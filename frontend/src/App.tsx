@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { Link, Navigate, Route, Routes } from 'react-router-dom'
+import HomeFivePage from './HomeFivePage'
 
 const ASSET_BASE = '/kapa-auth'
 
@@ -502,7 +503,8 @@ function LostPasswordPage() {
 function AppRoutes() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/my-account" replace />} />
+      <Route path="/" element={<HomeFivePage />} />
+      <Route path="/home-five" element={<HomeFivePage />} />
       <Route path="/my-account" element={<MyAccountPage />} />
       <Route path="/my-account/lost-password" element={<LostPasswordPage />} />
       <Route path="/customer/login" element={<MyAccountPage />} />
