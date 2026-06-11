@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { LostPasswordPage, MyAccountPage } from '../pages/auth'
 import { HomeFivePage } from '../pages/home-five'
+import { theme } from '../shared/config/theme'
 
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard').then((module) => ({ default: module.AdminDashboardPage })))
 
@@ -18,7 +19,14 @@ export default function App() {
       <Route
         path="/admin/dashboard"
         element={
-          <Suspense fallback={<div className="min-h-screen bg-slate-950 text-white" />}>
+          <Suspense
+            fallback={
+              <div
+                className="min-h-screen"
+                style={{ background: theme.color.surfaceStrong, color: theme.color.onPrimary }}
+              />
+            }
+          >
             <AdminDashboardPage />
           </Suspense>
         }

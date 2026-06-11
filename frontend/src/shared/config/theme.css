@@ -1,0 +1,16 @@
+:root {
+  --font-body: "Spartan", sans-serif;
+  --font-display: "Oswald", sans-serif;
+  --color-primary: #f51304;
+  --color-primary-hover: #d60e02;
+  --color-background: #ffffff;
+  --color-surface: #ffffff;
+  --color-surface-strong: #0f0e0e;
+  --color-surface-muted: #f8f8f8;
+  --color-text: #0f0e0e;
+  --color-text-muted: #646464;
+  --color-border: rgba(15, 14, 14, 0.12);
+  --color-on-primary: #ffffff;
+  --shadow-soft: 0 18px 50px rgba(15, 14, 14, 0.08);
+  --radius-card: 24px;
+}
