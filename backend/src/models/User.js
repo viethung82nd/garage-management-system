@@ -1,29 +1,59 @@
 import mongoose, { Schema } from "mongoose";
 
-export const USER_ROLES = ["admin", "staff", "customer"];
+export const USER_ROLES = [
+  "onlineCustomer",
+  "walkInCustomer",
+  "serviceAdvisor",
+  "technician",
+  "accountant",
+  "admin",
+];
+
+export const ACCOUNT_TYPES = ["registered", "walkIn"];
 
 const userSchema = new Schema(
   {
-    email: {
+    fullName: {
       type: String,
       required: true,
+      trim: true,
+    },
+    email: {
+      type: String,
       unique: true,
+      sparse: true,
       lowercase: true,
+      trim: true,
+    },
+    phone: {
+      type: String,
       trim: true,
     },
     passwordHash: {
       type: String,
-      required: true,
     },
-    name: {
+    lookupCode: {
       type: String,
-      required: true,
-      trim: true,
+      unique: true,
+      sparse: true,
+    },
+    accountType: {
+      type: String,
+      enum: ACCOUNT_TYPES,
+      default: "registered",
     },
     role: {
       type: String,
       enum: USER_ROLES,
-      default: "staff",
+      required: true,
+    },
+    isActive: {
+      type: Boolean,
+      default: true,
+    },
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
     },
   },
   { timestamps: true }
