@@ -8,13 +8,22 @@ export type IconName =
   | 'car'
   | 'cart'
   | 'cash'
+  | 'chevron-left'
+  | 'chevron-right'
   | 'check'
+  | 'clipboard'
+  | 'download'
   | 'gear'
   | 'grid'
+  | 'help'
+  | 'info'
   | 'invoice'
   | 'lift'
+  | 'logout'
   | 'map'
+  | 'person'
   | 'plus'
+  | 'search'
   | 'sliders'
   | 'team'
   | 'users'
@@ -78,10 +87,35 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M12 10a2 2 0 1 1 0 4 2 2 0 0 1 0-4Z" />
     </>
   ),
+  'chevron-left': (
+    <>
+      <path d="m15 18-6-6 6-6" />
+    </>
+  ),
+  'chevron-right': (
+    <>
+      <path d="m9 18 6-6-6-6" />
+    </>
+  ),
+  download: (
+    <>
+      <path d="M12 3v11" />
+      <path d="m7 10 5 5 5-5" />
+      <path d="M5 21h14" />
+    </>
+  ),
   check: (
     <>
       <circle cx="12" cy="12" r="8" />
       <path d="m8.5 12 2.2 2.2 4.8-5" />
+    </>
+  ),
+  clipboard: (
+    <>
+      <rect width="14" height="16" x="5" y="5" rx="2" />
+      <path d="M9 5a3 3 0 0 1 6 0" />
+      <path d="M9 11h6" />
+      <path d="M9 15h4" />
     </>
   ),
   gear: (
@@ -103,6 +137,20 @@ const iconPaths: Record<IconName, ReactNode> = {
       <rect width="7" height="7" x="14" y="3" rx="1.5" />
       <rect width="7" height="7" x="3" y="14" rx="1.5" />
       <rect width="7" height="7" x="14" y="14" rx="1.5" />
+    </>
+  ),
+  help: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M9.8 9a2.4 2.4 0 1 1 3.9 1.9c-.9.6-1.7 1.2-1.7 2.6" />
+      <path d="M12 17h.01" />
+    </>
+  ),
+  info: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 11v5" />
+      <path d="M12 8h.01" />
     </>
   ),
   invoice: (
@@ -130,10 +178,29 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="M15 6v15" />
     </>
   ),
+  logout: (
+    <>
+      <path d="M14 8V5a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2v-3" />
+      <path d="M9 12h11" />
+      <path d="m17 9 3 3-3 3" />
+    </>
+  ),
+  person: (
+    <>
+      <path d="M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8Z" />
+      <path d="M4 21a8 8 0 0 1 16 0" />
+    </>
+  ),
   plus: (
     <>
       <path d="M12 5v14" />
       <path d="M5 12h14" />
+    </>
+  ),
+  search: (
+    <>
+      <circle cx="11" cy="11" r="7" />
+      <path d="m20 20-4-4" />
     </>
   ),
   sliders: (
