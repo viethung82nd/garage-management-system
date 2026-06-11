@@ -33,15 +33,22 @@ export const designTokens = {
 } as const
 
 export const sidebarItems = [
-  { label: 'Overview', path: '/', icon: 'grid' },
-  { label: 'Work Orders', path: '/work-orders', icon: 'wrench' },
-  { label: 'Vehicles', path: '/vehicles', icon: 'car' },
-  { label: 'Customers', path: '/customers', icon: 'users' },
-  { label: 'Parts', path: '/parts', icon: 'sliders' },
-  { label: 'Team', path: '/team', icon: 'team' },
+  { label: 'Đặt lịch chờ duyệt', path: '/advisor/bookings', icon: 'calendar' },
+  { label: 'Tiếp nhận xe', path: '/advisor/reception', icon: 'car' },
+  { label: 'Lệnh sửa chữa', path: '/advisor/work-orders', icon: 'wrench' },
+  { label: 'Khách hàng', path: '/advisor/customers', icon: 'users' },
+  { label: 'Phương tiện', path: '/advisor/vehicles', icon: 'grid' },
+  { label: 'Việc kỹ thuật', path: '/technician/tasks', icon: 'team' },
+  { label: 'Hóa đơn', path: '/accountant/invoices', icon: 'invoice' },
 ] as const
 
-export const topNavItems = ['Dashboard', 'Inventory', 'Schedule', 'Reports'] as const
+export const topNavItems = [
+  { label: 'Cố vấn dịch vụ', path: '/advisor/bookings' },
+  { label: 'Khách hàng', path: '/customer/dashboard' },
+  { label: 'Kỹ thuật viên', path: '/technician/tasks' },
+  { label: 'Kế toán', path: '/accountant/dashboard' },
+  { label: 'Quản trị viên', path: '/admin/dashboard' },
+] as const
 
 export const stats = [
   {
