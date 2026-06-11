@@ -3,36 +3,18 @@ import {
   CheckCircleOutlined,
   ClockCircleOutlined,
   DashboardOutlined,
-  MenuFoldOutlined,
-  MenuUnfoldOutlined,
   PieChartOutlined,
   SettingOutlined,
   TeamOutlined,
 } from '@ant-design/icons'
-import { Avatar, Badge, Button, Card, Menu, Progress, Space, Table, Tag, Typography } from 'antd'
+import { Button, Card, Progress, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { bookingOverview, bookingRecords, weeklyStatus, type BookingRecord } from '../model/mock'
+import { BackOfficeShell, adminPalette } from '../../../../widgets/backoffice-shell'
 
-const { Title, Text } = Typography
-const KAPA_LOGO_URL = '/kapa-auth/wp-content/uploads/2023/01/Kapa_Logo-1.svg'
-
-const dashboardPalette = {
-  ink: '#0f0e0e',
-  inkSoft: '#2a2727',
-  textMuted: '#6b6262',
-  canvas: '#f7f2ec',
-  panel: '#fffdfa',
-  panelAlt: '#f4eee8',
-  border: 'rgba(15, 14, 14, 0.08)',
-  red: '#f51304',
-  redDeep: '#cf1a10',
-  amber: '#ffb347',
-  teal: '#197b74',
-  navy: '#1f365c',
-  green: '#2f8f63',
-  shadow: '0 24px 70px rgba(15, 14, 14, 0.08)',
-} as const
+const { Text } = Typography
+const dashboardPalette = adminPalette
 
 const serviceMix = [
   { label: 'Diagnostics', value: 36, color: dashboardPalette.red },
@@ -307,9 +289,6 @@ function HorizontalBarChart() {
 }
 
 export default function AdminDashboardPage() {
-  const [collapsed, setCollapsed] = useState(false)
-  const sidebarWidth = collapsed ? 76 : 288
-
   const columns = useMemo<ColumnsType<BookingRecord>>(
     () => [
       {
@@ -392,106 +371,28 @@ export default function AdminDashboardPage() {
   )
 
   return (
-    <div
-      className="min-h-screen"
-      style={{
-        background: `radial-gradient(circle at top left, rgba(245, 19, 4, 0.12), transparent 22%), radial-gradient(circle at top right, rgba(255, 179, 71, 0.16), transparent 22%), ${dashboardPalette.canvas}`,
-        color: dashboardPalette.ink,
-        fontFamily: 'var(--font-body)',
-      }}
+    <BackOfficeShell
+      palette={dashboardPalette}
+      background={`radial-gradient(circle at top left, rgba(245, 19, 4, 0.12), transparent 22%), radial-gradient(circle at top right, rgba(255, 179, 71, 0.16), transparent 22%), ${dashboardPalette.canvas}`}
+      sidebarGradient={`linear-gradient(180deg, ${dashboardPalette.ink} 0%, ${dashboardPalette.redDeep} 100%)`}
+      sidebarTitle="Admin"
+      sidebarSubtitle="Garage control room"
+      headerEyebrow="Admin dashboard"
+      headerTitle="Garage operations overview"
+      notificationIcon={<BellOutlined />}
+      profileInitial="A"
+      profileName="Admin"
+      profileRole="System administrator"
+      profileAccent={dashboardPalette.red}
+      selectedMenuKeys={['dashboard']}
+      menuItems={[
+        { key: 'dashboard', icon: <DashboardOutlined />, label: 'Overview' },
+        { key: 'repair-orders', icon: <ClockCircleOutlined />, label: 'Repair orders' },
+        { key: 'users', icon: <TeamOutlined />, label: 'Users' },
+        { key: 'reports', icon: <PieChartOutlined />, label: 'Reports' },
+        { key: 'settings', icon: <SettingOutlined />, label: 'Settings' },
+      ]}
     >
-      <div className="flex min-h-screen">
-        <aside
-          className="admin-dashboard-sidebar shrink-0 border-r transition-[width] duration-300"
-          style={{
-            width: sidebarWidth,
-            background: `linear-gradient(180deg, ${dashboardPalette.ink} 0%, ${dashboardPalette.redDeep} 100%)`,
-            borderColor: 'rgba(255,255,255,0.08)',
-            boxShadow: '18px 0 60px rgba(15, 14, 14, 0.14)',
-          }}
-        >
-          <div className="sticky top-0 flex h-screen flex-col">
-          <div className="flex min-h-[160px] flex-col items-center justify-center gap-3 border-b border-white/10 px-4 py-5 text-center">
-            <img src={KAPA_LOGO_URL} alt="Kapa" className={collapsed ? 'h-10 w-auto max-w-[56px]' : 'h-20 w-auto max-w-[150px]'} />
-            {!collapsed && (
-              <div className="flex flex-col items-center">
-                    <div className="font-['Oswald'] text-[24px] uppercase leading-none text-white">Admin</div>
-                <div
-                  className="mt-2 text-[11px] font-semibold uppercase tracking-[0.24em]"
-                  style={{ color: 'rgba(255, 255, 255, 0.82)' }}
-                >
-                  Garage control room
-                </div>
-              </div>
-            )}
-          </div>
-
-          <div className="px-3 py-5">
-            <Menu
-              theme="dark"
-              mode="inline"
-              defaultSelectedKeys={['dashboard']}
-              className="!border-0 !bg-transparent"
-              style={{ fontFamily: 'var(--font-body)' }}
-              items={[
-                { key: 'dashboard', icon: <DashboardOutlined />, label: 'Overview' },
-                { key: 'repair-orders', icon: <ClockCircleOutlined />, label: 'Repair orders' },
-                { key: 'users', icon: <TeamOutlined />, label: 'Users' },
-                { key: 'reports', icon: <PieChartOutlined />, label: 'Reports' },
-                { key: 'settings', icon: <SettingOutlined />, label: 'Settings' },
-              ]}
-            />
-          </div>
-
-          </div>
-        </aside>
-
-        <main className="min-w-0 flex-1">
-          <header
-            className="sticky top-0 z-30 flex h-20 items-center justify-between border-b px-5 md:px-6 backdrop-blur-xl"
-            style={{
-              background: 'rgba(255, 253, 250, 0.82)',
-              borderColor: dashboardPalette.border,
-            }}
-          >
-            <div>
-              <div className="flex items-center gap-3">
-                <Button
-                  type="text"
-                  icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                  onClick={() => setCollapsed((value) => !value)}
-                  className="!inline-flex !h-11 !w-11 !items-center !justify-center !rounded-full"
-                  style={{ color: dashboardPalette.ink }}
-                />
-                <span className="text-[12px] font-semibold uppercase tracking-[0.26em]" style={{ color: dashboardPalette.textMuted }}>
-                  Admin dashboard
-                </span>
-              </div>
-              <Title level={2} className="!mb-0 !mt-1 !font-['Oswald'] !text-[28px] md:!text-[34px] !leading-none" style={{ color: dashboardPalette.ink }}>
-                Garage operations overview
-              </Title>
-            </div>
-
-            <Space size="middle">
-              <Badge dot offset={[-4, 8]}>
-                <Button shape="circle" icon={<BellOutlined />} />
-              </Badge>
-              <Space size="middle" className="rounded-full border px-3 py-2" style={{ borderColor: dashboardPalette.border, background: dashboardPalette.panel }}>
-                <Avatar style={{ background: dashboardPalette.red, color: '#fff' }}>A</Avatar>
-                <div className="leading-tight">
-                  <div className="text-sm font-semibold" style={{ color: dashboardPalette.ink }}>
-                    Admin
-                  </div>
-                  <div className="text-xs" style={{ color: dashboardPalette.textMuted }}>
-                    System administrator
-                  </div>
-                </div>
-              </Space>
-            </Space>
-          </header>
-
-          <section className="px-4 py-5 md:px-6" style={{ background: 'transparent' }}>
-            <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">
               <div
                 className="gap-4"
                 style={{
@@ -643,10 +544,6 @@ export default function AdminDashboardPage() {
                     <VerticalBarChart />
                 </Card>
               </div>
-            </div>
-          </section>
-        </main>
-      </div>
-    </div>
+    </BackOfficeShell>
   )
 }
