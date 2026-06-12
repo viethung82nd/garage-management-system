@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom'
 import { asset } from '../../lib/asset'
 
 type LegacyCurrentPage = 'account' | 'lost-password'
-type ActiveSection = 'shop' | 'contact' | null
+type ActiveSection = 'shop' | 'contact' | 'customer' | null
 
 function MenuLink({
   label,
@@ -40,7 +40,7 @@ export function KapaNavbar({
   accountHref?: string
   contactHref?: string
 }) {
-  const resolvedActiveSection = current === 'account' || current === 'lost-password' ? 'shop' : activeSection
+  const resolvedActiveSection = current === 'account' || current === 'lost-password' ? 'shop' : activeSection === 'customer' ? 'shop' : activeSection
   const isShopActive = resolvedActiveSection === 'shop'
   const isContactActive = activeSection === 'contact'
 

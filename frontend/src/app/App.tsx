@@ -8,6 +8,7 @@ import { theme } from '../shared/config/theme'
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard').then((module) => ({ default: module.AdminDashboardPage })))
 const InvoiceManagementPage = lazy(() => import('../pages/accountant/invoices').then((module) => ({ default: module.InvoiceManagementPage })))
 const InvoiceConfirmPage = lazy(() => import('../pages/accountant/confirm').then((module) => ({ default: module.InvoiceConfirmPage })))
+const CustomerTrackingPage = lazy(() => import('../pages/customer/tracking').then((module) => ({ default: module.CustomerTrackingPage })))
 
 function RouteFallback() {
   return <div className="min-h-screen" style={{ background: theme.color.surfaceStrong, color: theme.color.onPrimary }} />
@@ -23,6 +24,14 @@ export default function App() {
       <Route path="/my-account/lost-password" element={<LostPasswordPage />} />
       <Route path="/customer/login" element={<MyAccountPage />} />
       <Route path="/customer/forgot-password" element={<LostPasswordPage />} />
+      <Route
+        path="/customer/tracking"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <CustomerTrackingPage />
+          </Suspense>
+        }
+      />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/accountant" element={<Navigate to="/accountant/invoices" replace />} />
       <Route
