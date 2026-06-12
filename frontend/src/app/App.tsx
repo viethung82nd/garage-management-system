@@ -8,6 +8,8 @@ import { theme } from '../shared/config/theme'
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard').then((module) => ({ default: module.AdminDashboardPage })))
 const InvoiceManagementPage = lazy(() => import('../pages/accountant/invoices').then((module) => ({ default: module.InvoiceManagementPage })))
 const InvoiceConfirmPage = lazy(() => import('../pages/accountant/confirm').then((module) => ({ default: module.InvoiceConfirmPage })))
+const CustomerProfilePage = lazy(() => import('../pages/customer/profile').then((module) => ({ default: module.CustomerProfilePage })))
+const CustomerBookingsPage = lazy(() => import('../pages/customer/bookings').then((module) => ({ default: module.CustomerBookingsPage })))
 const CustomerTrackingPage = lazy(() => import('../pages/customer/tracking').then((module) => ({ default: module.CustomerTrackingPage })))
 
 function RouteFallback() {
@@ -24,6 +26,22 @@ export default function App() {
       <Route path="/my-account/lost-password" element={<LostPasswordPage />} />
       <Route path="/customer/login" element={<MyAccountPage />} />
       <Route path="/customer/forgot-password" element={<LostPasswordPage />} />
+      <Route
+        path="/customer/profile"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <CustomerProfilePage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/customer/bookings"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <CustomerBookingsPage />
+          </Suspense>
+        }
+      />
       <Route
         path="/customer/tracking"
         element={
