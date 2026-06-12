@@ -164,9 +164,9 @@ export function NavBar({ current }: { current: 'account' | 'lost-password' }) {
                     <MenuLink label="Projects" />
                   </li>
                   <li className="menu-item menu-item-type-post_type menu-item-object-page nav-item">
-                    <a title="Contact Us" href="#" className="nav-link">
+                    <Link title="Contact Us" to="/contact-us" className="nav-link">
                       Contact Us
-                    </a>
+                    </Link>
                   </li>
                 </ul>
 
@@ -180,9 +180,9 @@ export function NavBar({ current }: { current: 'account' | 'lost-password' }) {
                     </div>
                   </div>
                   <div className="option-item">
-                    <a href="#" className="default-btn">
+                    <Link to="/contact-us" className="default-btn">
                       Get Free Quote
-                    </a>
+                    </Link>
                   </div>
                 </div>
               </div>
@@ -202,9 +202,9 @@ export function NavBar({ current }: { current: 'account' | 'lost-password' }) {
                 </div>
               </div>
               <div className="option-item">
-                <a href="#" className="default-btn">
+                <Link to="/contact-us" className="default-btn">
                   Get Free Quote
-                </a>
+                </Link>
               </div>
             </div>
           </div>
@@ -309,7 +309,7 @@ export function Footer() {
                     <a href="#">Our Team</a>
                   </li>
                   <li>
-                    <a href="#">Contact Us</a>
+                    <Link to="/contact-us">Contact Us</Link>
                   </li>
                 </ul>
                 <div className="copyright-text">

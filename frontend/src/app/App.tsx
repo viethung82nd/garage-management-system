@@ -1,6 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { LostPasswordPage, MyAccountPage } from '../pages/auth'
+import { ContactUsPage } from '../pages/contact-us'
 import { HomeFivePage } from '../pages/home-five'
 import { theme } from '../shared/config/theme'
 
@@ -17,6 +18,7 @@ export default function App() {
     <Routes>
       <Route path="/" element={<HomeFivePage />} />
       <Route path="/home-five" element={<HomeFivePage />} />
+      <Route path="/contact-us" element={<ContactUsPage />} />
       <Route path="/my-account" element={<MyAccountPage />} />
       <Route path="/my-account/lost-password" element={<LostPasswordPage />} />
       <Route path="/customer/login" element={<MyAccountPage />} />
