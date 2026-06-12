@@ -1,14 +1,15 @@
 import { Link } from 'react-router-dom'
-import { Footer, NavBar, PageBanner, PasswordField, Topbar, usePageMeta } from '../../shared/ui/AuthLayout'
+import { usePageMeta } from '../../../../shared/lib/kapa-template'
+import { KapaFooter, KapaNavbar, KapaPageBanner, KapaTopbar, PasswordField } from '../../../../shared/ui/kapa-chrome'
 
 export default function MyAccountPage() {
   usePageMeta('My account – Kapa')
 
   return (
     <>
-      <Topbar />
-      <NavBar current="account" />
-      <PageBanner title="My account" breadcrumb="My account" />
+      <KapaTopbar />
+      <KapaNavbar current="account" />
+      <KapaPageBanner title="My account" breadcrumb="My account" />
 
       <div className="page-main-content">
         <div className="page-area">
@@ -71,7 +72,7 @@ export default function MyAccountPage() {
         </div>
       </div>
 
-      <Footer />
+      <KapaFooter />
     </>
   )
 }

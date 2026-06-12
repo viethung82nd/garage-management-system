@@ -1,4 +1,5 @@
-import { Footer, NavBar, PageBanner, Topbar, usePageMeta } from '../../shared/ui/AuthLayout'
+import { usePageMeta } from '../../../../shared/lib/kapa-template'
+import { KapaFooter, KapaNavbar, KapaPageBanner, KapaTopbar } from '../../../../shared/ui/kapa-chrome'
 
 export default function LostPasswordPage() {
   usePageMeta(
@@ -8,9 +9,9 @@ export default function LostPasswordPage() {
 
   return (
     <>
-      <Topbar />
-      <NavBar current="lost-password" />
-      <PageBanner title="My account" breadcrumb="My account" />
+      <KapaTopbar />
+      <KapaNavbar current="lost-password" />
+      <KapaPageBanner title="My account" breadcrumb="My account" />
 
       <div className="page-main-content">
         <div className="page-area">
@@ -53,7 +54,7 @@ export default function LostPasswordPage() {
         </div>
       </div>
 
-      <Footer />
+      <KapaFooter />
     </>
   )
 }
