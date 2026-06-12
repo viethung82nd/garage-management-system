@@ -3,6 +3,7 @@ import cors from "cors";
 import { env } from "./config/env.js";
 import { dbStatus } from "./db/connect.js";
 import { errorHandler, notFound } from "./middleware/error.js";
+import { authRouter } from "./routes/auth.routes.js";
 
 /** Builds the Express application (no listening — see server.js). */
 export function createApp() {
@@ -15,6 +16,8 @@ export function createApp() {
   app.get("/api/health", (_req, res) => {
     res.json({ status: "ok", db: dbStatus() });
   });
+
+  app.use("/api/auth", authRouter);
 
   app.use(notFound);
   app.use(errorHandler);
