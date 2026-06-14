@@ -1,47 +1,8 @@
 import { useState } from 'react'
-import { Link } from 'react-router-dom'
 import { Icon } from '../../shared/ui/base'
+import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 import { Field, SelectField, TextAreaField } from '../../widgets/vehicle-reception/ui/FormFields'
 import { PanelTitle, ReceptionPanel } from '../../widgets/vehicle-reception/ui/ReceptionPanel'
-
-function TopNav() {
-  return (
-    <header className="sticky top-0 z-40 border-b border-[#e4e2e2] bg-white/90 backdrop-blur-xl">
-      <nav className="flex h-20 w-full items-center justify-between px-6">
-        <div className="flex items-center gap-8">
-          <Link className="text-2xl font-black tracking-tight text-[#ba0013]" to="/admin/dashboard">
-            Garage Master
-          </Link>
-          <div className="hidden items-center gap-6 md:flex">
-            <Link className="font-semibold text-[#5f5e5e] transition hover:text-[#ba0013]" to="/admin/dashboard">
-              Dashboard
-            </Link>
-            <Link className="font-semibold text-[#5f5e5e] transition hover:text-[#ba0013]" to="/advisor/bookings">
-              Schedule
-            </Link>
-            <Link className="font-semibold text-[#5f5e5e] transition hover:text-[#ba0013]" to="/admin/reports">
-              Reports
-            </Link>
-            <Link className="font-semibold text-[#5f5e5e] transition hover:text-[#ba0013]" to="/admin/settings">
-              Settings
-            </Link>
-          </div>
-        </div>
-        <div className="flex items-center gap-4">
-          <Link className="hidden bg-[#ba0013] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#93000d] sm:inline-flex" to="/advisor/reception">
-            Create Order
-          </Link>
-          <button aria-label="Thông báo" className="text-[#5f5e5e] transition hover:text-[#ba0013]" type="button">
-            <Icon name="bell" />
-          </button>
-          <button aria-label="Tài khoản" className="text-[#5f5e5e] transition hover:text-[#ba0013]" type="button">
-            <Icon name="person" />
-          </button>
-        </div>
-      </nav>
-    </header>
-  )
-}
 
 function InfoCard({
   icon,
@@ -73,25 +34,23 @@ export function VehicleReceptionPage() {
     plateStatus === 'checking' ? 'Đang kiểm tra...' : plateStatus === 'found' ? 'Đã tìm thấy xe' : 'Kiểm tra hệ thống'
 
   return (
-    <div className="min-h-screen bg-[#fbf9f8] text-[#1b1c1c]">
-      <TopNav />
-
-      <main className="w-full px-6 py-12">
-        <section className="mb-12 border-l-8 border-[#ba0013] pl-6">
-          <p className="mb-2 font-mono text-xs font-bold uppercase tracking-[0.24em] text-[#ba0013]">Service Operations</p>
-          <h1 className="text-4xl font-black tracking-tight text-[#1b1c1c] md:text-5xl">Biểu mẫu tiếp nhận xe</h1>
-          <p className="mt-5 max-w-2xl text-lg leading-8 text-[#5f5e5e]">
-            Nhập thông tin khách hàng và phương tiện để khởi tạo hồ sơ dịch vụ chính xác.
+    <ServiceAdvisorShell active="reception" title="Biểu mẫu tiếp nhận xe">
+      <div className="space-y-12">
+        <section className="border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
+          <p className="mb-2 font-mono text-xs font-bold uppercase tracking-[0.24em] text-[#ba0013]">Service Reception</p>
+          <h2 className="text-4xl font-black tracking-tight text-[#1b1c1c] md:text-5xl">Tiếp nhận xe mới</h2>
+          <p className="mt-5 max-w-3xl text-lg leading-8 text-[#5f5e5e]">
+            Nhập biển số, tạo hồ sơ khách hàng và phương tiện trước khi chuyển sang lệnh sửa chữa.
           </p>
         </section>
 
-        <form className="space-y-16">
+        <form className="space-y-12">
           <section className="relative overflow-hidden border border-[#e4e2e2] bg-white p-8 shadow-sm">
             <div className="absolute bottom-0 left-0 top-0 w-1 bg-[#ba0013]" />
             <div className="flex flex-col gap-6 md:flex-row md:items-end">
               <label className="flex-1 space-y-2">
                 <span className="block font-mono text-[11px] font-bold uppercase tracking-[0.16em] text-[#5f5e5e]">
-                  Biển số xe (License Plate)
+                  Biển số xe
                 </span>
                 <span className="relative block">
                   <input
@@ -115,24 +74,24 @@ export function VehicleReceptionPage() {
           </section>
 
           <div className="grid gap-6 lg:grid-cols-12">
-            <div className="space-y-12 lg:col-span-8">
+            <div className="space-y-8 lg:col-span-8">
               <ReceptionPanel>
                 <PanelTitle icon="person" title="Thông tin khách hàng" />
                 <div className="grid gap-6 md:grid-cols-2">
                   <Field label="Họ và tên" placeholder="Nguyễn Văn A" />
                   <Field label="Số điện thoại" placeholder="090 123 4567" type="tel" />
                   <Field label="Email" placeholder="customer@example.com" type="email" />
-                  <Field label="Địa chỉ" placeholder="123 Street, District 1, HCMC" />
+                  <Field label="Địa chỉ" placeholder="123 Nguyễn Văn Linh, Quận 7" />
                 </div>
               </ReceptionPanel>
 
               <ReceptionPanel>
                 <PanelTitle icon="car" title="Thông tin phương tiện" />
                 <div className="grid gap-6 md:grid-cols-3">
-                  <Field className="md:col-span-2" label="Dòng xe / hiệu xe (Make/Model)" placeholder="Mercedes-Benz C300" />
+                  <Field className="md:col-span-2" label="Dòng xe / hiệu xe" placeholder="BMW M4 Competition" />
                   <SelectField label="Năm sản xuất" />
-                  <Field label="Số KM hiện tại" placeholder="12,500 km" />
-                  <Field label="Số khung (VIN)" placeholder="WDD1234567..." />
+                  <Field label="Số km hiện tại" placeholder="18,240 km" />
+                  <Field label="Số khung (VIN)" placeholder="WBS33AZ08PCM44882" />
                   <Field label="Số máy" placeholder="ENG-987654" />
                 </div>
               </ReceptionPanel>
@@ -145,7 +104,7 @@ export function VehicleReceptionPage() {
                   <TextAreaField
                     dark
                     label="Mô tả vấn đề / yêu cầu dịch vụ"
-                    placeholder="Vui lòng mô tả tình trạng xe hoặc các gói dịch vụ cần thực hiện..."
+                    placeholder="Mô tả tình trạng xe hoặc các gói dịch vụ cần thực hiện..."
                     rows={6}
                   />
                   <label className="space-y-2">
@@ -163,7 +122,7 @@ export function VehicleReceptionPage() {
                     Xác nhận tiếp nhận
                   </div>
                   <button
-                    className="flex min-h-[68px] w-full items-center justify-center gap-4 bg-[#ba0013] px-8 text-2xl font-black uppercase text-white shadow-[0_18px_32px_rgba(186,0,19,0.22)] transition hover:bg-[#e31e24]"
+                    className="flex min-h-[68px] w-full items-center justify-center gap-4 bg-[#ba0013] px-8 text-xl font-black uppercase text-white shadow-[0_18px_32px_rgba(186,0,19,0.22)] transition hover:bg-[#e31e24]"
                     type="submit"
                   >
                     Lưu biểu mẫu
@@ -175,32 +134,18 @@ export function VehicleReceptionPage() {
           </div>
         </form>
 
-        <section className="mt-20 grid gap-6 md:grid-cols-3">
+        <section className="grid gap-6 md:grid-cols-3">
           <InfoCard icon="check" title="Kiểm định chính hãng">
-            Tất cả xe tiếp nhận đều được quét lỗi bằng thiết bị chuyên dụng chuẩn Châu Âu.
+            Xe tiếp nhận được kiểm tra bằng thiết bị chuyên dụng và lưu hồ sơ rõ ràng.
           </InfoCard>
           <InfoCard icon="calendar" title="Đúng tiến độ">
-            Hệ thống dự báo thời gian hoàn thành dựa trên khối lượng công việc hiện tại.
+            Thời gian hẹn trả xe được ghi nhận để Service Advisor theo dõi trong toàn bộ quy trình.
           </InfoCard>
-          <InfoCard icon="info" title="Bảo hành dịch vụ">
-            Cam kết linh kiện chính hãng và bảo hành lên đến 24 tháng cho mọi gói sửa chữa.
+          <InfoCard icon="info" title="Minh bạch dịch vụ">
+            Hồ sơ tiếp nhận là đầu vào cho lệnh sửa chữa, báo giá và thông báo khách hàng.
           </InfoCard>
         </section>
-      </main>
-
-      <footer className="mt-20 bg-[#1b1c1c] py-12 text-white">
-        <div className="flex w-full flex-col items-center justify-between gap-8 px-6 md:flex-row">
-          <div>
-            <p className="text-2xl font-black uppercase text-[#e31e24]">Garage Master</p>
-            <p className="mt-2 font-mono text-xs uppercase tracking-[0.16em] text-[#c8c6c5]">© 2026 Precision Automotive Care</p>
-          </div>
-          <div className="flex gap-8 text-sm font-black uppercase">
-            <a className="hover:text-[#e31e24]" href="#">Điều khoản</a>
-            <a className="hover:text-[#e31e24]" href="#">Bảo mật</a>
-            <a className="hover:text-[#e31e24]" href="#">Đăng xuất</a>
-          </div>
-        </div>
-      </footer>
-    </div>
+      </div>
+    </ServiceAdvisorShell>
   )
 }

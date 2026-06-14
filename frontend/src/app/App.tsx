@@ -1,17 +1,20 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AdminDashboardPage } from '../pages/admin/DashboardPage'
 import { BookingRequestsPage } from '../pages/advisor/BookingRequestsPage'
+import { RepairOrderAssignmentPage } from '../pages/advisor/RepairOrderAssignmentPage'
+import { ServiceAdvisorDashboardPage } from '../pages/advisor/ServiceAdvisorDashboardPage'
 import { VehicleReceptionPage } from '../pages/advisor/VehicleReceptionPage'
 import { PlaceholderPage } from '../pages/PlaceholderPage'
 
 export default function App() {
   return (
     <Routes>
-      <Route element={<Navigate replace to="/advisor/bookings" />} path="/" />
+      <Route element={<Navigate replace to="/advisor/dashboard" />} path="/" />
 
+      <Route element={<ServiceAdvisorDashboardPage />} path="/advisor/dashboard" />
       <Route element={<BookingRequestsPage />} path="/advisor/bookings" />
       <Route element={<VehicleReceptionPage />} path="/advisor/reception" />
-      <Route element={<PlaceholderPage title="Lệnh sửa chữa" />} path="/advisor/work-orders" />
+      <Route element={<RepairOrderAssignmentPage />} path="/advisor/work-orders" />
       <Route element={<PlaceholderPage title="Khách hàng" />} path="/advisor/customers" />
       <Route element={<PlaceholderPage title="Xe" />} path="/advisor/vehicles" />
 
