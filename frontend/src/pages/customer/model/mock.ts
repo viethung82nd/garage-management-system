@@ -143,6 +143,48 @@ export type BookingHistoryRecord = {
   additionalProposal?: string
 }
 
+export type CustomerInvoiceStatus = 'Paid' | 'Awaiting payment' | 'Updated'
+
+export type CustomerInvoiceLineItem = {
+  item: string
+  label: string
+  description: string
+  quantity: number
+  unitPrice: string
+  lineTotal: string
+}
+
+export type CustomerInvoiceRecord = {
+  id: string
+  repairOrderId: string
+  bookingId?: string
+  issuedAt: string
+  serviceDate: string
+  vehicle: string
+  plate: string
+  vin: string
+  mileage: string
+  advisor: string
+  technician: string
+  customerName: string
+  customerPhone: string
+  customerEmail: string
+  customerAddress: string
+  accountantName: string
+  invoiceStatus: CustomerInvoiceStatus
+  statusTone: 'completed' | 'pending' | 'ready'
+  paymentMethod: 'Cash at garage' | 'Card at counter' | 'Bank transfer'
+  paymentNote: string
+  subtotal: string
+  tax: string
+  discount: string
+  total: string
+  serviceItems: CustomerInvoiceLineItem[]
+  issueImages: string[]
+  garageName: string
+  customerNote?: string
+}
+
 export const bookingHistory: BookingHistoryRecord[] = [
   {
     id: 'RO-240611-08',
@@ -238,5 +280,117 @@ export const bookingHistory: BookingHistoryRecord[] = [
     ],
     issueSummary: 'Customer came in after no-start issue; further part replacement was suggested.',
     additionalProposal: 'Battery terminal and cable set recommended after test result.',
+  },
+]
+
+export const customerInvoices: CustomerInvoiceRecord[] = [
+  {
+    id: 'INV-240611-08',
+    repairOrderId: 'RO-240611-08',
+    bookingId: 'BK-240611-08',
+    issuedAt: '11 Jun 2026 • 05:10 PM',
+    serviceDate: '11 Jun 2026',
+    vehicle: 'Toyota Vios 2021',
+    plate: '51H-12345',
+    vin: 'RL4BC4CJ0MA001082',
+    mileage: '42,180 km',
+    advisor: 'Tran Hoang',
+    technician: 'Le Duc',
+    customerName: 'Nguyen Minh Hung',
+    customerPhone: '0901 234 567',
+    customerEmail: 'hung.nguyen@example.com',
+    customerAddress: 'District 7, Ho Chi Minh City',
+    accountantName: 'Le Thu Ha',
+    invoiceStatus: 'Awaiting payment',
+    statusTone: 'pending',
+    paymentMethod: 'Bank transfer',
+    paymentNote: 'Awaiting direct transfer confirmation from customer.',
+    subtotal: '$210.00',
+    tax: '$18.00',
+    discount: '$0.00',
+    total: '$228.00',
+    serviceItems: [
+      { item: 'SRV-01', label: 'Engine diagnostics', description: 'Confirmed braking feel issue and scanned engine control system.', quantity: 1, unitPrice: '$78.00', lineTotal: '$78.00' },
+      { item: 'SRV-02', label: 'Oil change', description: 'Replaced engine oil and oil filter under scheduled maintenance.', quantity: 1, unitPrice: '$68.00', lineTotal: '$68.00' },
+      { item: 'SRV-03', label: 'Brake fluid flush', description: 'Flushed old brake fluid and refilled to service standard.', quantity: 1, unitPrice: '$64.00', lineTotal: '$64.00' },
+    ],
+    issueImages: [
+      '/wp-content/uploads/2024/12/service1.jpg',
+      '/wp-content/uploads/2022/11/choose.webp',
+      '/wp-content/uploads/2024/12/banner-bg2.jpg',
+    ],
+    garageName: 'Kapa Auto Care Center',
+    customerNote: 'Invoice uploaded after repair order completion. Please settle at the service desk or confirm your bank transfer.',
+  },
+  {
+    id: 'INV-240529-04',
+    repairOrderId: 'RO-240529-04',
+    bookingId: 'BK-240529-04',
+    issuedAt: '29 May 2026 • 01:20 PM',
+    serviceDate: '29 May 2026',
+    vehicle: 'Toyota Vios 2021',
+    plate: '51H-12345',
+    vin: 'RL4BC4CJ0MA001082',
+    mileage: '41,620 km',
+    advisor: 'Mai Linh',
+    technician: 'Pham Kiet',
+    customerName: 'Nguyen Minh Hung',
+    customerPhone: '0901 234 567',
+    customerEmail: 'hung.nguyen@example.com',
+    customerAddress: 'District 7, Ho Chi Minh City',
+    accountantName: 'Le Thu Ha',
+    invoiceStatus: 'Paid',
+    statusTone: 'completed',
+    paymentMethod: 'Card at counter',
+    paymentNote: 'Paid directly at the front desk after vehicle handover.',
+    subtotal: '$136.00',
+    tax: '$12.00',
+    discount: '$0.00',
+    total: '$148.00',
+    serviceItems: [
+      { item: 'SRV-11', label: 'AC inspection', description: 'Checked airflow, cooling efficiency, and compressor response.', quantity: 1, unitPrice: '$64.00', lineTotal: '$64.00' },
+      { item: 'SRV-12', label: 'Cabin filter replacement', description: 'Installed new cabin filter after advisor recommendation.', quantity: 1, unitPrice: '$72.00', lineTotal: '$72.00' },
+    ],
+    issueImages: [
+      '/wp-content/uploads/2022/11/choose.webp',
+      '/wp-content/uploads/2022/11/banner-bg-2.webp',
+    ],
+    garageName: 'Kapa Auto Care Center',
+  },
+  {
+    id: 'INV-240420-11',
+    repairOrderId: 'RO-240420-11',
+    bookingId: 'BK-240420-11',
+    issuedAt: '20 Apr 2026 • 04:10 PM',
+    serviceDate: '20 Apr 2026',
+    vehicle: 'Toyota Vios 2021',
+    plate: '51H-12345',
+    vin: 'RL4BC4CJ0MA001082',
+    mileage: '40,980 km',
+    advisor: 'Bao Nguyen',
+    technician: 'Nguyen Dat',
+    customerName: 'Nguyen Minh Hung',
+    customerPhone: '0901 234 567',
+    customerEmail: 'hung.nguyen@example.com',
+    customerAddress: 'District 7, Ho Chi Minh City',
+    accountantName: 'Le Thu Ha',
+    invoiceStatus: 'Updated',
+    statusTone: 'ready',
+    paymentMethod: 'Cash at garage',
+    paymentNote: 'Invoice updated after advisor confirmed the final wheel alignment scope.',
+    subtotal: '$88.00',
+    tax: '$8.00',
+    discount: '$0.00',
+    total: '$96.00',
+    serviceItems: [
+      { item: 'SRV-21', label: 'Tire rotation', description: 'Balanced tire wear before highway trip preparation.', quantity: 1, unitPrice: '$38.00', lineTotal: '$38.00' },
+      { item: 'SRV-22', label: 'Wheel alignment', description: 'Adjusted alignment after steering drift inspection.', quantity: 1, unitPrice: '$50.00', lineTotal: '$50.00' },
+    ],
+    issueImages: [
+      '/wp-content/uploads/2022/11/banner-bg-2.webp',
+      '/wp-content/uploads/2024/12/service1.jpg',
+    ],
+    garageName: 'Kapa Auto Care Center',
+    customerNote: 'The invoice total was updated before pickup and posted by accounting for review.',
   },
 ]

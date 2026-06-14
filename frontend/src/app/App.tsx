@@ -10,6 +10,7 @@ const InvoiceManagementPage = lazy(() => import('../pages/accountant/invoices').
 const InvoiceConfirmPage = lazy(() => import('../pages/accountant/confirm').then((module) => ({ default: module.InvoiceConfirmPage })))
 const CustomerProfilePage = lazy(() => import('../pages/customer/profile').then((module) => ({ default: module.CustomerProfilePage })))
 const CustomerBookingsPage = lazy(() => import('../pages/customer/bookings').then((module) => ({ default: module.CustomerBookingsPage })))
+const CustomerInvoicesPage = lazy(() => import('../pages/customer/invoices').then((module) => ({ default: module.CustomerInvoicesPage })))
 const CustomerTrackingPage = lazy(() => import('../pages/customer/tracking').then((module) => ({ default: module.CustomerTrackingPage })))
 
 function RouteFallback() {
@@ -39,6 +40,14 @@ export default function App() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <CustomerBookingsPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/customer/invoices"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <CustomerInvoicesPage />
           </Suspense>
         }
       />
