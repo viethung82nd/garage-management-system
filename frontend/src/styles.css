@@ -1542,14 +1542,21 @@ select {
   width: 100%;
   border-collapse: collapse;
   border-top: 1px solid rgba(15, 14, 14, 0.14);
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-bottom: 0 !important;
 }
 
 .customer-invoice-sheet__table th,
 .customer-invoice-sheet__table td {
   padding: 13px 8px;
   border-bottom: 1px solid rgba(15, 14, 14, 0.14);
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-top: 0 !important;
   text-align: left;
   vertical-align: top;
+  box-shadow: none !important;
 }
 
 .customer-invoice-sheet__table th {
@@ -1603,7 +1610,17 @@ select {
 }
 
 .customer-invoice-sheet__totals {
+  width: 100%;
+  border-collapse: collapse;
   border-top: 2px solid rgba(15, 14, 14, 0.08);
+}
+
+.customer-invoice-sheet__totals td {
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid rgba(15, 14, 14, 0.1);
+  box-shadow: none !important;
 }
 
 .customer-invoice-sheet__grand-total {
@@ -1612,6 +1629,7 @@ select {
 
 .customer-invoice-sheet__grand-total td {
   padding-top: 16px;
+  border-bottom: 0 !important;
 }
 
 .customer-invoice-sheet__grand-total td:first-child {
