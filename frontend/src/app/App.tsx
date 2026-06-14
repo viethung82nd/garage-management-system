@@ -1,7 +1,8 @@
 import { Navigate, Route, Routes } from 'react-router-dom'
-import { BookingRequestsPage } from './pages/advisor/BookingRequestsPage'
-import { VehicleReceptionPage } from './pages/advisor/VehicleReceptionPage'
-import { PlaceholderPage } from './pages/PlaceholderPage'
+import { AdminDashboardPage } from '../pages/admin/DashboardPage'
+import { BookingRequestsPage } from '../pages/advisor/BookingRequestsPage'
+import { VehicleReceptionPage } from '../pages/advisor/VehicleReceptionPage'
+import { PlaceholderPage } from '../pages/PlaceholderPage'
 
 export default function App() {
   return (
@@ -29,7 +30,7 @@ export default function App() {
       <Route element={<PlaceholderPage title="Thanh toán" />} path="/accountant/payments" />
       <Route element={<PlaceholderPage title="Báo cáo tài chính" />} path="/accountant/reports" />
 
-      <Route element={<PlaceholderPage title="Quản trị - Tổng quan" />} path="/admin/dashboard" />
+      <Route element={<AdminDashboardPage />} path="/admin/dashboard" />
       <Route element={<PlaceholderPage title="Người dùng" />} path="/admin/users" />
       <Route element={<PlaceholderPage title="Phân quyền" />} path="/admin/roles" />
       <Route element={<PlaceholderPage title="Dịch vụ" />} path="/admin/services" />

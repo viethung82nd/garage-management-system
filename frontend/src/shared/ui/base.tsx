@@ -21,6 +21,7 @@ export type IconName =
   | 'lift'
   | 'logout'
   | 'map'
+  | 'more'
   | 'person'
   | 'plus'
   | 'search'
@@ -176,6 +177,13 @@ const iconPaths: Record<IconName, ReactNode> = {
       <path d="m9 18-6 3V6l6-3 6 3 6-3v15l-6 3-6-3Z" />
       <path d="M9 3v15" />
       <path d="M15 6v15" />
+    </>
+  ),
+  more: (
+    <>
+      <path d="M12 6h.01" />
+      <path d="M12 12h.01" />
+      <path d="M12 18h.01" />
     </>
   ),
   logout: (

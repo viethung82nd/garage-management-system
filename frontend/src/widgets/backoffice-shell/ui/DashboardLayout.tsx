@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import { Link, NavLink, useLocation } from 'react-router-dom'
-import { Icon, IconButton } from '../components/base'
-import { sidebarItems, topNavItems } from '../design/tokens'
+import { Icon, IconButton } from '../../../shared/ui/base'
+import { sidebarItems, topNavItems } from '../../../shared/config/tokens'
 
 export function DashboardLayout({ children }: { children: ReactNode }) {
   const location = useLocation()
