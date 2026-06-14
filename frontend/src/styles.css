@@ -832,6 +832,11 @@ select {
   line-height: 1.5;
 }
 
+.customer-text-break {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
 .customer-booking-card__grid p,
 .customer-profile-meta p,
 .customer-vehicle-card__grid p {
@@ -1208,6 +1213,27 @@ select {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.customer-vehicle-card__layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.9fr) minmax(0, 1.1fr);
+  gap: 22px;
+}
+
+.customer-vehicle-card__media {
+  overflow: hidden;
+  border-radius: 22px;
+  background: rgba(15, 14, 14, 0.04);
+  min-height: 100%;
+}
+
+.customer-vehicle-card__media img {
+  width: 100%;
+  height: 100%;
+  min-height: 320px;
+  object-fit: cover;
+  display: block;
+}
+
 .customer-stats-strip {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -1254,6 +1280,10 @@ select {
   .customer-vehicle-card__grid,
   .customer-stats-strip {
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .customer-vehicle-card__layout {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -1315,6 +1345,10 @@ select {
   .customer-vehicle-card__grid,
   .customer-stats-strip {
     grid-template-columns: 1fr;
+  }
+
+  .customer-vehicle-card__media img {
+    min-height: 240px;
   }
 
   .customer-modal-backdrop {

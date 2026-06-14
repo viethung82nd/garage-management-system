@@ -111,6 +111,7 @@ export const customerProfile = {
     vin: 'RL4BC4CJ0MA001082',
     mileage: '42,180 km',
     lastService: '11 Jun 2026',
+    image: '/wp-content/uploads/2022/11/choose.webp',
   },
   stats: [
     { label: 'Appointments', value: '08' },

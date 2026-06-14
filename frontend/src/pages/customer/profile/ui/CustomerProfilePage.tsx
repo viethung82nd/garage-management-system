@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { asset } from '../../../../shared/lib/asset'
 import {
   CustomerAccountNav,
   CustomerInfoCard,
@@ -63,7 +64,7 @@ export default function CustomerProfilePage() {
                 </div>
                 <div>
                   <span className="customer-booking-card__label">Email</span>
-                  <strong>{customerProfile.email}</strong>
+                  <strong className="customer-text-break">{customerProfile.email}</strong>
                 </div>
                 <div>
                   <span className="customer-booking-card__label">Address</span>
@@ -103,22 +104,28 @@ export default function CustomerProfilePage() {
         />
 
         <CustomerInfoCard eyebrow={customerProfile.primaryVehicle.label} title={customerProfile.primaryVehicle.vehicle} className="customer-vehicle-card">
-          <div className="customer-vehicle-card__grid">
-            <div>
-              <span className="customer-booking-card__label">License plate</span>
-              <strong>{customerProfile.primaryVehicle.plate}</strong>
+          <div className="customer-vehicle-card__layout">
+            <div className="customer-vehicle-card__media">
+              <img src={asset(customerProfile.primaryVehicle.image)} alt={customerProfile.primaryVehicle.vehicle} />
             </div>
-            <div>
-              <span className="customer-booking-card__label">Mileage</span>
-              <strong>{customerProfile.primaryVehicle.mileage}</strong>
-            </div>
-            <div>
-              <span className="customer-booking-card__label">Last service</span>
-              <strong>{customerProfile.primaryVehicle.lastService}</strong>
-            </div>
-            <div>
-              <span className="customer-booking-card__label">VIN</span>
-              <strong>{customerProfile.primaryVehicle.vin}</strong>
+
+            <div className="customer-vehicle-card__grid">
+              <div>
+                <span className="customer-booking-card__label">License plate</span>
+                <strong>{customerProfile.primaryVehicle.plate}</strong>
+              </div>
+              <div>
+                <span className="customer-booking-card__label">Mileage</span>
+                <strong>{customerProfile.primaryVehicle.mileage}</strong>
+              </div>
+              <div>
+                <span className="customer-booking-card__label">Last service</span>
+                <strong>{customerProfile.primaryVehicle.lastService}</strong>
+              </div>
+              <div>
+                <span className="customer-booking-card__label">VIN</span>
+                <strong>{customerProfile.primaryVehicle.vin}</strong>
+              </div>
             </div>
           </div>
         </CustomerInfoCard>
