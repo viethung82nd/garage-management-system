@@ -1462,6 +1462,22 @@ select {
   padding: 10px 0;
 }
 
+.customer-invoice-sheet__meta-table {
+  border-top: 1px solid rgba(15, 14, 14, 0.14);
+}
+
+.customer-invoice-sheet__meta-table td {
+  border-left: 0 !important;
+  border-right: 0 !important;
+  border-top: 0 !important;
+  border-bottom: 1px solid rgba(15, 14, 14, 0.14);
+  box-shadow: none !important;
+}
+
+.customer-invoice-sheet__meta-table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
 .customer-invoice-sheet__meta-table td:first-child,
 .customer-invoice-sheet__totals td:first-child,
 .customer-invoice-sheet__facts div {
@@ -1480,19 +1496,15 @@ select {
 }
 
 .customer-invoice-sheet__parties {
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   margin-top: 24px;
   padding-top: 8px;
+  gap: 34px;
+  border-top: 1px solid rgba(15, 14, 14, 0.08);
 }
 
 .customer-invoice-sheet__column {
-  padding: 0 18px 0 0;
-  border-right: 1px solid rgba(15, 14, 14, 0.08);
-}
-
-.customer-invoice-sheet__column:last-child {
-  padding-right: 0;
-  border-right: 0;
+  padding: 0;
 }
 
 .customer-invoice-sheet__column > strong {

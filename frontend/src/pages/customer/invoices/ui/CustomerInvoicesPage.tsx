@@ -221,6 +221,10 @@ export default function CustomerInvoicesPage() {
                         <td>Booking</td>
                         <td>{selectedInvoice.bookingId ?? 'Walk-in intake'}</td>
                       </tr>
+                      <tr>
+                        <td>Payment method</td>
+                        <td>{selectedInvoice.paymentMethod}</td>
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -252,28 +256,6 @@ export default function CustomerInvoicesPage() {
                       <div>
                         <span>Odometer</span>
                         <strong>{selectedInvoice.mileage}</strong>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="customer-invoice-sheet__column">
-                    <span className="customer-booking-card__label">Service team</span>
-                    <div className="customer-invoice-sheet__facts">
-                      <div>
-                        <span>Service advisor</span>
-                        <strong>{selectedInvoice.advisor}</strong>
-                      </div>
-                      <div>
-                        <span>Technician</span>
-                        <strong>{selectedInvoice.technician}</strong>
-                      </div>
-                      <div>
-                        <span>Accountant</span>
-                        <strong>{selectedInvoice.accountantName}</strong>
-                      </div>
-                      <div>
-                        <span>Payment method</span>
-                        <strong>{selectedInvoice.paymentMethod}</strong>
                       </div>
                     </div>
                   </div>
