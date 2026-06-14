@@ -3,7 +3,7 @@ type TimelineStepState = 'complete' | 'current' | 'pending'
 export type CustomerTimelineStep = {
   id: string
   label: string
-  description: string
+  description?: string
   timestamp: string
   state: TimelineStepState
 }
@@ -26,7 +26,7 @@ export function CustomerTimeline({
               <h4>{step.label}</h4>
               <span>{step.timestamp}</span>
             </div>
-            <p>{step.description}</p>
+            {step.description ? <p>{step.description}</p> : null}
           </div>
         </li>
       ))}

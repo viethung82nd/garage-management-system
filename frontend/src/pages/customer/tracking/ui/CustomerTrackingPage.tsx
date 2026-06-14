@@ -5,6 +5,7 @@ import {
   CustomerFormField,
   CustomerInfoCard,
   CustomerInput,
+  CustomerMetricCard,
   CustomerPageLayout,
   CustomerPrimaryButton,
   CustomerSectionHeading,
@@ -37,28 +38,20 @@ export default function CustomerTrackingPage() {
           <div className="col-lg-6">
             <CustomerSectionHeading
               eyebrow="Track Your Repair"
-              title="Follow every milestone of your vehicle service in one place"
-              description="Use your license plate and phone number to check the latest repair progress, assigned technician, approved services, and pickup readiness."
+              title="Check repair progress fast"
+              description="Check online booking or walk-in repair."
+              compact
             />
 
-            <div className="customer-highlight-list">
-              <div className="customer-highlight-list__item">
-                <strong>Walk-in friendly</strong>
-                <p>Designed for both account holders and direct service customers.</p>
-              </div>
-              <div className="customer-highlight-list__item">
-                <strong>Live repair milestones</strong>
-                <p>See intake, diagnosis, repair, and handover updates without calling the garage.</p>
-              </div>
-              <div className="customer-highlight-list__item">
-                <strong>Kapa service visibility</strong>
-                <p>Review assigned staff, approved work items, and expected completion time clearly.</p>
-              </div>
-            </div>
+            <div className="customer-metric-strip customer-metric-strip--three">
+                  <CustomerMetricCard label="Input" value="2 fields" note="Plate + phone" />
+                  <CustomerMetricCard label="Covers" value="Walk-in / online" note="One repair flow" />
+                  <CustomerMetricCard label="Focus" value="ETA" note="See ready time fast" accent />
+                </div>
           </div>
 
           <div className="col-lg-6">
-            <CustomerInfoCard eyebrow="Lookup Form" title="Get your latest repair update" className="customer-tracking-form-card">
+            <CustomerInfoCard eyebrow="Lookup" title="Find your order" className="customer-tracking-form-card">
               <form
                 onSubmit={(event) => {
                   event.preventDefault()
@@ -66,7 +59,7 @@ export default function CustomerTrackingPage() {
                 }}
                 className="customer-tracking-form"
               >
-                <CustomerFormField id="tracking-plate" label="License Plate" required hint="Example: 51H-12345">
+                <CustomerFormField id="tracking-plate" label="License Plate" required>
                   <CustomerInput
                     id="tracking-plate"
                     name="tracking-plate"
@@ -76,7 +69,7 @@ export default function CustomerTrackingPage() {
                   />
                 </CustomerFormField>
 
-                <CustomerFormField id="tracking-phone" label="Phone Number" required hint="Use the number provided during check-in or booking.">
+                <CustomerFormField id="tracking-phone" label="Phone Number" required>
                   <CustomerInput
                     id="tracking-phone"
                     name="tracking-phone"
@@ -96,8 +89,8 @@ export default function CustomerTrackingPage() {
       {result === false ? (
         <section className="customer-section">
           <CustomerEmptyState
-            title="We could not find a repair order with those details"
-            description="Please recheck your license plate and phone number, or contact our service team if your vehicle was checked in recently."
+            title="No repair order found"
+            description="Check plate and phone number, or contact Kapa."
             action={
               <div className="customer-empty-actions">
                 <Link to="/contact-us" className="default-btn customer-primary-btn">
@@ -118,38 +111,38 @@ export default function CustomerTrackingPage() {
         <section className="customer-section customer-section--results">
           <div className="row g-4">
             <div className="col-xl-4">
-              <CustomerInfoCard eyebrow="Repair Summary" title="Current order snapshot">
+              <CustomerInfoCard eyebrow="Current Status" title={result.currentStatus}>
+                <div className="customer-metric-strip customer-metric-strip--stack">
+                  <CustomerMetricCard label="ETA" value={result.estimatedCompletion} accent />
+                  <CustomerMetricCard label={result.stageLabel} value={result.stageValue} note={result.progressPercent} />
+                </div>
                 <div className="customer-meta-list">
                   <div>
                     <span>Booking ID</span>
                     <strong>{result.bookingId}</strong>
                   </div>
                   <div>
-                    <span>Customer</span>
-                    <strong>{result.customerName}</strong>
-                  </div>
-                  <div>
                     <span>Vehicle</span>
                     <strong>{result.vehicle}</strong>
                   </div>
                   <div>
-                    <span>Current status</span>
-                    <CustomerStatusBadge tone={result.currentStatusTone}>{result.currentStatus}</CustomerStatusBadge>
+                    <span>Order type</span>
+                    <strong>{result.intakeType}</strong>
                   </div>
                   <div>
-                    <span>Estimated completion</span>
-                    <strong>{result.estimatedCompletion}</strong>
+                    <span>Status</span>
+                    <CustomerStatusBadge tone={result.currentStatusTone}>{result.currentStatus}</CustomerStatusBadge>
                   </div>
                 </div>
               </CustomerInfoCard>
             </div>
 
             <div className="col-xl-4">
-              <CustomerInfoCard eyebrow="Service Details" title="Assigned team and approved work">
+              <CustomerInfoCard eyebrow="Service Snapshot" title="Who is handling your car">
                 <div className="customer-meta-list">
                   <div>
-                    <span>Branch</span>
-                    <strong>{result.branch}</strong>
+                    <span>Garage</span>
+                    <strong>{result.garageName}</strong>
                   </div>
                   <div>
                     <span>Service advisor</span>
@@ -160,21 +153,40 @@ export default function CustomerTrackingPage() {
                     <strong>{result.technician}</strong>
                   </div>
                   <div>
-                    <span>Payment status</span>
+                    <span>Payment</span>
                     <CustomerStatusBadge tone={result.paymentTone}>{result.paymentStatus}</CustomerStatusBadge>
+                  </div>
+                  <div>
+                    <span>Invoice</span>
+                    <strong>{result.invoiceId}</strong>
+                  </div>
+                  <div>
+                    <span>Quoted total</span>
+                    <strong>{result.quotedTotal}</strong>
+                  </div>
+                  <div>
+                    <span>Payment method</span>
+                    <strong>{result.paymentMethod}</strong>
                   </div>
                 </div>
 
                 <div className="customer-service-tags">
-                  {result.selectedServices.map((service) => (
+                  {result.approvedServices.map((service) => (
                     <span key={service}>{service}</span>
                   ))}
                 </div>
+
+                {result.additionalProposal ? (
+                  <div className="customer-inline-note">
+                    <span className="customer-booking-card__label">Additional proposal</span>
+                    <p>{result.additionalProposal}</p>
+                  </div>
+                ) : null}
               </CustomerInfoCard>
             </div>
 
             <div className="col-xl-4">
-              <CustomerInfoCard eyebrow="Repair Timeline" title="Live progress milestones">
+              <CustomerInfoCard eyebrow="Progress" title="Repair steps">
                 <CustomerTimeline steps={result.timeline} />
               </CustomerInfoCard>
             </div>

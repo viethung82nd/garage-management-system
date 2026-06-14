@@ -12,6 +12,7 @@ export type BookingCardRecord = {
   amount: string
   statusLabel: string
   statusTone: 'completed' | 'in-progress' | 'pending' | 'ready'
+  primaryService?: string
 }
 
 export function CustomerBookingCard({
@@ -31,7 +32,7 @@ export function CustomerBookingCard({
 
       <div className="customer-booking-card__grid">
         <div>
-          <span className="customer-booking-card__label">Date / Time</span>
+          <span className="customer-booking-card__label">Visit</span>
           <strong>{booking.dateTime}</strong>
         </div>
         <div>
@@ -40,8 +41,8 @@ export function CustomerBookingCard({
           <p>{booking.plate}</p>
         </div>
         <div>
-          <span className="customer-booking-card__label">Advisor / Branch</span>
-          <strong>{booking.advisor}</strong>
+          <span className="customer-booking-card__label">Main Service</span>
+          <strong>{booking.primaryService ?? booking.services[0]}</strong>
           <p>{booking.branch}</p>
         </div>
         <div>
@@ -51,15 +52,19 @@ export function CustomerBookingCard({
       </div>
 
       <div className="customer-booking-card__services">
-        <span className="customer-booking-card__label">Services</span>
+        <span className="customer-booking-card__label">More Services</span>
         <div className="customer-booking-card__tags">
-          {booking.services.map((service) => (
+          {booking.services.slice(1).map((service) => (
             <span key={service}>{service}</span>
           ))}
         </div>
       </div>
 
       <div className="customer-booking-card__actions">
+        <div className="customer-booking-card__meta">
+          <span>{booking.advisor}</span>
+          <span>{booking.branch}</span>
+        </div>
         <Link to="/customer/tracking" className="default-btn customer-primary-btn customer-primary-btn--ghost">
           View Progress
           <span />

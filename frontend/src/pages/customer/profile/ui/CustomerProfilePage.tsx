@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom'
 import {
   CustomerAccountNav,
   CustomerInfoCard,
+  CustomerMetricCard,
   CustomerPageLayout,
   CustomerSectionHeading,
 } from '../../../../shared/ui/kapa-customer'
@@ -20,9 +21,12 @@ export default function CustomerProfilePage() {
               <div className="customer-profile-hero__copy">
                 <span className="customer-booking-card__eyebrow">Account Overview</span>
                 <h3>{customerProfile.name}</h3>
-                <p>
-                  {customerProfile.customerId} • Member since {customerProfile.memberSince} • {customerProfile.loyaltyTier}
-                </p>
+                <div className="customer-profile-chips">
+                  <span>{customerProfile.customerId}</span>
+                  <span>Since {customerProfile.memberSince}</span>
+                  <span>{customerProfile.loyaltyTier}</span>
+                  <span>{customerProfile.garageName}</span>
+                </div>
               </div>
             </div>
 
@@ -31,7 +35,7 @@ export default function CustomerProfilePage() {
                 View Booking History
                 <span />
               </Link>
-              <Link to="/customer/tracking" className="default-btn customer-primary-btn customer-primary-btn--ghost">
+              <Link to="/tracking" className="default-btn customer-primary-btn customer-primary-btn--ghost">
                 Track Repair
                 <span />
               </Link>
@@ -41,12 +45,9 @@ export default function CustomerProfilePage() {
       </section>
 
       <section className="customer-section">
-        <div className="customer-stats-strip">
+        <div className="customer-metric-strip customer-metric-strip--four">
           {customerProfile.stats.map((item) => (
-            <div key={item.label} className="customer-stat-card">
-              <span>{item.label}</span>
-              <strong>{item.value}</strong>
-            </div>
+            <CustomerMetricCard key={item.label} label={item.label} value={item.value} accent={item.label === 'Active'} />
           ))}
         </div>
       </section>
@@ -54,7 +55,7 @@ export default function CustomerProfilePage() {
       <section className="customer-section">
         <div className="row g-4">
           <div className="col-xl-6">
-            <CustomerInfoCard eyebrow="Contact Details" title="Your profile information">
+            <CustomerInfoCard eyebrow="Contact" title="Your details">
               <div className="customer-profile-meta">
                 <div>
                   <span className="customer-booking-card__label">Phone</span>
@@ -73,19 +74,20 @@ export default function CustomerProfilePage() {
           </div>
 
           <div className="col-xl-6">
-            <CustomerInfoCard eyebrow="Service Snapshot" title="What is active on your account">
+            <CustomerInfoCard eyebrow="Current Activity" title="What needs attention">
               <div className="customer-profile-meta">
                 <div>
-                  <span className="customer-booking-card__label">Active repair</span>
+                  <span className="customer-booking-card__label">Repair</span>
                   <strong>{customerProfile.activeRepair}</strong>
+                  <p>{customerProfile.activeStatus}</p>
                 </div>
                 <div>
-                  <span className="customer-booking-card__label">Next appointment</span>
+                  <span className="customer-booking-card__label">Next visit</span>
                   <strong>{customerProfile.nextAppointment}</strong>
                 </div>
                 <div>
-                  <span className="customer-booking-card__label">Tier</span>
-                  <strong>{customerProfile.loyaltyTier}</strong>
+                  <span className="customer-booking-card__label">Garage</span>
+                  <strong>{customerProfile.garageName}</strong>
                 </div>
               </div>
             </CustomerInfoCard>
@@ -96,8 +98,8 @@ export default function CustomerProfilePage() {
       <section className="customer-section">
         <CustomerSectionHeading
           eyebrow="Primary Vehicle"
-          title="Vehicle details tied to your latest Kapa visits"
-          description="This quick summary helps you review the car we are currently servicing and the maintenance history attached to your profile."
+          title="Your main vehicle"
+          compact
         />
 
         <CustomerInfoCard eyebrow={customerProfile.primaryVehicle.label} title={customerProfile.primaryVehicle.vehicle} className="customer-vehicle-card">
@@ -107,16 +109,16 @@ export default function CustomerProfilePage() {
               <strong>{customerProfile.primaryVehicle.plate}</strong>
             </div>
             <div>
-              <span className="customer-booking-card__label">VIN</span>
-              <strong>{customerProfile.primaryVehicle.vin}</strong>
-            </div>
-            <div>
               <span className="customer-booking-card__label">Mileage</span>
               <strong>{customerProfile.primaryVehicle.mileage}</strong>
             </div>
             <div>
               <span className="customer-booking-card__label">Last service</span>
               <strong>{customerProfile.primaryVehicle.lastService}</strong>
+            </div>
+            <div>
+              <span className="customer-booking-card__label">VIN</span>
+              <strong>{customerProfile.primaryVehicle.vin}</strong>
             </div>
           </div>
         </CustomerInfoCard>

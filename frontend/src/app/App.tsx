@@ -43,13 +43,14 @@ export default function App() {
         }
       />
       <Route
-        path="/customer/tracking"
+        path="/tracking"
         element={
           <Suspense fallback={<RouteFallback />}>
             <CustomerTrackingPage />
           </Suspense>
         }
       />
+      <Route path="/customer/tracking" element={<Navigate to="/tracking" replace />} />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/accountant" element={<Navigate to="/accountant/invoices" replace />} />
       <Route

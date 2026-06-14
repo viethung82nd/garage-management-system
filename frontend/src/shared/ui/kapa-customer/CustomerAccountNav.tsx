@@ -3,7 +3,7 @@ import { NavLink } from 'react-router-dom'
 const links = [
   { to: '/customer/profile', label: 'Profile' },
   { to: '/customer/bookings', label: 'Booking History' },
-  { to: '/customer/tracking', label: 'Track Repair' },
+  { to: '/tracking', label: 'Track Repair' },
 ]
 
 export function CustomerAccountNav() {
