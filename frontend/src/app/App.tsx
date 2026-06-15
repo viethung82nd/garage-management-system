@@ -5,6 +5,7 @@ import { LostPasswordPage, MyAccountPage } from '../pages/auth'
 import { ContactUsPage } from '../pages/contact-us'
 import { HomeFivePage } from '../pages/home-five'
 import { OurBrandsPage } from '../pages/our-brands'
+import { RequireAuth, RequireRole } from './route-guards'
 import { theme } from '../shared/config/theme'
 
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard').then((module) => ({ default: module.AdminDashboardPage })))
@@ -35,7 +36,11 @@ export default function App() {
         path="/customer/profile"
         element={
           <Suspense fallback={<RouteFallback />}>
-            <CustomerProfilePage />
+            <RequireAuth>
+              <RequireRole roles={['onlineCustomer']}>
+                <CustomerProfilePage />
+              </RequireRole>
+            </RequireAuth>
           </Suspense>
         }
       />
@@ -43,7 +48,11 @@ export default function App() {
         path="/customer/bookings"
         element={
           <Suspense fallback={<RouteFallback />}>
-            <CustomerBookingsPage />
+            <RequireAuth>
+              <RequireRole roles={['onlineCustomer']}>
+                <CustomerBookingsPage />
+              </RequireRole>
+            </RequireAuth>
           </Suspense>
         }
       />
@@ -51,7 +60,11 @@ export default function App() {
         path="/customer/invoices"
         element={
           <Suspense fallback={<RouteFallback />}>
-            <CustomerInvoicesPage />
+            <RequireAuth>
+              <RequireRole roles={['onlineCustomer']}>
+                <CustomerInvoicesPage />
+              </RequireRole>
+            </RequireAuth>
           </Suspense>
         }
       />
@@ -70,7 +83,11 @@ export default function App() {
         path="/admin/dashboard"
         element={
           <Suspense fallback={<RouteFallback />}>
-            <AdminDashboardPage />
+            <RequireAuth>
+              <RequireRole roles={['admin']}>
+                <AdminDashboardPage />
+              </RequireRole>
+            </RequireAuth>
           </Suspense>
         }
       />
@@ -78,7 +95,11 @@ export default function App() {
         path="/accountant/invoices"
         element={
           <Suspense fallback={<RouteFallback />}>
-            <InvoiceManagementPage />
+            <RequireAuth>
+              <RequireRole roles={['accountant']}>
+                <InvoiceManagementPage />
+              </RequireRole>
+            </RequireAuth>
           </Suspense>
         }
       />
@@ -86,7 +107,11 @@ export default function App() {
         path="/accountant/invoices/confirm"
         element={
           <Suspense fallback={<RouteFallback />}>
-            <InvoiceConfirmPage />
+            <RequireAuth>
+              <RequireRole roles={['accountant']}>
+                <InvoiceConfirmPage />
+              </RequireRole>
+            </RequireAuth>
           </Suspense>
         }
       />

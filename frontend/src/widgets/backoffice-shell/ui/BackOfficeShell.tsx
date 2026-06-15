@@ -20,6 +20,7 @@ export function BackOfficeShell({
   profileName,
   profileRole,
   profileAccent,
+  onLogout,
   menuItems,
   selectedMenuKeys,
   children,
@@ -36,6 +37,7 @@ export function BackOfficeShell({
   profileName: string
   profileRole: string
   profileAccent: string
+  onLogout?: () => void
   menuItems: MenuProps['items']
   selectedMenuKeys: string[]
   children: ReactNode
@@ -127,6 +129,11 @@ export function BackOfficeShell({
                   </div>
                 </div>
               </Space>
+              {onLogout && (
+                <Button onClick={onLogout} className="!rounded-full !font-semibold">
+                  Logout
+                </Button>
+              )}
             </Space>
           </header>
 

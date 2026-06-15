@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../../../shared/auth'
 import { asset } from '../../../../shared/lib/asset'
 import {
   CustomerAccountNav,
@@ -10,6 +11,11 @@ import {
 import { customerProfile } from '../../model/mock'
 
 export default function CustomerProfilePage() {
+  const { user } = useAuth()
+  const profileName = user?.fullName || customerProfile.name
+  const profileEmail = user?.email || customerProfile.email
+  const profilePhone = user?.phone || customerProfile.phone
+
   return (
     <CustomerPageLayout title="Customer Profile" breadcrumb="Customer Profile">
       <section className="customer-section">
@@ -18,10 +24,10 @@ export default function CustomerProfilePage() {
         <div className="customer-panel customer-profile-hero-card">
           <div className="customer-profile-hero">
             <div className="d-flex align-items-center gap-4 flex-wrap">
-              <div className="customer-profile-avatar">{customerProfile.name.slice(0, 2).toUpperCase()}</div>
+              <div className="customer-profile-avatar">{profileName.slice(0, 2).toUpperCase()}</div>
               <div className="customer-profile-hero__copy">
                 <span className="customer-booking-card__eyebrow">Account Overview</span>
-                <h3>{customerProfile.name}</h3>
+                <h3>{profileName}</h3>
                 <div className="customer-profile-chips">
                   <span>{customerProfile.customerId}</span>
                   <span>Since {customerProfile.memberSince}</span>
@@ -60,11 +66,11 @@ export default function CustomerProfilePage() {
               <div className="customer-profile-meta">
                 <div>
                   <span className="customer-booking-card__label">Phone</span>
-                  <strong>{customerProfile.phone}</strong>
+                  <strong>{profilePhone}</strong>
                 </div>
                 <div>
                   <span className="customer-booking-card__label">Email</span>
-                  <strong className="customer-text-break">{customerProfile.email}</strong>
+                  <strong className="customer-text-break">{profileEmail}</strong>
                 </div>
                 <div>
                   <span className="customer-booking-card__label">Address</span>

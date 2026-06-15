@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { getPostLoginPath, useAuth } from '../../auth'
 import { asset } from '../../lib/asset'
 
 type LegacyCurrentPage = 'account' | 'lost-password'
@@ -40,9 +41,14 @@ export function KapaNavbar({
   accountHref?: string
   contactHref?: string
 }) {
+  const { isAuthenticated, logout, user } = useAuth()
   const resolvedActiveSection = current === 'account' || current === 'lost-password' ? 'shop' : activeSection === 'customer' ? 'shop' : activeSection
   const isShopActive = resolvedActiveSection === 'shop'
   const isContactActive = activeSection === 'contact'
+  const accountRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? accountHref : accountHref
+  const logoRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? logoHref : logoHref
+  const ctaLabel = isAuthenticated ? 'Account' : 'Get Free Quote'
+  const dashboardLabel = user?.role === 'onlineCustomer' ? 'My account' : 'Workspace'
 
   return (
     <>
@@ -51,7 +57,7 @@ export function KapaNavbar({
           <div className="container">
             <div className="main-responsive-menu logo-cls">
               <div className="logo">
-                <Link to={logoHref}>
+                <Link to={logoRoute}>
                   <img src={asset('/wp-content/uploads/2023/01/Kapa_Logo_Black.svg')} alt="Kapa" />
                 </Link>
               </div>
@@ -114,10 +120,17 @@ export function KapaNavbar({
                         </a>
                       </li>
                       <li className="nav-item">
-                        <Link className="dropdown-item" to={accountHref}>
-                          My account
+                        <Link className="dropdown-item" to={accountRoute}>
+                          {dashboardLabel}
                         </Link>
                       </li>
+                      {isAuthenticated && (
+                        <li className="nav-item">
+                          <button type="button" className="dropdown-item kapa-navbar-dropdown-button" onClick={logout}>
+                            Logout
+                          </button>
+                        </li>
+                      )}
                     </ul>
                   </li>
                   <li className="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children dropdown nav-item">
@@ -126,7 +139,7 @@ export function KapaNavbar({
                 </ul>
 
                 <div className="main-logo-box">
-                  <Link to={logoHref}>
+                  <Link to={logoRoute}>
                     <img src={asset('/wp-content/uploads/2023/01/Kapa_Logo-1.svg')} alt="Kapa" />
                   </Link>
                 </div>
@@ -152,8 +165,8 @@ export function KapaNavbar({
                     </div>
                   </div>
                   <div className="option-item">
-                    <Link to={contactHref} className="default-btn">
-                      Get Free Quote
+                    <Link to={isAuthenticated ? accountRoute : contactHref} className="default-btn">
+                      {ctaLabel}
                     </Link>
                   </div>
                 </div>
@@ -174,8 +187,8 @@ export function KapaNavbar({
                 </div>
               </div>
               <div className="option-item">
-                <Link to={contactHref} className="default-btn">
-                  Get Free Quote
+                <Link to={isAuthenticated ? accountRoute : contactHref} className="default-btn">
+                  {ctaLabel}
                 </Link>
               </div>
             </div>

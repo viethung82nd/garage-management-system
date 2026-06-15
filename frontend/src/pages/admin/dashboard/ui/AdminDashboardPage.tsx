@@ -10,6 +10,7 @@ import {
 import { Button, Card, Progress, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useMemo } from 'react'
+import { useAuth } from '../../../../shared/auth'
 import { bookingOverview, bookingRecords, weeklyStatus, type BookingRecord } from '../model/mock'
 import { BackOfficeShell, adminPalette } from '../../../../widgets/backoffice-shell'
 
@@ -289,6 +290,9 @@ function HorizontalBarChart() {
 }
 
 export default function AdminDashboardPage() {
+  const { logout, user } = useAuth()
+  const profileName = user?.fullName || 'Admin'
+  const profileInitial = profileName.trim().charAt(0).toUpperCase() || 'A'
   const columns = useMemo<ColumnsType<BookingRecord>>(
     () => [
       {
@@ -380,10 +384,11 @@ export default function AdminDashboardPage() {
       headerEyebrow="Admin dashboard"
       headerTitle="Garage operations overview"
       notificationIcon={<BellOutlined />}
-      profileInitial="A"
-      profileName="Admin"
+      profileInitial={profileInitial}
+      profileName={profileName}
       profileRole="System administrator"
       profileAccent={dashboardPalette.red}
+      onLogout={logout}
       selectedMenuKeys={['dashboard']}
       menuItems={[
         { key: 'dashboard', icon: <DashboardOutlined />, label: 'Overview' },

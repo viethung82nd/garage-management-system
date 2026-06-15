@@ -1,7 +1,10 @@
+import { useState } from 'react'
 import { usePageMeta } from '../../../../shared/lib/kapa-template'
 import { KapaFooter, KapaNavbar, KapaPageBanner, KapaTopbar } from '../../../../shared/ui/kapa-chrome'
 
 export default function LostPasswordPage() {
+  const [message, setMessage] = useState('')
+
   usePageMeta(
     'Lost password – Kapa',
     'wp-singular page-template-default page page-id-808 wp-theme-kapa theme-kapa woocommerce-account woocommerce-page woocommerce-lost-password woocommerce-js elementor-default elementor-kit-5',
@@ -20,7 +23,15 @@ export default function LostPasswordPage() {
               <div className="entry-content">
                 <div className="woocommerce">
                   <div className="woocommerce-notices-wrapper" />
-                  <form method="post" className="woocommerce-ResetPassword lost_reset_password">
+                  {message ? <div className="auth-form-message auth-form-message--info">{message}</div> : null}
+                  <form
+                    method="post"
+                    className="woocommerce-ResetPassword lost_reset_password"
+                    onSubmit={(event) => {
+                      event.preventDefault()
+                      setMessage('Password reset chưa được tích hợp backend.')
+                    }}
+                  >
                     <p>
                       Lost your password? Please enter your username or email address. You will receive a link to create a new password via email.
                     </p>
