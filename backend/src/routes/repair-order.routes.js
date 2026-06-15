@@ -6,6 +6,7 @@ import {
   getRepairOrderById,
   createRepairOrder,
   updateRepairOrder,
+  updateRepairProgress,
   deleteRepairOrder,
   addStepNote,
   getStepNotes,
@@ -36,6 +37,14 @@ repairOrderRouter.put(
   requireAuth,
   requireRole("advisor", "admin"),
   asyncHandler(updateRepairOrder),
+);
+
+// Update repair order progress (technician, advisor, or admin)
+repairOrderRouter.patch(
+  "/:id/progress",
+  requireAuth,
+  requireRole("technician", "advisor", "admin"),
+  asyncHandler(updateRepairProgress),
 );
 
 // Delete a repair order (admin only)

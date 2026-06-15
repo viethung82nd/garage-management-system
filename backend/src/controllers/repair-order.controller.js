@@ -249,6 +249,112 @@ export async function updateRepairOrder(req, res) {
 }
 
 /**
+ * PATCH /api/repair-orders/:id/progress
+ * Update repair order progress (status + optional notes)
+ */
+export async function updateRepairProgress(req, res) {
+  const { id } = req.params;
+  const { status, notes, technicianId } = req.body ?? {};
+
+  if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+    throw new HttpError(400, "Invalid repair order ID format");
+  }
+
+  if (!status) {
+    throw new HttpError(400, "Status is required");
+  }
+
+  const validStatuses = ["pending", "inProgress", "completed", "cancelled"];
+  if (!validStatuses.includes(status)) {
+    throw new HttpError(
+      400,
+      `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
+    );
+  }
+
+  const order = await RepairOrderModel.findById(id);
+  if (!order) {
+    throw new HttpError(404, "Repair order not found");
+  }
+
+  // Validate status transitions
+  if (order.status === "completed" && status !== "completed") {
+    throw new HttpError(
+      400,
+      "Cannot change status of a completed repair order",
+    );
+  }
+
+  if (order.status === "cancelled" && status !== "cancelled") {
+    throw new HttpError(
+      400,
+      "Cannot change status of a cancelled repair order",
+    );
+  }
+
+  // Validate technician if provided
+  let technicianDoc = null;
+  if (technicianId) {
+    if (!technicianId.match(/^[0-9a-fA-F]{24}$/)) {
+      throw new HttpError(400, "Invalid technician ID format");
+    }
+    technicianDoc = await UserModel.findById(technicianId);
+    if (!technicianDoc) {
+      throw new HttpError(404, "Technician not found");
+    }
+    order.technicianId = technicianId;
+  }
+
+  // Update status
+  const previousStatus = order.status;
+  order.status = status;
+
+  // Set timestamps
+  if (status === "inProgress" && !order.startedAt) {
+    order.startedAt = new Date();
+  }
+
+  if (status === "completed" && !order.completedAt) {
+    order.completedAt = new Date();
+  }
+
+  // Add step note if provided
+  if (notes && notes.trim()) {
+    const techId = technicianId || order.technicianId;
+
+    if (!techId) {
+      throw new HttpError(
+        400,
+        "Technician ID is required when adding progress notes",
+      );
+    }
+
+    const newNote = {
+      content: `[${previousStatus} → ${status}] ${notes.trim()}`,
+      technicianId: techId,
+      createdAt: new Date(),
+    };
+
+    order.stepNotes.push(newNote);
+  }
+
+  await order.save();
+
+  await order.populate([
+    { path: "vehicleId", select: "licensePlate model" },
+    { path: "advisorId", select: "firstName lastName email" },
+    { path: "technicianId", select: "firstName lastName email" },
+    { path: "services.serviceId", select: "name category" },
+    { path: "stepNotes.technicianId", select: "firstName lastName email" },
+  ]);
+
+  res.json({
+    message: `Repair order status updated from ${previousStatus} to ${status}`,
+    order,
+  });
+}
+
+/**
  * DELETE /api/repair-orders/:id
  * Delete a repair order (only if pending)
  */
