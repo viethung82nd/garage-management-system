@@ -9,10 +9,16 @@ const APP_ROUTE_BY_PATHNAME = new Map<string, string>([
   ['/kapa/appointment/index.html', '/appointment'],
   ['/kapa/our-brands/', '/our-brands'],
   ['/kapa/our-brands/index.html', '/our-brands'],
+  ['/kapa/my-account/', '/my-account'],
+  ['/kapa/my-account/index.html', '/my-account'],
+  ['/kapa/my-account/lost-password/', '/my-account/lost-password'],
+  ['/kapa/my-account/lost-password/index.html', '/my-account/lost-password'],
   ['/contact-us/index.html', '/contact-us'],
   ['/appointment/index.html', '/appointment'],
   ['/our-brands/index.html', '/our-brands'],
   ['/home-five/index.html', '/home-five'],
+  ['/my-account/index.html', '/my-account'],
+  ['/my-account/lost-password/index.html', '/my-account/lost-password'],
 ])
 
 function normalizePathname(pathname: string) {
