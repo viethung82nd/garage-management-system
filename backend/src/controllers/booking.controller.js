@@ -12,6 +12,7 @@ import {
   getSlotTimes,
   isValidSlot,
 } from "../config/slots.js";
+import { todayUtc } from "../utils/date.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -28,14 +29,6 @@ function parseBookingDate(dateStr) {
     throw new HttpError(400, "date is not a valid calendar date");
   }
   return date;
-}
-
-/** UTC midnight of the current day — the earliest date that can still be booked. */
-function todayUtc() {
-  const now = new Date();
-  return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  );
 }
 
 /** Counts active (slot-occupying) bookings for a given day + slot. */
