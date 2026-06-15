@@ -1,0 +1,357 @@
+import { useMemo, useState } from 'react'
+import { Link } from 'react-router-dom'
+import { asset } from '../../../../shared/lib/asset'
+import {
+  CustomerAccountNav,
+  CustomerEmptyState,
+  CustomerFormField,
+  CustomerInput,
+  CustomerMetricCard,
+  CustomerPageLayout,
+  CustomerPanel,
+  CustomerSectionHeading,
+  CustomerSelect,
+  CustomerStatusBadge,
+} from '../../../../shared/ui/kapa-customer'
+import { customerInvoices } from '../../model/mock'
+
+function parseMoney(value: string) {
+  return Number(value.replace(/[^0-9.-]+/g, ''))
+}
+
+function formatMoney(value: number) {
+  return `$${value.toFixed(2)}`
+}
+
+export default function CustomerInvoicesPage() {
+  const [query, setQuery] = useState('')
+  const [status, setStatus] = useState('all')
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
+
+  const filteredInvoices = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+
+    return customerInvoices.filter((invoice) => {
+      const matchesQuery =
+        normalizedQuery.length === 0 ||
+        invoice.id.toLowerCase().includes(normalizedQuery) ||
+        invoice.repairOrderId.toLowerCase().includes(normalizedQuery) ||
+        invoice.vehicle.toLowerCase().includes(normalizedQuery) ||
+        invoice.plate.toLowerCase().includes(normalizedQuery)
+
+      const matchesStatus = status === 'all' || invoice.statusTone === status
+
+      return matchesQuery && matchesStatus
+    })
+  }, [query, status])
+
+  const summary = useMemo(
+    () => ({
+      paid: customerInvoices.filter((invoice) => invoice.statusTone === 'completed').length,
+      awaiting: customerInvoices.filter((invoice) => invoice.statusTone === 'pending').length,
+      updated: customerInvoices.filter((invoice) => invoice.statusTone === 'ready').length,
+    }),
+    [],
+  )
+
+  const selectedInvoice = useMemo(
+    () => customerInvoices.find((invoice) => invoice.id === selectedInvoiceId) ?? null,
+    [selectedInvoiceId],
+  )
+
+  return (
+    <CustomerPageLayout title="Customer Invoices" breadcrumb="Invoices">
+      <section className="customer-section">
+        <CustomerAccountNav />
+        <CustomerSectionHeading eyebrow="Billing Records" title="Your invoices" description="Direct invoices uploaded by Kapa accounting." compact />
+
+        <div className="customer-metric-strip customer-metric-strip--three">
+          <CustomerMetricCard label="Paid" value={summary.paid} />
+          <CustomerMetricCard label="Awaiting Payment" value={summary.awaiting} accent />
+          <CustomerMetricCard label="Adjusted / Updated" value={summary.updated} />
+        </div>
+
+        <div className="customer-toolbar">
+          <CustomerPanel>
+            <CustomerFormField id="invoice-search" label="Search">
+              <CustomerInput
+                id="invoice-search"
+                name="invoice-search"
+                placeholder="Invoice ID, repair order, vehicle, or plate"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </CustomerFormField>
+          </CustomerPanel>
+
+          <CustomerPanel>
+            <CustomerFormField id="invoice-status" label="Status">
+              <CustomerSelect id="invoice-status" name="invoice-status" value={status} onChange={(event) => setStatus(event.target.value)}>
+                <option value="all">All statuses</option>
+                <option value="completed">Paid</option>
+                <option value="pending">Awaiting payment</option>
+                <option value="ready">Adjusted / updated</option>
+              </CustomerSelect>
+            </CustomerFormField>
+          </CustomerPanel>
+        </div>
+      </section>
+
+      <section className="customer-section">
+        {filteredInvoices.length === 0 ? (
+          <CustomerEmptyState
+            title="No invoice found"
+            description="Try another keyword or open your booking history for the matching repair order."
+            action={
+              <div className="customer-empty-actions">
+                <Link to="/customer/bookings" className="default-btn customer-primary-btn">
+                  View Booking History
+                  <span />
+                </Link>
+              </div>
+            }
+          />
+        ) : (
+          <div className="customer-bookings-table-wrap">
+            <div className="customer-bookings-table-scroll">
+              <table className="customer-bookings-table">
+                <thead>
+                  <tr>
+                    <th>Invoice</th>
+                    <th>Issued</th>
+                    <th>Vehicle</th>
+                    <th>Repair Order</th>
+                    <th>Status</th>
+                    <th>Payment</th>
+                    <th>Total</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredInvoices.map((invoice) => (
+                    <tr key={invoice.id}>
+                      <td>
+                        <strong>{invoice.id}</strong>
+                        <span>{invoice.garageName}</span>
+                      </td>
+                      <td>{invoice.issuedAt}</td>
+                      <td>
+                        <strong>{invoice.vehicle}</strong>
+                        <span>{invoice.plate}</span>
+                      </td>
+                      <td>
+                        <strong>{invoice.repairOrderId}</strong>
+                        <span>{invoice.bookingId ?? 'Walk-in intake'}</span>
+                      </td>
+                      <td>
+                        <CustomerStatusBadge tone={invoice.statusTone}>{invoice.invoiceStatus}</CustomerStatusBadge>
+                      </td>
+                      <td>
+                        <strong>{invoice.paymentMethod}</strong>
+                        <span>{invoice.paymentNote}</span>
+                      </td>
+                      <td className="customer-bookings-table__amount">{invoice.total}</td>
+                      <td>
+                        <div className="customer-table-actions">
+                          <button type="button" className="customer-table-link" onClick={() => setSelectedInvoiceId(invoice.id)}>
+                            View detail
+                          </button>
+                          <button type="button" className="customer-table-link customer-table-link--ghost">
+                            Download
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      {selectedInvoice ? (
+        <div className="customer-modal-backdrop" role="presentation" onClick={() => setSelectedInvoiceId(null)}>
+          <div className="customer-modal customer-modal--invoice" role="dialog" aria-modal="true" aria-labelledby="invoice-detail-title" onClick={(event) => event.stopPropagation()}>
+            <button type="button" className="customer-modal__close" aria-label="Close detail" onClick={() => setSelectedInvoiceId(null)}>
+              ×
+            </button>
+
+            <div className="customer-modal__content customer-modal__content--invoice">
+              <div className="customer-invoice-sheet">
+                <div className="customer-invoice-sheet__masthead">
+                  <div className="customer-invoice-sheet__brand">
+                    <img src={asset('/wp-content/uploads/2023/01/Kapa_Logo-1.svg')} alt="Kapa" />
+                    <div>
+                      <span className="customer-invoice-sheet__eyebrow">Kapa Auto Care Center</span>
+                      <p>Customer invoice issued by accounting after repair completion.</p>
+                    </div>
+                  </div>
+
+                  <div className="customer-invoice-sheet__headline">
+                    <span className="customer-invoice-sheet__type">Tax Invoice</span>
+                    <strong id="invoice-detail-title">{selectedInvoice.id}</strong>
+                    <CustomerStatusBadge tone={selectedInvoice.statusTone}>{selectedInvoice.invoiceStatus}</CustomerStatusBadge>
+                  </div>
+                </div>
+
+                <div className="customer-invoice-sheet__topline">
+                  <div className="customer-invoice-sheet__garage">
+                    <strong>Kapa Auto Care Center</strong>
+                    <span>7011 Vermont Ave</span>
+                    <span>Los Angeles, CA 90044</span>
+                    <span>support@kapa-garage.com</span>
+                    <span>+1 (323) 750-1234</span>
+                  </div>
+                  <table className="customer-invoice-sheet__meta-table">
+                    <tbody>
+                      <tr>
+                        <td>Issued date</td>
+                        <td>{selectedInvoice.issuedAt}</td>
+                      </tr>
+                      <tr>
+                        <td>Service date</td>
+                        <td>{selectedInvoice.serviceDate}</td>
+                      </tr>
+                      <tr>
+                        <td>Repair order</td>
+                        <td>{selectedInvoice.repairOrderId}</td>
+                      </tr>
+                      <tr>
+                        <td>Booking</td>
+                        <td>{selectedInvoice.bookingId ?? 'Walk-in intake'}</td>
+                      </tr>
+                      <tr>
+                        <td>Payment method</td>
+                        <td>{selectedInvoice.paymentMethod}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="customer-invoice-sheet__parties">
+                  <div className="customer-invoice-sheet__column">
+                    <span className="customer-booking-card__label">Billed to</span>
+                    <strong>{selectedInvoice.customerName}</strong>
+                    <p>{selectedInvoice.customerAddress}</p>
+                    <p>{selectedInvoice.customerPhone}</p>
+                    <p>{selectedInvoice.customerEmail}</p>
+                  </div>
+
+                  <div className="customer-invoice-sheet__column">
+                    <span className="customer-booking-card__label">Vehicle details</span>
+                    <div className="customer-invoice-sheet__facts">
+                      <div>
+                        <span>Make / model</span>
+                        <strong>{selectedInvoice.vehicle}</strong>
+                      </div>
+                      <div>
+                        <span>Plate</span>
+                        <strong>{selectedInvoice.plate}</strong>
+                      </div>
+                      <div>
+                        <span>VIN</span>
+                        <strong>{selectedInvoice.vin}</strong>
+                      </div>
+                      <div>
+                        <span>Odometer</span>
+                        <strong>{selectedInvoice.mileage}</strong>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="customer-invoice-sheet__table-wrap">
+                  <table className="customer-invoice-sheet__table">
+                    <thead>
+                      <tr>
+                        <th>Item</th>
+                        <th>Description</th>
+                        <th>Quantity</th>
+                        <th>Unit Price</th>
+                        <th>GST</th>
+                        <th>Total</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {selectedInvoice.serviceItems.map((item) => {
+                        const subtotal = parseMoney(selectedInvoice.subtotal)
+                        const tax = parseMoney(selectedInvoice.tax)
+                        const unitPrice = parseMoney(item.unitPrice)
+                        const lineBaseTotal = parseMoney(item.lineTotal)
+                        const gstRate = subtotal > 0 ? tax / subtotal : 0
+                        const gstAmount = lineBaseTotal * gstRate
+                        const lineGrandTotal = lineBaseTotal + gstAmount
+
+                        return (
+                        <tr key={`${selectedInvoice.id}-${item.item}`}>
+                          <td>{item.item}</td>
+                          <td>
+                            <strong>{item.label}</strong>
+                            <span>{item.description}</span>
+                          </td>
+                          <td className="customer-invoice-sheet__table-number">{item.quantity}</td>
+                          <td className="customer-invoice-sheet__table-number">{formatMoney(unitPrice)}</td>
+                          <td className="customer-invoice-sheet__table-number">{formatMoney(gstAmount)}</td>
+                          <td className="customer-invoice-sheet__table-number">{formatMoney(lineGrandTotal)}</td>
+                        </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+
+                <div className="customer-invoice-sheet__summary">
+                  <div className="customer-invoice-sheet__note">
+                    <span className="customer-booking-card__label">Payment note</span>
+                    <p>{selectedInvoice.paymentNote}</p>
+                    {selectedInvoice.customerNote ? <p>{selectedInvoice.customerNote}</p> : null}
+                  </div>
+
+                  <table className="customer-invoice-sheet__totals">
+                    <tbody>
+                      <tr>
+                        <td>Subtotal</td>
+                        <td>{selectedInvoice.subtotal}</td>
+                      </tr>
+                      <tr>
+                        <td>Tax</td>
+                        <td>{selectedInvoice.tax}</td>
+                      </tr>
+                      <tr>
+                        <td>Discount</td>
+                        <td>{selectedInvoice.discount}</td>
+                      </tr>
+                      <tr className="customer-invoice-sheet__grand-total">
+                        <td>Balance Due</td>
+                        <td>{selectedInvoice.total}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+                
+                <div className="customer-invoice-sheet__footer">
+                  <div className="customer-invoice-sheet__footer-copy">
+                    <span>Issued by {selectedInvoice.accountantName}</span>
+                    <span>Thank you for choosing Kapa Auto Care Center.</span>
+                  </div>
+
+                  <div className="customer-modal__actions">
+                    <button type="button" className="default-btn customer-primary-btn customer-primary-btn--ghost">
+                      Download invoice
+                      <span />
+                    </button>
+                    <button type="button" className="default-btn customer-primary-btn customer-primary-btn--ghost" onClick={() => setSelectedInvoiceId(null)}>
+                      Close
+                      <span />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+    </CustomerPageLayout>
+  )
+}
