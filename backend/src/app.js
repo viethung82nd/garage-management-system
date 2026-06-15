@@ -5,6 +5,7 @@ import { dbStatus } from "./db/connect.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { authRouter } from "./routes/auth.routes.js";
 import { bookingRouter } from "./routes/booking.routes.js";
+import { adminRouter } from "./routes/admin.routes.js";
 
 /** Builds the Express application (no listening — see server.js). */
 export function createApp() {
@@ -20,6 +21,7 @@ export function createApp() {
 
   app.use("/api/auth", authRouter);
   app.use("/api/bookings", bookingRouter);
+  app.use("/api/admin", adminRouter);
 
   app.use(notFound);
   app.use(errorHandler);
