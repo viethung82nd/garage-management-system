@@ -1,11 +1,12 @@
 import { useCallback, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { useClonedKapaPage, type TransformTemplateDocument } from '../../../shared/lib/kapa-template'
+import { rewriteKapaRouteLinks, useClonedKapaPage, type TransformTemplateDocument } from '../../../shared/lib/kapa-template'
 import EstimateSection from '../../../widgets/home-five-estimate/ui/EstimateSection'
 
 const HOME_FIVE_URL = '/kapa-auth/home-five/index.html'
 const HOME_FIVE_BASE = '/kapa-auth/home-five/'
 const HOME_FIVE_TITLE = 'Home Five – Kapa'
+const HOME_FIVE_REMOTE_URL = 'https://themes.envytheme.com/kapa/home-five/'
 const HOME_FIVE_BODY_CLASS =
   'wp-singular page-template-default page page-id-988 wp-theme-kapa theme-kapa woocommerce-js elementor-default elementor-kit-5 elementor-page elementor-page-988 e--ua-blink e--ua-chrome e--ua-webkit'
 
@@ -14,6 +15,8 @@ const OVERLAY_REVEAL_SELECTOR =
 
 export default function HomeFivePage() {
   const transformDocument = useCallback<TransformTemplateDocument>((doc, body) => {
+    rewriteKapaRouteLinks(body, HOME_FIVE_REMOTE_URL)
+
     body.querySelectorAll('.estimate-left-content').forEach((element) => {
       const slot = doc.createElement('div')
       slot.id = 'home-five-estimate-slot'

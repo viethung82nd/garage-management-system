@@ -1,23 +1,8 @@
 jQuery(document).ready(function($) {
-    var ajaxUrl = customAjax && customAjax.ajaxUrl ? customAjax.ajaxUrl : '';
-    var isSameOrigin = false;
-
-    try {
-        isSameOrigin = ajaxUrl ? new URL(ajaxUrl, window.location.href).origin === window.location.origin : false;
-    } catch (e) {
-        isSameOrigin = false;
-    }
-
-    // In local/static mode we keep the cart count stable and avoid cross-origin noise.
-    if (!isSameOrigin) {
-        $('.mini-cart-count').text('0');
-        return;
-    }
-
     // AJAX function to update mini-cart count
     function updateMiniCartCount() {
         $.ajax({
-            url: ajaxUrl,
+            url: customAjax.ajaxUrl,
             type: 'POST',
             data: {
                 action: 'kapa_update_mini_cart_count',
@@ -35,7 +20,7 @@ jQuery(document).ready(function($) {
     // AJAX function to update mini-cart count after cart update
     function updateMiniCartCountAfterUpdate() {
         $.ajax({
-            url: ajaxUrl,
+            url: customAjax.ajaxUrl,
             type: 'POST',
             data: {
                 action: 'kapa_update_mini_cart_count_after_update',
@@ -60,3 +45,4 @@ jQuery(document).ready(function($) {
         updateMiniCartCountAfterUpdate();
     });
 });
+

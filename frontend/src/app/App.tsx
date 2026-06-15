@@ -1,8 +1,10 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
+import { AppointmentPage } from '../pages/appointment'
 import { LostPasswordPage, MyAccountPage } from '../pages/auth'
 import { ContactUsPage } from '../pages/contact-us'
 import { HomeFivePage } from '../pages/home-five'
+import { OurBrandsPage } from '../pages/our-brands'
 import { theme } from '../shared/config/theme'
 
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard').then((module) => ({ default: module.AdminDashboardPage })))
@@ -23,6 +25,8 @@ export default function App() {
       <Route path="/" element={<HomeFivePage />} />
       <Route path="/home-five" element={<HomeFivePage />} />
       <Route path="/contact-us" element={<ContactUsPage />} />
+      <Route path="/appointment" element={<AppointmentPage />} />
+      <Route path="/our-brands" element={<OurBrandsPage />} />
       <Route path="/my-account" element={<MyAccountPage />} />
       <Route path="/my-account/lost-password" element={<LostPasswordPage />} />
       <Route path="/customer/login" element={<MyAccountPage />} />
