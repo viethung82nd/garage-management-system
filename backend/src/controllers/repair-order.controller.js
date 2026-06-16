@@ -541,3 +541,20 @@ export const getRepairOrderStatus = async (req, res) => {
     });
   }
 };
+export async function getRepairOrderSummary(req, res) {
+  const { id } = req.params;
+  if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+    throw new HttpError(400, "Invalid repair order ID format");
+  }
+  const order = await RepairOrderModel.findById(id).select(
+    "services totalCost completedAt",
+  );
+  if (!order) {
+    throw new HttpError(404, "Repair order not found");
+  }
+  res.json({
+    services: order.services,
+    totalCost: order.totalCost,
+    completedAt: order.completedAt,
+  });
+}
