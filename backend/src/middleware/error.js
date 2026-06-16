@@ -25,9 +25,22 @@ export function notFound(req, res) {
  */
 // eslint-disable-next-line no-unused-vars
 export function errorHandler(err, _req, res, _next) {
-  const status = err instanceof HttpError ? err.status : 500;
-  const message =
-    status < 500 && err instanceof Error ? err.message : "Internal server error";
+  let status = 500;
+  let message = "Internal server error";
+
+  if (err instanceof HttpError) {
+    status = err.status;
+    message = err.message;
+  } else if (err?.name === "ValidationError" || err?.name === "CastError") {
+    // Mongoose schema/cast failures are bad client input, not server faults.
+    status = 400;
+    message = err.message;
+  } else if (err?.code === 11000) {
+    // Duplicate key on a unique index.
+    status = 409;
+    message = "Resource already exists";
+  }
+
   if (status >= 500) {
     console.error("[error]", err instanceof Error ? err.stack : err);
   }
