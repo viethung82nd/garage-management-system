@@ -8,6 +8,8 @@ import { authRouter } from "./routes/auth.routes.js";
 import { bookingRouter } from "./routes/booking.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
 import { paymentRouter } from "./routes/payment.routes.js";
+import { serviceRouter } from "./routes/service.routes.js";
+import { repairOrderRouter } from "./routes/repair-order.routes.js";
 
 /** Builds the Express application (no listening — see server.js). */
 export function createApp() {
@@ -26,6 +28,8 @@ export function createApp() {
   app.use("/api/bookings", bookingRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api/payments", paymentRouter);
+  app.use("/api/admin/services", serviceRouter);
+  app.use("/api/repair-orders", repairOrderRouter);
 
   app.use(notFound);
   app.use(errorHandler);
