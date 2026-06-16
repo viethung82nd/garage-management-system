@@ -485,3 +485,59 @@ export async function deleteStepNote(req, res) {
     stepNotes: order.stepNotes,
   });
 }
+
+export const getRepairOrderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const repairOrder = await RepairOrderModel.findById(id)
+      .populate("vehicleId")
+      .populate("technicianId", "fullName phone")
+      .populate("advisorId", "fullName");
+
+    if (!repairOrder) {
+      return res.status(404).json({
+        message: "Repair order not found",
+      });
+    }
+
+    return res.status(200).json({
+      repairOrderId: repairOrder._id,
+
+      status: repairOrder.status,
+
+      vehicle: {
+        id: repairOrder.vehicleId._id,
+        licensePlate: repairOrder.vehicleId.licensePlate,
+        brand: repairOrder.vehicleId.brand,
+        model: repairOrder.vehicleId.model,
+      },
+
+      technician: repairOrder.technicianId
+        ? {
+            id: repairOrder.technicianId._id,
+            name: repairOrder.technicianId.fullName,
+            phone: repairOrder.technicianId.phone,
+          }
+        : null,
+
+      services: repairOrder.services.map((service) => ({
+        name: service.name,
+        price: service.priceAtTime,
+        quantity: service.quantity,
+      })),
+
+      notes: repairOrder.stepNotes,
+
+      startedAt: repairOrder.startedAt,
+
+      completedAt: repairOrder.completedAt,
+
+      totalCost: repairOrder.totalCost,
+    });
+  } catch (error) {
+    return res.status(500).json({
+      message: error.message,
+    });
+  }
+};
