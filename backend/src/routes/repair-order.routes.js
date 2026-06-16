@@ -11,6 +11,7 @@ import {
   addStepNote,
   getStepNotes,
   deleteStepNote,
+  getRepairOrderStatus,
 } from "../controllers/repair-order.controller.js";
 
 export const repairOrderRouter = Router();
@@ -78,4 +79,11 @@ repairOrderRouter.delete(
   requireAuth,
   requireRole("admin"),
   asyncHandler(deleteStepNote),
+);
+
+// Get repair order status
+repairOrderRouter.get(
+  "/:id/status",
+  requireAuth,
+  asyncHandler(getRepairOrderStatus),
 );
