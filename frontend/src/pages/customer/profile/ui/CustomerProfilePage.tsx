@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../../../shared/auth'
 import { asset } from '../../../../shared/lib/asset'
@@ -8,13 +9,195 @@ import {
   CustomerPageLayout,
   CustomerSectionHeading,
 } from '../../../../shared/ui/kapa-customer'
-import { customerProfile } from '../../model/mock'
+import {
+  fetchCustomerBookings,
+  fetchCustomerInvoices,
+  fetchCustomerRepairOrders,
+  type CustomerBookingApiRecord,
+  type CustomerInvoiceApiRecord,
+  type CustomerRepairOrderApiRecord,
+} from '../../api/customerApi'
+
+const GARAGE_NAME = 'Kapa Auto Care Center'
+const PRIMARY_VEHICLE_IMAGE = '/wp-content/uploads/2022/11/choose.webp'
+
+function formatMemberSince(value?: string) {
+  if (!value) {
+    return 'Recently joined'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return 'Recently joined'
+  }
+
+  return new Intl.DateTimeFormat('en-US', {
+    month: 'long',
+    year: 'numeric',
+  }).format(date)
+}
+
+function formatVisitDate(value?: string, timeSlot?: string) {
+  if (!value) {
+    return 'No appointment scheduled'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return timeSlot ? `${value} • ${timeSlot}` : value
+  }
+
+  const formattedDate = new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
+
+  return timeSlot ? `${formattedDate} • ${timeSlot}` : formattedDate
+}
+
+function mapRepairStatus(status?: string) {
+  switch (status) {
+    case 'inProgress':
+      return 'Repair in progress'
+    case 'completed':
+      return 'Ready for handover'
+    case 'cancelled':
+      return 'Cancelled'
+    case 'pending':
+      return 'Awaiting advisor intake'
+    default:
+      return 'Updating'
+  }
+}
+
+function buildCustomerCode(userId?: string) {
+  return userId ? `CUS-${userId.slice(-4).toUpperCase()}` : 'CUS-0000'
+}
+
+function pickPrimaryVehicle(
+  repairOrders: CustomerRepairOrderApiRecord[],
+  bookings: CustomerBookingApiRecord[],
+) {
+  const latestRepairVehicle = repairOrders.find((order) => order.vehicleId)?.vehicleId
+  if (latestRepairVehicle) {
+    return latestRepairVehicle
+  }
+
+  return bookings.find((booking) => booking.vehicleId)?.vehicleId || null
+}
+
+function findUpcomingBooking(bookings: CustomerBookingApiRecord[]) {
+  const now = Date.now()
+
+  return [...bookings]
+    .filter((booking) => booking.status === 'pending' || booking.status === 'confirmed')
+    .map((booking) => ({
+      booking,
+      startsAt: new Date(`${booking.bookingDate}T${booking.timeSlot}:00`).getTime(),
+    }))
+    .filter((item) => !Number.isNaN(item.startsAt) && item.startsAt >= now)
+    .sort((left, right) => left.startsAt - right.startsAt)[0]?.booking || null
+}
+
+function findActiveRepair(repairOrders: CustomerRepairOrderApiRecord[]) {
+  return [...repairOrders]
+    .filter((order) => order.status !== 'completed' && order.status !== 'cancelled')
+    .sort((left, right) => {
+      const leftTime = new Date(left.startedAt || left.completedAt || 0).getTime()
+      const rightTime = new Date(right.startedAt || right.completedAt || 0).getTime()
+      return rightTime - leftTime
+    })[0] || null
+}
 
 export default function CustomerProfilePage() {
-  const { user } = useAuth()
-  const profileName = user?.fullName || customerProfile.name
-  const profileEmail = user?.email || customerProfile.email
-  const profilePhone = user?.phone || customerProfile.phone
+  const { token, user } = useAuth()
+  const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
+  const [repairOrders, setRepairOrders] = useState<CustomerRepairOrderApiRecord[]>([])
+  const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
+  const [requestError, setRequestError] = useState('')
+
+  useEffect(() => {
+    if (!token) {
+      return
+    }
+
+    let cancelled = false
+
+    const load = async () => {
+      setRequestError('')
+
+      try {
+        const [bookingResponse, repairOrderResponse, invoiceResponse] = await Promise.all([
+          fetchCustomerBookings(token),
+          fetchCustomerRepairOrders(token),
+          fetchCustomerInvoices(token),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        setBookings(bookingResponse.bookings)
+        setRepairOrders(repairOrderResponse)
+        setInvoices(invoiceResponse.invoices)
+      } catch (error) {
+        if (!cancelled) {
+          setRequestError(error instanceof Error ? error.message : 'Unable to load your customer profile.')
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  const profileView = useMemo(() => {
+    const activeRepair = findActiveRepair(repairOrders)
+    const upcomingBooking = findUpcomingBooking(bookings)
+    const primaryVehicle = pickPrimaryVehicle(repairOrders, bookings)
+    const paidInvoices = invoices.filter((invoice) => invoice.status === 'paid').length
+
+    return {
+      name: user?.fullName || 'Customer',
+      customerId: buildCustomerCode(user?._id),
+      memberSince: formatMemberSince(user?.createdAt),
+      phone: user?.phone || 'No phone on file',
+      email: user?.email || 'No email on file',
+      address: 'No address on file',
+      garageName: GARAGE_NAME,
+      loyaltyTier: 'Online customer',
+      activeRepair: activeRepair ? `RO-${activeRepair._id.slice(-6).toUpperCase()}` : 'No active repair',
+      nextAppointment: upcomingBooking ? formatVisitDate(upcomingBooking.bookingDate, upcomingBooking.timeSlot) : 'No appointment scheduled',
+      activeStatus: activeRepair ? mapRepairStatus(activeRepair.status) : 'All current repairs completed',
+      primaryVehicle: {
+        label: 'Primary Vehicle',
+        vehicle: [primaryVehicle?.brand, primaryVehicle?.model, primaryVehicle?.year].filter(Boolean).join(' ') || 'Vehicle updating',
+        plate: primaryVehicle?.licensePlate || 'Not recorded',
+        vin: primaryVehicle?.chassisNumber || primaryVehicle?.engineNumber || 'Not recorded',
+        mileage: 'Not recorded',
+        lastService:
+          repairOrders[0]?.completedAt
+            ? formatVisitDate(repairOrders[0].completedAt)
+            : bookings[0]
+              ? formatVisitDate(bookings[0].bookingDate, bookings[0].timeSlot)
+              : 'No service recorded',
+        image: PRIMARY_VEHICLE_IMAGE,
+      },
+      stats: [
+        { label: 'Appointments', value: String(bookings.length).padStart(2, '0') },
+        { label: 'Repair Orders', value: String(repairOrders.length).padStart(2, '0') },
+        { label: 'Paid Invoices', value: String(paidInvoices).padStart(2, '0') },
+        {
+          label: 'Active Repair',
+          value: String(repairOrders.filter((order) => order.status !== 'completed' && order.status !== 'cancelled').length).padStart(2, '0'),
+        },
+      ],
+    }
+  }, [bookings, invoices, repairOrders, user])
 
   return (
     <CustomerPageLayout title="Customer Profile" breadcrumb="Customer Profile">
@@ -24,15 +207,15 @@ export default function CustomerProfilePage() {
         <div className="customer-panel customer-profile-hero-card">
           <div className="customer-profile-hero">
             <div className="d-flex align-items-center gap-4 flex-wrap">
-              <div className="customer-profile-avatar">{profileName.slice(0, 2).toUpperCase()}</div>
+              <div className="customer-profile-avatar">{profileView.name.slice(0, 2).toUpperCase()}</div>
               <div className="customer-profile-hero__copy">
                 <span className="customer-booking-card__eyebrow">Account Overview</span>
-                <h3>{profileName}</h3>
+                <h3>{profileView.name}</h3>
                 <div className="customer-profile-chips">
-                  <span>{customerProfile.customerId}</span>
-                  <span>Since {customerProfile.memberSince}</span>
-                  <span>{customerProfile.loyaltyTier}</span>
-                  <span>{customerProfile.garageName}</span>
+                  <span>{profileView.customerId}</span>
+                  <span>Since {profileView.memberSince}</span>
+                  <span>{profileView.loyaltyTier}</span>
+                  <span>{profileView.garageName}</span>
                 </div>
               </div>
             </div>
@@ -49,12 +232,18 @@ export default function CustomerProfilePage() {
             </div>
           </div>
         </div>
+
+        {requestError ? (
+          <div className="customer-panel mt-4 text-sm" style={{ color: '#991b1b', border: '1px solid #fecaca', background: '#fff1f2' }}>
+            {requestError}
+          </div>
+        ) : null}
       </section>
 
       <section className="customer-section">
         <div className="customer-metric-strip customer-metric-strip--four">
-          {customerProfile.stats.map((item) => (
-            <CustomerMetricCard key={item.label} label={item.label} value={item.value} accent={item.label === 'Active'} />
+          {profileView.stats.map((item) => (
+            <CustomerMetricCard key={item.label} label={item.label} value={item.value} accent={item.label === 'Active Repair'} />
           ))}
         </div>
       </section>
@@ -66,15 +255,15 @@ export default function CustomerProfilePage() {
               <div className="customer-profile-meta">
                 <div>
                   <span className="customer-booking-card__label">Phone</span>
-                  <strong>{profilePhone}</strong>
+                  <strong>{profileView.phone}</strong>
                 </div>
                 <div>
                   <span className="customer-booking-card__label">Email</span>
-                  <strong className="customer-text-break">{profileEmail}</strong>
+                  <strong className="customer-text-break">{profileView.email}</strong>
                 </div>
                 <div>
                   <span className="customer-booking-card__label">Address</span>
-                  <strong>{customerProfile.address}</strong>
+                  <strong>{profileView.address}</strong>
                 </div>
               </div>
             </CustomerInfoCard>
@@ -85,16 +274,16 @@ export default function CustomerProfilePage() {
               <div className="customer-profile-meta">
                 <div>
                   <span className="customer-booking-card__label">Repair</span>
-                  <strong>{customerProfile.activeRepair}</strong>
-                  <p>{customerProfile.activeStatus}</p>
+                  <strong>{profileView.activeRepair}</strong>
+                  <p>{profileView.activeStatus}</p>
                 </div>
                 <div>
                   <span className="customer-booking-card__label">Next visit</span>
-                  <strong>{customerProfile.nextAppointment}</strong>
+                  <strong>{profileView.nextAppointment}</strong>
                 </div>
                 <div>
                   <span className="customer-booking-card__label">Garage</span>
-                  <strong>{customerProfile.garageName}</strong>
+                  <strong>{profileView.garageName}</strong>
                 </div>
               </div>
             </CustomerInfoCard>
@@ -103,34 +292,30 @@ export default function CustomerProfilePage() {
       </section>
 
       <section className="customer-section">
-        <CustomerSectionHeading
-          eyebrow="Primary Vehicle"
-          title="Your main vehicle"
-          compact
-        />
+        <CustomerSectionHeading eyebrow="Primary Vehicle" title="Your main vehicle" compact />
 
-        <CustomerInfoCard eyebrow={customerProfile.primaryVehicle.label} title={customerProfile.primaryVehicle.vehicle} className="customer-vehicle-card">
+        <CustomerInfoCard eyebrow={profileView.primaryVehicle.label} title={profileView.primaryVehicle.vehicle} className="customer-vehicle-card">
           <div className="customer-vehicle-card__layout">
             <div className="customer-vehicle-card__media">
-              <img src={asset(customerProfile.primaryVehicle.image)} alt={customerProfile.primaryVehicle.vehicle} />
+              <img src={asset(profileView.primaryVehicle.image)} alt={profileView.primaryVehicle.vehicle} />
             </div>
 
             <div className="customer-vehicle-card__grid">
               <div>
                 <span className="customer-booking-card__label">License plate</span>
-                <strong>{customerProfile.primaryVehicle.plate}</strong>
+                <strong>{profileView.primaryVehicle.plate}</strong>
               </div>
               <div>
                 <span className="customer-booking-card__label">Mileage</span>
-                <strong>{customerProfile.primaryVehicle.mileage}</strong>
+                <strong>{profileView.primaryVehicle.mileage}</strong>
               </div>
               <div>
                 <span className="customer-booking-card__label">Last service</span>
-                <strong>{customerProfile.primaryVehicle.lastService}</strong>
+                <strong>{profileView.primaryVehicle.lastService}</strong>
               </div>
               <div>
                 <span className="customer-booking-card__label">VIN</span>
-                <strong>{customerProfile.primaryVehicle.vin}</strong>
+                <strong>{profileView.primaryVehicle.vin}</strong>
               </div>
             </div>
           </div>

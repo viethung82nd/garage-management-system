@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { asset } from '../../../../shared/lib/asset'
 import {
@@ -13,20 +13,192 @@ import {
   CustomerSelect,
   CustomerStatusBadge,
 } from '../../../../shared/ui/kapa-customer'
-import { customerInvoices } from '../../model/mock'
+import { useAuth } from '../../../../shared/auth'
+import {
+  fetchCustomerBookings,
+  fetchCustomerInvoices,
+  type CustomerBookingApiRecord,
+  type CustomerInvoiceApiRecord,
+} from '../../api/customerApi'
+import type { CustomerInvoiceRecord, CustomerInvoiceStatus } from '../../model/mock'
+
+const GARAGE_NAME = 'Kapa Auto Care Center'
 
 function parseMoney(value: string) {
   return Number(value.replace(/[^0-9.-]+/g, ''))
 }
 
 function formatMoney(value: number) {
-  return `$${value.toFixed(2)}`
+  return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return 'Updating'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function formatDateOnly(value?: string | null) {
+  if (!value) {
+    return 'Updating'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
+}
+
+function paymentMethodLabel(method?: string | null): CustomerInvoiceRecord['paymentMethod'] {
+  switch (method) {
+    case 'bankTransfer':
+      return 'Bank transfer'
+    case 'card':
+      return 'Card at counter'
+    case 'cash':
+      return 'Cash at garage'
+    default:
+      return 'Cash at garage'
+  }
+}
+
+function paymentNote(invoice: CustomerInvoiceApiRecord) {
+  if (invoice.status === 'paid') {
+    return 'Paid directly at the service desk and confirmed by accounting.'
+  }
+
+  if (invoice.latestPayment?.status === 'pending') {
+    return 'Payment attempt is pending confirmation from the garage.'
+  }
+
+  return 'Awaiting direct payment confirmation from customer.'
+}
+
+function inferBookingId(invoice: CustomerInvoiceApiRecord, bookings: CustomerBookingApiRecord[]) {
+  const booking = bookings.find((item) => item.vehicleId?._id === invoice.vehicle?.id)
+  return booking ? `BK-${booking._id.slice(-6).toUpperCase()}` : undefined
+}
+
+function mapInvoiceStatus(invoice: CustomerInvoiceApiRecord): {
+  label: CustomerInvoiceStatus
+  tone: CustomerInvoiceRecord['statusTone']
+} {
+  if (invoice.status === 'paid') {
+    return { label: 'Paid', tone: 'completed' as const }
+  }
+  if (invoice.status === 'cancelled') {
+    return { label: 'Cancelled', tone: 'ready' as const }
+  }
+  return { label: 'Awaiting payment', tone: 'pending' as const }
 }
 
 export default function CustomerInvoicesPage() {
+  const { token, user } = useAuth()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null)
+  const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
+  const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
+  const [requestError, setRequestError] = useState('')
+
+  useEffect(() => {
+    if (!token) {
+      return
+    }
+
+    let cancelled = false
+
+    const load = async () => {
+      setRequestError('')
+
+      try {
+        const [invoiceResponse, bookingResponse] = await Promise.all([
+          fetchCustomerInvoices(token),
+          fetchCustomerBookings(token),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        setInvoices(invoiceResponse.invoices)
+        setBookings(bookingResponse.bookings)
+      } catch (error) {
+        if (!cancelled) {
+          setRequestError(error instanceof Error ? error.message : 'Unable to load your invoices.')
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  const customerInvoices = useMemo<CustomerInvoiceRecord[]>(() => {
+    return invoices.map((invoice) => {
+      const mappedStatus = mapInvoiceStatus(invoice)
+
+      return {
+        id: invoice.displayId,
+        repairOrderId: invoice.repairOrder?.displayId || 'Repair order pending',
+        bookingId: inferBookingId(invoice, bookings),
+        issuedAt: formatDateTime(invoice.issuedAt),
+        serviceDate: formatDateOnly(invoice.repairOrder?.completedAt || invoice.repairOrder?.startedAt || invoice.issuedAt),
+        vehicle: [invoice.vehicle?.brand, invoice.vehicle?.model, invoice.vehicle?.year].filter(Boolean).join(' ') || 'Vehicle updating',
+        plate: invoice.vehicle?.licensePlate || 'Not recorded',
+        vin: invoice.vehicle?.chassisNumber || invoice.vehicle?.engineNumber || 'Not recorded',
+        mileage: 'Not recorded',
+        advisor: invoice.serviceAdvisor?.fullName || 'Service advisor updating',
+        technician: invoice.technician?.fullName || 'Technician updating',
+        customerName: invoice.customer?.fullName || user?.fullName || 'Customer',
+        customerPhone: invoice.customer?.phone || user?.phone || 'No phone on file',
+        customerEmail: invoice.customer?.email || user?.email || 'No email on file',
+        customerAddress: 'No address on file',
+        accountantName: invoice.accountant?.fullName || 'Kapa accounting',
+        invoiceStatus: mappedStatus.label,
+        statusTone: mappedStatus.tone,
+        paymentMethod: paymentMethodLabel(invoice.latestPayment?.method),
+        paymentNote: paymentNote(invoice),
+        subtotal: formatMoney(invoice.subtotal),
+        tax: formatMoney(0),
+        discount: formatMoney(invoice.discount),
+        total: formatMoney(invoice.total),
+        serviceItems: invoice.lineItems.map((item, index) => ({
+          item: `SRV-${String(index + 1).padStart(2, '0')}`,
+          label: item.description,
+          description: `Service quantity ${item.quantity} approved in the repair order.`,
+          quantity: item.quantity,
+          unitPrice: formatMoney(item.unitPrice),
+          lineTotal: formatMoney(item.lineTotal),
+        })),
+        issueImages: [],
+        garageName: GARAGE_NAME,
+        customerNote: invoice.status === 'unpaid' ? 'Please settle at the service desk or confirm your direct transfer with the accountant.' : undefined,
+      }
+    })
+  }, [bookings, invoices, user?.email, user?.fullName, user?.phone])
 
   const filteredInvoices = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -43,7 +215,7 @@ export default function CustomerInvoicesPage() {
 
       return matchesQuery && matchesStatus
     })
-  }, [query, status])
+  }, [customerInvoices, query, status])
 
   const summary = useMemo(
     () => ({
@@ -51,12 +223,12 @@ export default function CustomerInvoicesPage() {
       awaiting: customerInvoices.filter((invoice) => invoice.statusTone === 'pending').length,
       updated: customerInvoices.filter((invoice) => invoice.statusTone === 'ready').length,
     }),
-    [],
+    [customerInvoices],
   )
 
   const selectedInvoice = useMemo(
     () => customerInvoices.find((invoice) => invoice.id === selectedInvoiceId) ?? null,
-    [selectedInvoiceId],
+    [customerInvoices, selectedInvoiceId],
   )
 
   return (
@@ -95,6 +267,12 @@ export default function CustomerInvoicesPage() {
             </CustomerFormField>
           </CustomerPanel>
         </div>
+
+        {requestError ? (
+          <div className="customer-panel mt-4 text-sm" style={{ color: '#991b1b', border: '1px solid #fecaca', background: '#fff1f2' }}>
+            {requestError}
+          </div>
+        ) : null}
       </section>
 
       <section className="customer-section">
@@ -141,7 +319,7 @@ export default function CustomerInvoicesPage() {
                       </td>
                       <td>
                         <strong>{invoice.repairOrderId}</strong>
-                        <span>{invoice.bookingId ?? 'Walk-in intake'}</span>
+                        <span>{invoice.bookingId ?? 'Customer record'}</span>
                       </td>
                       <td>
                         <CustomerStatusBadge tone={invoice.statusTone}>{invoice.invoiceStatus}</CustomerStatusBadge>
@@ -219,7 +397,7 @@ export default function CustomerInvoicesPage() {
                       </tr>
                       <tr>
                         <td>Booking</td>
-                        <td>{selectedInvoice.bookingId ?? 'Walk-in intake'}</td>
+                        <td>{selectedInvoice.bookingId ?? 'Customer record'}</td>
                       </tr>
                       <tr>
                         <td>Payment method</td>
@@ -275,26 +453,21 @@ export default function CustomerInvoicesPage() {
                     </thead>
                     <tbody>
                       {selectedInvoice.serviceItems.map((item) => {
-                        const subtotal = parseMoney(selectedInvoice.subtotal)
-                        const tax = parseMoney(selectedInvoice.tax)
-                        const unitPrice = parseMoney(item.unitPrice)
-                        const lineBaseTotal = parseMoney(item.lineTotal)
-                        const gstRate = subtotal > 0 ? tax / subtotal : 0
-                        const gstAmount = lineBaseTotal * gstRate
-                        const lineGrandTotal = lineBaseTotal + gstAmount
+                        const gstAmount = 0
+                        const lineGrandTotal = parseMoney(item.lineTotal) + gstAmount
 
                         return (
-                        <tr key={`${selectedInvoice.id}-${item.item}`}>
-                          <td>{item.item}</td>
-                          <td>
-                            <strong>{item.label}</strong>
-                            <span>{item.description}</span>
-                          </td>
-                          <td className="customer-invoice-sheet__table-number">{item.quantity}</td>
-                          <td className="customer-invoice-sheet__table-number">{formatMoney(unitPrice)}</td>
-                          <td className="customer-invoice-sheet__table-number">{formatMoney(gstAmount)}</td>
-                          <td className="customer-invoice-sheet__table-number">{formatMoney(lineGrandTotal)}</td>
-                        </tr>
+                          <tr key={`${selectedInvoice.id}-${item.item}`}>
+                            <td>{item.item}</td>
+                            <td>
+                              <strong>{item.label}</strong>
+                              <span>{item.description}</span>
+                            </td>
+                            <td className="customer-invoice-sheet__table-number">{item.quantity}</td>
+                            <td className="customer-invoice-sheet__table-number">{item.unitPrice}</td>
+                            <td className="customer-invoice-sheet__table-number">{formatMoney(gstAmount)}</td>
+                            <td className="customer-invoice-sheet__table-number">{formatMoney(lineGrandTotal)}</td>
+                          </tr>
                         )
                       })}
                     </tbody>
@@ -329,7 +502,7 @@ export default function CustomerInvoicesPage() {
                     </tbody>
                   </table>
                 </div>
-                
+
                 <div className="customer-invoice-sheet__footer">
                   <div className="customer-invoice-sheet__footer-copy">
                     <span>Issued by {selectedInvoice.accountantName}</span>

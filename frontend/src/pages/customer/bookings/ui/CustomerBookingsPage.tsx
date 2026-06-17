@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { asset } from '../../../../shared/lib/asset'
 import {
   CustomerAccountNav,
@@ -12,13 +12,181 @@ import {
   CustomerSelect,
   CustomerStatusBadge,
 } from '../../../../shared/ui/kapa-customer'
-import { bookingHistory } from '../../model/mock'
+import {
+  fetchCustomerBookings,
+  fetchCustomerInvoices,
+  fetchCustomerRepairOrders,
+  type CustomerBookingApiRecord,
+  type CustomerInvoiceApiRecord,
+  type CustomerRepairOrderApiRecord,
+} from '../../api/customerApi'
+import type { BookingHistoryRecord } from '../../model/mock'
+import { useAuth } from '../../../../shared/auth'
+
+const GARAGE_NAME = 'Kapa Auto Care Center'
+const DETAIL_IMAGES = [
+  '/wp-content/uploads/2024/12/service1.jpg',
+  '/wp-content/uploads/2022/11/choose.webp',
+  '/wp-content/uploads/2024/12/banner-bg2.jpg',
+]
+
+function formatMoney(value: number) {
+  return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) {
+    return 'Updating'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
+function formatVehicle(order: CustomerRepairOrderApiRecord) {
+  return [order.vehicleId?.brand, order.vehicleId?.model, order.vehicleId?.year].filter(Boolean).join(' ') || 'Vehicle updating'
+}
+
+function toDisplayOrderId(id: string) {
+  return `RO-${id.slice(-6).toUpperCase()}`
+}
+
+function paymentMethodLabel(method?: string | null) {
+  switch (method) {
+    case 'bankTransfer':
+      return 'Bank transfer'
+    case 'eWallet':
+      return 'E-wallet'
+    case 'card':
+      return 'Card'
+    case 'cash':
+      return 'Cash'
+    default:
+      return 'Pending confirmation'
+  }
+}
+
+function mapStatus(order: CustomerRepairOrderApiRecord, invoice?: CustomerInvoiceApiRecord | null) {
+  switch (order.status) {
+    case 'inProgress':
+      return { statusLabel: 'In Progress', statusTone: 'in-progress' as const }
+    case 'pending':
+      return { statusLabel: 'Pending Intake', statusTone: 'pending' as const }
+    case 'cancelled':
+      return { statusLabel: 'Cancelled', statusTone: 'pending' as const }
+    case 'completed':
+      if (invoice?.status === 'paid') {
+        return { statusLabel: 'Completed', statusTone: 'completed' as const }
+      }
+      return { statusLabel: 'Ready for Pickup', statusTone: 'ready' as const }
+    default:
+      return { statusLabel: 'Updating', statusTone: 'pending' as const }
+  }
+}
+
+function findMatchingBooking(order: CustomerRepairOrderApiRecord, bookings: CustomerBookingApiRecord[]) {
+  return bookings.find((booking) => booking.vehicleId?._id === order.vehicleId?._id) || null
+}
 
 export default function CustomerBookingsPage() {
+  const { token } = useAuth()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
   const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [repairOrders, setRepairOrders] = useState<CustomerRepairOrderApiRecord[]>([])
+  const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
+  const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
+  const [requestError, setRequestError] = useState('')
+
+  useEffect(() => {
+    if (!token) {
+      return
+    }
+
+    let cancelled = false
+
+    const load = async () => {
+      setRequestError('')
+
+      try {
+        const [bookingResponse, repairOrderResponse, invoiceResponse] = await Promise.all([
+          fetchCustomerBookings(token),
+          fetchCustomerRepairOrders(token),
+          fetchCustomerInvoices(token),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        setBookings(bookingResponse.bookings)
+        setRepairOrders(repairOrderResponse)
+        setInvoices(invoiceResponse.invoices)
+      } catch (error) {
+        if (!cancelled) {
+          setRequestError(error instanceof Error ? error.message : 'Unable to load your booking history.')
+        }
+      }
+    }
+
+    void load()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  const bookingHistory = useMemo<BookingHistoryRecord[]>(() => {
+    return repairOrders.map((order) => {
+      const invoice = invoices.find((item) => item.repairOrder?.id === order._id) || null
+      const linkedBooking = findMatchingBooking(order, bookings)
+      const visualStatus = mapStatus(order, invoice)
+
+      return {
+        id: toDisplayOrderId(order._id),
+        invoiceId: invoice?.displayId || 'Invoice pending',
+        dateTime: formatDateTime(order.startedAt || order.completedAt),
+        vehicle: formatVehicle(order),
+        plate: order.vehicleId?.licensePlate || 'Not recorded',
+        intakeType: linkedBooking?.source === 'walkIn' ? 'Walk-in' : 'Appointment',
+        advisor: order.advisorId?.fullName || 'Service advisor updating',
+        technician: order.technicianId?.fullName || 'Technician updating',
+        garageName: GARAGE_NAME,
+        amount: formatMoney(invoice?.total || order.totalCost || 0),
+        paymentMethod: paymentMethodLabel(invoice?.latestPayment?.method),
+        invoiceStatus:
+          invoice?.status === 'paid'
+            ? 'Paid'
+            : invoice?.status === 'unpaid'
+              ? 'Awaiting payment'
+              : invoice?.status === 'cancelled'
+                ? 'Cancelled'
+                : 'Invoice not issued',
+        statusLabel: visualStatus.statusLabel,
+        statusTone: visualStatus.statusTone,
+        primaryService: order.services[0]?.name || 'Service advisor intake',
+        approvedServices: order.services.map((service) => service.name),
+        detailImages: DETAIL_IMAGES,
+        issueSummary:
+          order.stepNotes[0]?.content ||
+          (order.services.length > 0
+            ? `Approved services: ${order.services.map((service) => service.name).join(', ')}.`
+            : 'Repair order recorded and awaiting more service notes.'),
+        additionalProposal: undefined,
+      }
+    })
+  }, [bookings, invoices, repairOrders])
 
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -34,7 +202,7 @@ export default function CustomerBookingsPage() {
 
       return matchesQuery && matchesStatus
     })
-  }, [query, status])
+  }, [bookingHistory, query, status])
 
   const summary = useMemo(
     () => ({
@@ -42,12 +210,12 @@ export default function CustomerBookingsPage() {
       inProgress: bookingHistory.filter((booking) => booking.statusTone === 'in-progress').length,
       pending: bookingHistory.filter((booking) => booking.statusTone === 'pending' || booking.statusTone === 'ready').length,
     }),
-    [],
+    [bookingHistory],
   )
 
   const selectedBooking = useMemo(
     () => bookingHistory.find((booking) => booking.id === selectedBookingId) ?? null,
-    [selectedBookingId],
+    [bookingHistory, selectedBookingId],
   )
 
   return (
@@ -87,6 +255,12 @@ export default function CustomerBookingsPage() {
             </CustomerFormField>
           </CustomerPanel>
         </div>
+
+        {requestError ? (
+          <div className="customer-panel mt-4 text-sm" style={{ color: '#991b1b', border: '1px solid #fecaca', background: '#fff1f2' }}>
+            {requestError}
+          </div>
+        ) : null}
       </section>
 
       <section className="customer-section">

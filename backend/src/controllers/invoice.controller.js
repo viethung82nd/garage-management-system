@@ -1,5 +1,10 @@
 import mongoose from "mongoose";
-import { InvoiceModel, PaymentModel, RepairOrderModel } from "../models/index.js";
+import {
+  InvoiceModel,
+  PaymentModel,
+  RepairOrderModel,
+  VehicleModel,
+} from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
 
 const invoicePopulate = [
@@ -9,7 +14,7 @@ const invoicePopulate = [
     populate: [
       {
         path: "vehicleId",
-        select: "licensePlate brand model year color customerId",
+        select: "licensePlate brand model year color chassisNumber engineNumber customerId",
         populate: {
           path: "customerId",
           select: "fullName phone email accountType role",
@@ -105,6 +110,8 @@ function serializeInvoice(invoice, latestPayment) {
           model: vehicle.model || "",
           year: vehicle.year || null,
           color: vehicle.color || "",
+          chassisNumber: vehicle.chassisNumber || "",
+          engineNumber: vehicle.engineNumber || "",
         }
       : null,
     serviceAdvisor: order?.advisorId
@@ -147,6 +154,40 @@ async function getLatestPayments(invoiceIds) {
 
 export async function listInvoices(_req, res) {
   const invoices = await InvoiceModel.find()
+    .populate(invoicePopulate)
+    .sort({ issuedAt: -1 });
+
+  const paymentMap = await getLatestPayments(invoices.map((invoice) => invoice._id));
+
+  res.json({
+    invoices: invoices.map((invoice) =>
+      serializeInvoice(invoice, paymentMap.get(String(invoice._id))),
+    ),
+  });
+}
+
+export async function listMyInvoices(req, res) {
+  const vehicles = await VehicleModel.find({ customerId: req.user.sub }).select("_id");
+  const vehicleIds = vehicles.map((vehicle) => vehicle._id);
+
+  if (vehicleIds.length === 0) {
+    res.json({ invoices: [] });
+    return;
+  }
+
+  const repairOrders = await RepairOrderModel.find({
+    vehicleId: { $in: vehicleIds },
+  }).select("_id");
+  const repairOrderIds = repairOrders.map((order) => order._id);
+
+  if (repairOrderIds.length === 0) {
+    res.json({ invoices: [] });
+    return;
+  }
+
+  const invoices = await InvoiceModel.find({
+    repairOrderId: { $in: repairOrderIds },
+  })
     .populate(invoicePopulate)
     .sort({ issuedAt: -1 });
 

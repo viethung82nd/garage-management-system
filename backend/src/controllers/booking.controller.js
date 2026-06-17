@@ -61,6 +61,20 @@ export async function listBookings(req, res) {
   res.json({ bookings });
 }
 
+/**
+ * GET /api/bookings/mine — authenticated online customer's own bookings.
+ */
+export async function listMyBookings(req, res) {
+  const bookings = await BookingModel.find({ customerId: req.user.sub })
+    .populate("customerId", "fullName phone email accountType role")
+    .populate("vehicleId", "licensePlate brand model year chassisNumber engineNumber color")
+    .populate("serviceId", "name basePrice estimatedDuration")
+    .populate("advisorId", "fullName role")
+    .sort({ bookingDate: -1, timeSlot: -1 });
+
+  res.json({ bookings });
+}
+
 /** Counts active (slot-occupying) bookings for a given day + slot. */
 async function countActive(bookingDate, timeSlot) {
   return BookingModel.countDocuments({

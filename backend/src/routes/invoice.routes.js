@@ -5,9 +5,17 @@ import {
   generateInvoiceFromRepairOrder,
   getInvoiceById,
   listInvoices,
+  listMyInvoices,
 } from "../controllers/invoice.controller.js";
 
 export const invoiceRouter = Router();
+
+invoiceRouter.get(
+  "/mine",
+  requireAuth,
+  requireRole("onlineCustomer"),
+  asyncHandler(listMyInvoices),
+);
 
 invoiceRouter.get(
   "",

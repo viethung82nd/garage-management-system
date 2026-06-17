@@ -143,7 +143,7 @@ export type BookingHistoryRecord = {
   additionalProposal?: string
 }
 
-export type CustomerInvoiceStatus = 'Paid' | 'Awaiting payment' | 'Updated'
+export type CustomerInvoiceStatus = 'Paid' | 'Awaiting payment' | 'Updated' | 'Cancelled'
 
 export type CustomerInvoiceLineItem = {
   item: string

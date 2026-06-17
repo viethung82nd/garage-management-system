@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/error.js";
 import {
   getAllRepairOrders,
+  getMyRepairOrders,
   getRepairOrderById,
   createRepairOrder,
   updateRepairOrder,
@@ -19,11 +20,28 @@ export const repairOrderRouter = Router();
 
 // ============= REPAIR ORDER ROUTES =============
 
-// Get all repair orders (authenticated users)
-repairOrderRouter.get("", requireAuth, asyncHandler(getAllRepairOrders));
+repairOrderRouter.get(
+  "/mine",
+  requireAuth,
+  requireRole("onlineCustomer"),
+  asyncHandler(getMyRepairOrders),
+);
+
+// Get all repair orders (staff roles only)
+repairOrderRouter.get(
+  "",
+  requireAuth,
+  requireRole("admin", "accountant", "serviceAdvisor", "technician"),
+  asyncHandler(getAllRepairOrders),
+);
 
 // Get a specific repair order
-repairOrderRouter.get("/:id", requireAuth, asyncHandler(getRepairOrderById));
+repairOrderRouter.get(
+  "/:id",
+  requireAuth,
+  requireRole("admin", "accountant", "serviceAdvisor", "technician"),
+  asyncHandler(getRepairOrderById),
+);
 
 // Create a new repair order (service advisor or admin only)
 repairOrderRouter.post(
@@ -63,6 +81,7 @@ repairOrderRouter.delete(
 repairOrderRouter.get(
   "/:id/step-notes",
   requireAuth,
+  requireRole("admin", "accountant", "serviceAdvisor", "technician"),
   asyncHandler(getStepNotes),
 );
 
@@ -86,11 +105,13 @@ repairOrderRouter.delete(
 repairOrderRouter.get(
   "/:id/status",
   requireAuth,
+  requireRole("admin", "accountant", "serviceAdvisor", "technician"),
   asyncHandler(getRepairOrderStatus),
 );
 
 repairOrderRouter.get(
   "/:id/summary",
   requireAuth,
+  requireRole("admin", "accountant", "serviceAdvisor", "technician"),
   asyncHandler(getRepairOrderSummary),
 );

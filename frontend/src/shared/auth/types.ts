@@ -8,6 +8,7 @@ export type AuthUser = {
   role: AuthRole
   accountType: 'registered' | 'walkIn'
   isActive: boolean
+  createdAt?: string
 }
 
 export type AuthStatus = 'idle' | 'loading' | 'authenticated' | 'anonymous'

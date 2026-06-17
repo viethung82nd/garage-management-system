@@ -1,4 +1,9 @@
-import { RepairOrderModel, ServiceModel, UserModel } from "../models/index.js";
+import {
+  RepairOrderModel,
+  ServiceModel,
+  UserModel,
+  VehicleModel,
+} from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
 
 // ============= REPAIR ORDER CONTROLLERS =============
@@ -11,7 +16,7 @@ const vehicleCustomerPopulate = {
 const repairOrderPopulate = [
   {
     path: "vehicleId",
-    select: "licensePlate brand model year color customerId",
+    select: "licensePlate brand model year color chassisNumber engineNumber customerId",
     populate: vehicleCustomerPopulate,
   },
   { path: "inspectionId" },
@@ -40,6 +45,27 @@ export async function getAllRepairOrders(req, res) {
     .populate(repairOrderPopulate)
     .select("-__v")
     .sort({ createdAt: -1 });
+
+  res.json(orders);
+}
+
+/**
+ * GET /api/repair-orders/mine
+ * Fetch only the authenticated online customer's repair orders.
+ */
+export async function getMyRepairOrders(req, res) {
+  const vehicles = await VehicleModel.find({ customerId: req.user.sub }).select("_id");
+  const vehicleIds = vehicles.map((vehicle) => vehicle._id);
+
+  if (vehicleIds.length === 0) {
+    res.json([]);
+    return;
+  }
+
+  const orders = await RepairOrderModel.find({ vehicleId: { $in: vehicleIds } })
+    .populate(repairOrderPopulate)
+    .select("-__v")
+    .sort({ completedAt: -1, startedAt: -1, _id: -1 });
 
   res.json(orders);
 }
