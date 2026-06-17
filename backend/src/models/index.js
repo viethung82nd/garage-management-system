@@ -1,6 +1,7 @@
 export * from "./User.js";
 export * from "./Vehicle.js";
 export * from "./Service.js";
+export * from "./ServiceCategory.js";
 export * from "./Booking.js";
 export * from "./BookingHistory.js";
 export * from "./InspectionReport.js";

@@ -221,6 +221,30 @@ select {
   width: 100%;
 }
 
+.appointment-booking-panel .default-btn:disabled {
+  opacity: 0.72;
+  cursor: not-allowed;
+}
+
+.appointment-booking-feedback {
+  display: block;
+  margin-top: 8px;
+  min-height: 28px;
+  color: rgba(15, 14, 14, 0.74);
+}
+
+.appointment-booking-feedback:empty {
+  display: none;
+}
+
+.appointment-booking-feedback--success {
+  color: #188754;
+}
+
+.appointment-booking-feedback--error {
+  color: var(--color-primary);
+}
+
 .home-five-estimate-panel .funfact-card {
   border-radius: var(--radius-card);
   background: rgba(255, 255, 255, 0.06);

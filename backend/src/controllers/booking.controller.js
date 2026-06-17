@@ -12,6 +12,7 @@ import {
   getSlotTimes,
   isValidSlot,
 } from "../config/slots.js";
+import { todayUtc } from "../utils/date.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -28,14 +29,6 @@ function parseBookingDate(dateStr) {
     throw new HttpError(400, "date is not a valid calendar date");
   }
   return date;
-}
-
-/** UTC midnight of the current day — the earliest date that can still be booked. */
-function todayUtc() {
-  const now = new Date();
-  return new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate())
-  );
 }
 
 /** Counts active (slot-occupying) bookings for a given day + slot. */
@@ -79,14 +72,30 @@ export async function getSlots(req, res) {
 }
 
 /** Finds a user by phone, or creates a walk-in customer record for them. */
-async function resolveCustomer({ fullName, phone }) {
-  const existing = await UserModel.findOne({ phone });
+async function resolveCustomer({ fullName, phone, email }) {
+  const existing = await UserModel.findOne({
+    phone,
+    role: { $in: ["onlineCustomer", "walkInCustomer"] },
+  });
   if (existing) {
+    let shouldSave = false;
+    if (!existing.email && email?.trim()) {
+      existing.email = email.trim().toLowerCase();
+      shouldSave = true;
+    }
+    if (existing.accountType === "walkIn" && fullName?.trim() && existing.fullName !== fullName.trim()) {
+      existing.fullName = fullName.trim();
+      shouldSave = true;
+    }
+    if (shouldSave) {
+      await existing.save();
+    }
     return existing;
   }
   return UserModel.create({
-    fullName,
+    fullName: fullName.trim(),
     phone,
+    email: email?.trim()?.toLowerCase() || undefined,
     role: "walkInCustomer",
     accountType: "walkIn",
   });

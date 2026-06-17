@@ -1,12 +1,6 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
-
-type EstimateFormState = {
-  name: string
-  email: string
-  number: string
-  service: string
-  message: string
-}
+import { useEffect, useRef, useState } from 'react'
+import { useAuth } from '../../../shared/auth'
+import { AppointmentBookingForm } from '../../appointment-booking'
 
 function useAnimatedCount(target: number, active: boolean) {
   const [value, setValue] = useState(0)
@@ -35,13 +29,7 @@ function useAnimatedCount(target: number, active: boolean) {
 }
 
 export default function EstimateSection() {
-  const [formState, setFormState] = useState<EstimateFormState>({
-    name: '',
-    email: '',
-    number: '',
-    service: '',
-    message: '',
-  })
+  const { user } = useAuth()
   const [isVisible, setIsVisible] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
@@ -66,13 +54,6 @@ export default function EstimateSection() {
   const awards = useAnimatedCount(45, isVisible)
   const projects = useAnimatedCount(350, isVisible)
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault()
-    window.alert(
-      `Estimate request submitted for ${formState.name || 'guest'}.\nWe will contact ${formState.email || 'you'} soon.`,
-    )
-  }
-
   return (
     <div
       ref={rootRef}
@@ -86,87 +67,7 @@ export default function EstimateSection() {
       <h3>Get A Location-Based Car Repair Estimate</h3>
 
       <div className="estimate-form">
-        <form className="wpcf7-form init home-five-estimate-form" onSubmit={handleSubmit}>
-          <div className="row">
-            <div className="col-lg-6 col-md-6">
-              <div className="form-group">
-                <input
-                  className="wpcf7-form-control wpcf7-text wpcf7-validates-as-required form-control"
-                  placeholder="Name*"
-                  type="text"
-                  name="your-name"
-                  value={formState.name}
-                  onChange={(event) => setFormState((current) => ({ ...current, name: event.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="col-lg-6 col-md-6">
-              <div className="form-group">
-                <input
-                  className="wpcf7-form-control wpcf7-email wpcf7-validates-as-required wpcf7-text wpcf7-validates-as-email form-control"
-                  placeholder="Email*"
-                  type="email"
-                  name="your-email"
-                  value={formState.email}
-                  onChange={(event) => setFormState((current) => ({ ...current, email: event.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="col-lg-6 col-md-6">
-              <div className="form-group">
-                <input
-                  className="wpcf7-form-control wpcf7-number wpcf7-validates-as-required wpcf7-validates-as-number form-control"
-                  placeholder="Number*"
-                  type="number"
-                  name="your-number"
-                  value={formState.number}
-                  onChange={(event) => setFormState((current) => ({ ...current, number: event.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="col-lg-6 col-md-6">
-              <div className="form-group">
-                <div className="select-box">
-                  <select
-                    className="wpcf7-form-control wpcf7-select wpcf7-validates-as-required form-control home-five-select"
-                    id="ourservices"
-                    name="ourservices"
-                    value={formState.service}
-                    onChange={(event) => setFormState((current) => ({ ...current, service: event.target.value }))}
-                  >
-                    <option value="">-- Select Services --</option>
-                    <option value="Belts And Hoses">Belts And Hoses</option>
-                    <option value="Brake Repair">Brake Repair</option>
-                    <option value="Suspension Repair">Suspension Repair</option>
-                    <option value="Liquid Changing">Liquid Changing</option>
-                  </select>
-                </div>
-              </div>
-            </div>
-
-            <div className="col-lg-12 col-md-12">
-              <div className="form-group">
-                <textarea
-                  className="wpcf7-form-control wpcf7-textarea form-control"
-                  placeholder="Your Message"
-                  name="your-message"
-                  rows={5}
-                  value={formState.message}
-                  onChange={(event) => setFormState((current) => ({ ...current, message: event.target.value }))}
-                />
-              </div>
-            </div>
-
-            <div className="col-lg-12 col-md-12">
-              <button type="submit" className="default-btn">
-                Make An Appointment
-              </button>
-            </div>
-          </div>
-        </form>
+        <AppointmentBookingForm user={user} />
       </div>
 
       <div className="row four-about-funfact">
