@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   CustomerEmptyState,
@@ -12,24 +12,77 @@ import {
   CustomerStatusBadge,
   CustomerTimeline,
 } from '../../../../shared/ui/kapa-customer'
-import { trackingRecords } from '../../model/mock'
+import type { TrackingRecord } from '../../model/mock'
+import { fetchTrackingRecord, TrackingApiError, type TrackingApiResponse } from '../api/trackingApi'
 
-function normalize(value: string) {
-  return value.replace(/\s+/g, '').toLowerCase()
+function formatVehicle(vehicle: TrackingApiResponse['vehicle']) {
+  return [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || vehicle.licensePlate
+}
+
+function formatCurrency(amount: number) {
+  return `$${amount.toFixed(2)}`
+}
+
+function formatDateTime(value: string | null | undefined) {
+  if (!value) return 'Updating'
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+    .format(date)
+    .replace(',', ' •')
+}
+
+function mapTrackingRecord(record: TrackingApiResponse): TrackingRecord {
+  return {
+    plate: record.vehicle.licensePlate,
+    phone: record.customer?.phone || '',
+    bookingId: record.displayRepairOrderId,
+    customerName: record.customer?.fullName || 'Customer',
+    customerId: record.customer ? `CUS-${record.customer.phone.slice(-4)}` : 'CUS-0000',
+    vehicle: formatVehicle(record.vehicle),
+    intakeType: record.intakeType === 'Walk-in' ? 'Walk-in' : 'Appointment',
+    garageName: record.garageName,
+    currentStatus: record.statusLabel,
+    currentStatusTone: record.statusTone,
+    estimatedCompletion:
+      record.status === 'completed'
+        ? 'Completed'
+        : formatDateTime(record.completedAt || record.invoice.issuedAt) === 'Updating'
+          ? 'Updating'
+          : formatDateTime(record.completedAt || record.invoice.issuedAt),
+    paymentStatus: record.payment.status,
+    paymentTone: record.payment.tone,
+    serviceAdvisor: record.serviceAdvisor,
+    technician: record.technician,
+    approvedServices: record.approvedServices,
+    invoiceId: record.invoice.displayId,
+    quotedTotal: formatCurrency(record.invoice.total || record.totalCost || 0),
+    paymentMethod: record.payment.method,
+    timeline: record.timeline.map((step) => ({
+      ...step,
+      timestamp: formatDateTime(step.timestamp),
+    })),
+    stageLabel: record.stageLabel,
+    stageValue: record.stageValue,
+    progressPercent: record.progressPercent,
+  }
 }
 
 export default function CustomerTrackingPage() {
   const [plate, setPlate] = useState('51H-12345')
   const [phone, setPhone] = useState('0901234567')
-  const [hasSubmitted, setHasSubmitted] = useState(false)
-
-  const result = useMemo<false | null | (typeof trackingRecords)[number]>(() => {
-    if (!hasSubmitted) return null
-
-    return (
-      trackingRecords.find((record) => normalize(record.plate) === normalize(plate) && normalize(record.phone) === normalize(phone)) ?? false
-    )
-  }, [hasSubmitted, phone, plate])
+  const [result, setResult] = useState<TrackingRecord | false | null>(null)
+  const [isSubmitting, setIsSubmitting] = useState(false)
+  const [requestError, setRequestError] = useState('')
 
   return (
     <CustomerPageLayout title="Repair Status Tracking" breadcrumb="Repair Status Tracking">
@@ -53,9 +106,28 @@ export default function CustomerTrackingPage() {
           <div className="col-lg-6">
             <CustomerInfoCard eyebrow="Lookup" title="Find your order" className="customer-tracking-form-card">
               <form
-                onSubmit={(event) => {
+                onSubmit={async (event) => {
                   event.preventDefault()
-                  setHasSubmitted(true)
+                  setIsSubmitting(true)
+                  setRequestError('')
+                  setResult(null)
+
+                  try {
+                    const response = await fetchTrackingRecord(plate.trim(), phone.trim())
+                    setResult(mapTrackingRecord(response))
+                  } catch (error) {
+                    if (error instanceof TrackingApiError && error.status === 404) {
+                      setResult(false)
+                    } else {
+                      setRequestError(
+                        error instanceof TrackingApiError
+                          ? error.message
+                          : 'Unable to load tracking information right now.',
+                      )
+                    }
+                  } finally {
+                    setIsSubmitting(false)
+                  }
                 }}
                 className="customer-tracking-form"
               >
@@ -79,7 +151,11 @@ export default function CustomerTrackingPage() {
                   />
                 </CustomerFormField>
 
-                <CustomerPrimaryButton type="submit">Track Repair Status</CustomerPrimaryButton>
+                <CustomerPrimaryButton type="submit" disabled={isSubmitting}>
+                  {isSubmitting ? 'Checking Status...' : 'Track Repair Status'}
+                </CustomerPrimaryButton>
+
+                {requestError ? <p className="customer-form-field__hint">{requestError}</p> : null}
               </form>
             </CustomerInfoCard>
           </div>

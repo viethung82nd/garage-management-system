@@ -1,8 +1,161 @@
-import { RepairOrderModel, VehicleModel } from "../models/index.js";
+import {
+  InvoiceModel,
+  PaymentModel,
+  RepairOrderModel,
+  VehicleModel,
+} from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
 
 function normalizePhone(value) {
   return String(value || "").replace(/\D+/g, "");
+}
+
+const GARAGE_NAME = "Kapa Auto Care Center";
+
+function formatDisplayId(prefix, value) {
+  return `${prefix}-${String(value).slice(-6).toUpperCase()}`;
+}
+
+function getStatusMeta(status) {
+  switch (status) {
+    case "completed":
+      return {
+        label: "Ready for handover",
+        tone: "ready",
+        stageValue: "Quality check complete",
+        progress: "5 / 5 steps",
+        completedSteps: 5,
+      };
+    case "inProgress":
+      return {
+        label: "Repair in progress",
+        tone: "in-progress",
+        stageValue: "Technician working",
+        progress: "4 / 5 steps",
+        completedSteps: 4,
+      };
+    case "cancelled":
+      return {
+        label: "Repair cancelled",
+        tone: "pending",
+        stageValue: "Cancelled by service team",
+        progress: "1 / 5 steps",
+        completedSteps: 1,
+      };
+    case "pending":
+    default:
+      return {
+        label: "Awaiting service intake",
+        tone: "pending",
+        stageValue: "Waiting for advisor review",
+        progress: "2 / 5 steps",
+        completedSteps: 2,
+      };
+  }
+}
+
+function getPaymentMeta(payment, invoice) {
+  if (payment?.status === "succeeded") {
+    return {
+      label: "Paid",
+      tone: "completed",
+      method: payment.method,
+    };
+  }
+
+  if (invoice?.status === "paid") {
+    return {
+      label: "Paid",
+      tone: "completed",
+      method: payment?.method || "cash",
+    };
+  }
+
+  if (invoice?.status === "cancelled") {
+    return {
+      label: "Invoice cancelled",
+      tone: "pending",
+      method: payment?.method || null,
+    };
+  }
+
+  return {
+    label: invoice ? "Awaiting payment" : "Invoice pending",
+    tone: invoice ? "pending" : "ready",
+    method: payment?.method || null,
+  };
+}
+
+function formatMethod(method) {
+  switch (method) {
+    case "bankTransfer":
+      return "Bank transfer";
+    case "eWallet":
+      return "E-wallet";
+    case "card":
+      return "Card";
+    case "cash":
+      return "Cash";
+    default:
+      return "Updating";
+  }
+}
+
+function buildTimeline(order, statusMeta) {
+  const createdAt =
+    typeof order._id?.getTimestamp === "function"
+      ? order._id.getTimestamp()
+      : null;
+
+  const receivedTime = createdAt?.toISOString() || null;
+  const startedTime = order.startedAt ? new Date(order.startedAt).toISOString() : null;
+  const completedTime = order.completedAt
+    ? new Date(order.completedAt).toISOString()
+    : null;
+
+  const states = [1, 2, 3, 4, 5].map((index) => {
+    if (statusMeta.completedSteps > index) return "complete";
+    if (statusMeta.completedSteps === index) return "current";
+    return "pending";
+  });
+
+  return [
+    {
+      id: "received",
+      label: "Repair order received",
+      description: "Lookup details verified.",
+      timestamp: receivedTime,
+      state: states[0],
+    },
+    {
+      id: "intake",
+      label: "Vehicle intake",
+      description: "Service advisor review.",
+      timestamp: startedTime || receivedTime,
+      state: states[1],
+    },
+    {
+      id: "diagnosis",
+      label: "Diagnosis confirmed",
+      description: "Approved work added to order.",
+      timestamp: startedTime || receivedTime,
+      state: states[2],
+    },
+    {
+      id: "repair",
+      label: "Repair in progress",
+      description: "Technician working on approved items.",
+      timestamp: startedTime,
+      state: states[3],
+    },
+    {
+      id: "handover",
+      label: "Ready for handover",
+      description: "Invoice review and pickup.",
+      timestamp: completedTime,
+      state: states[4],
+    },
+  ];
 }
 
 /**
@@ -29,10 +182,17 @@ export async function trackRepairOrder(req, res) {
       throw new HttpError(400, "Invalid repair order ID format");
     }
 
-    order = await RepairOrderModel.findById(orderId).populate(
-      "vehicleId",
-      "licensePlate brand model"
-    );
+    order = await RepairOrderModel.findById(orderId)
+      .populate({
+        path: "vehicleId",
+        select: "licensePlate brand model customerId",
+        populate: {
+          path: "customerId",
+          select: "fullName phone accountType",
+        },
+      })
+      .populate("advisorId", "fullName")
+      .populate("technicianId", "fullName");
 
     if (!order || !order.vehicleId || order.vehicleId.licensePlate !== normalizedPlate) {
       throw new HttpError(404, "Repair order not found");
@@ -40,7 +200,7 @@ export async function trackRepairOrder(req, res) {
   } else {
     const vehicle = await VehicleModel.findOne({ licensePlate: normalizedPlate }).populate(
       "customerId",
-      "fullName phone"
+      "fullName phone accountType"
     );
 
     if (
@@ -52,26 +212,79 @@ export async function trackRepairOrder(req, res) {
 
     order = await RepairOrderModel.findOne({ vehicleId: vehicle._id })
       .sort({ _id: -1 })
-      .populate("vehicleId", "licensePlate brand model");
+      .populate({
+        path: "vehicleId",
+        select: "licensePlate brand model customerId",
+        populate: {
+          path: "customerId",
+          select: "fullName phone accountType",
+        },
+      })
+      .populate("advisorId", "fullName")
+      .populate("technicianId", "fullName");
 
     if (!order) {
       throw new HttpError(404, "Repair order not found");
     }
   }
 
+  const invoice = await InvoiceModel.findOne({ repairOrderId: order._id }).sort({ issuedAt: -1 });
+  const payment = invoice
+    ? await PaymentModel.findOne({ invoiceId: invoice._id }).sort({ _id: -1 })
+    : null;
+
+  const statusMeta = getStatusMeta(order.status);
+  const paymentMeta = getPaymentMeta(payment, invoice);
+  const customer = order.vehicleId?.customerId || null;
+  const displayRepairOrderId = formatDisplayId("RO", order._id);
+  const displayInvoiceId = invoice ? formatDisplayId("INV", invoice._id) : "Pending";
+  const services = order.services.map((s) => ({
+    name: s.name,
+    price: s.priceAtTime,
+    quantity: s.quantity,
+  }));
+
   res.json({
     repairOrderId: order._id,
+    displayRepairOrderId,
     status: order.status,
+    statusLabel: statusMeta.label,
+    statusTone: statusMeta.tone,
+    stageLabel: "Current stage",
+    stageValue: statusMeta.stageValue,
+    progressPercent: statusMeta.progress,
+    garageName: GARAGE_NAME,
+    customer: customer
+      ? {
+          fullName: customer.fullName,
+          phone: customer.phone,
+          accountType: customer.accountType,
+        }
+      : null,
+    intakeType:
+      customer?.accountType === "walkIn" ? "Walk-in" : "Online account",
     vehicle: {
       licensePlate: order.vehicleId.licensePlate,
       brand: order.vehicleId.brand,
       model: order.vehicleId.model,
     },
-    services: order.services.map((s) => ({
-      name: s.name,
-      price: s.priceAtTime,
-      quantity: s.quantity,
-    })),
+    serviceAdvisor: order.advisorId?.fullName || "Updating",
+    technician: order.technicianId?.fullName || "Assigning technician",
+    services,
+    approvedServices: services.map((service) => service.name),
+    invoice: {
+      id: invoice?._id || null,
+      displayId: displayInvoiceId,
+      status: invoice?.status || null,
+      total: invoice?.total ?? order.totalCost ?? 0,
+      issuedAt: invoice?.issuedAt || null,
+    },
+    payment: {
+      status: paymentMeta.label,
+      tone: paymentMeta.tone,
+      method: formatMethod(paymentMeta.method),
+    },
+    timeline: buildTimeline(order, statusMeta),
     totalCost: order.totalCost,
     startedAt: order.startedAt,
     completedAt: order.completedAt,

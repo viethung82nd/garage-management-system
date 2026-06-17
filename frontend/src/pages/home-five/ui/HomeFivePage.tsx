@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
 import { rewriteKapaRouteLinks, useClonedKapaPage, type TransformTemplateDocument } from '../../../shared/lib/kapa-template'
+import { useAuth } from '../../../shared/auth'
 import EstimateSection from '../../../widgets/home-five-estimate/ui/EstimateSection'
 
 const HOME_FIVE_URL = '/kapa-auth/home-five/index.html'
@@ -14,6 +15,7 @@ const OVERLAY_REVEAL_SELECTOR =
   '.main-banner-content h1, .content h3, .choose-us-content h3, .section-content h2, .process-item h3, .section-title-wrap h2, .estimate-left-content h3, .who-we-are-content h3, .main-banner-wrap-content h1, .services-details-content h3'
 
 export default function HomeFivePage() {
+  const { user } = useAuth()
   const transformDocument = useCallback<TransformTemplateDocument>((doc, body) => {
     rewriteKapaRouteLinks(body, HOME_FIVE_REMOTE_URL)
 
@@ -41,12 +43,12 @@ export default function HomeFivePage() {
     if (!slot) return
 
     const root = createRoot(slot)
-    root.render(<EstimateSection />)
+    root.render(<EstimateSection user={user} />)
 
     return () => {
       root.unmount()
     }
-  }, [markup, pageSpec])
+  }, [markup, pageSpec, user])
 
   return <div className="home-five-root" dangerouslySetInnerHTML={{ __html: markup }} aria-busy={!pageSpec} />
 }

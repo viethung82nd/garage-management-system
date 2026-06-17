@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react'
-import { useAuth } from '../../../shared/auth'
+import type { AuthUser } from '../../../shared/auth'
 import { AppointmentBookingForm } from '../../appointment-booking'
+
+type EstimateSectionProps = {
+  user?: AuthUser | null
+}
 
 function useAnimatedCount(target: number, active: boolean) {
   const [value, setValue] = useState(0)
@@ -28,8 +32,7 @@ function useAnimatedCount(target: number, active: boolean) {
   return value
 }
 
-export default function EstimateSection() {
-  const { user } = useAuth()
+export default function EstimateSection({ user }: EstimateSectionProps) {
   const [isVisible, setIsVisible] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
 
