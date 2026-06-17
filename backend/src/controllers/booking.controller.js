@@ -31,6 +31,36 @@ function parseBookingDate(dateStr) {
   return date;
 }
 
+/**
+ * GET /api/bookings — authenticated booking list for back-office screens.
+ * Query: status, source, limit
+ */
+export async function listBookings(req, res) {
+  const { status, source } = req.query ?? {};
+  const rawLimit = Number.parseInt(String(req.query?.limit ?? "20"), 10);
+  const limit = Number.isFinite(rawLimit)
+    ? Math.min(Math.max(rawLimit, 1), 100)
+    : 20;
+
+  const filter = {};
+  if (status) {
+    filter.status = status;
+  }
+  if (source) {
+    filter.source = source;
+  }
+
+  const bookings = await BookingModel.find(filter)
+    .populate("customerId", "fullName phone email accountType role")
+    .populate("vehicleId", "licensePlate brand model year")
+    .populate("serviceId", "name basePrice estimatedDuration")
+    .populate("advisorId", "fullName role")
+    .sort({ bookingDate: -1, timeSlot: -1 })
+    .limit(limit);
+
+  res.json({ bookings });
+}
+
 /** Counts active (slot-occupying) bookings for a given day + slot. */
 async function countActive(bookingDate, timeSlot) {
   return BookingModel.countDocuments({

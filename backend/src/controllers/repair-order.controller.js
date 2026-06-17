@@ -3,6 +3,24 @@ import { HttpError } from "../middleware/error.js";
 
 // ============= REPAIR ORDER CONTROLLERS =============
 
+const vehicleCustomerPopulate = {
+  path: "customerId",
+  select: "fullName phone email accountType role",
+};
+
+const repairOrderPopulate = [
+  {
+    path: "vehicleId",
+    select: "licensePlate brand model year color customerId",
+    populate: vehicleCustomerPopulate,
+  },
+  { path: "inspectionId" },
+  { path: "advisorId", select: "fullName email phone role" },
+  { path: "technicianId", select: "fullName email phone role" },
+  { path: "services.serviceId", select: "name category" },
+  { path: "stepNotes.technicianId", select: "fullName email phone role" },
+];
+
 /**
  * GET /api/repair-orders
  * Fetch all repair orders with optional filters
@@ -19,11 +37,7 @@ export async function getAllRepairOrders(req, res) {
   if (technicianId) filter.technicianId = technicianId;
 
   const orders = await RepairOrderModel.find(filter)
-    .populate("vehicleId", "licensePlate model")
-    .populate("advisorId", "fullName email phone role")
-    .populate("technicianId", "fullName email phone role")
-    .populate("services.serviceId", "name category")
-    .populate("stepNotes.technicianId", "fullName email")
+    .populate(repairOrderPopulate)
     .select("-__v")
     .sort({ createdAt: -1 });
 
@@ -42,12 +56,7 @@ export async function getRepairOrderById(req, res) {
   }
 
   const order = await RepairOrderModel.findById(id)
-    .populate("vehicleId")
-    .populate("inspectionId")
-    .populate("advisorId", "fullName email phone role")
-    .populate("technicianId", "fullName email phone role")
-    .populate("services.serviceId")
-    .populate("stepNotes.technicianId", "fullName email")
+    .populate(repairOrderPopulate)
     .select("-__v");
 
   if (!order) {
@@ -124,10 +133,7 @@ export async function createRepairOrder(req, res) {
   await newOrder.save();
 
   await newOrder.populate([
-    { path: "vehicleId", select: "licensePlate model" },
-    { path: "advisorId", select: "fullName email phone role" },
-    { path: "inspectionId" },
-    { path: "services.serviceId", select: "name category" },
+    ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),
   ]);
 
   res.status(201).json(newOrder);
@@ -245,11 +251,7 @@ export async function updateRepairOrder(req, res) {
   await order.save();
 
   await order.populate([
-    { path: "vehicleId", select: "licensePlate model" },
-    { path: "advisorId", select: "fullName email phone role" },
-    { path: "technicianId", select: "fullName email phone role" },
-    { path: "inspectionId" },
-    { path: "services.serviceId", select: "name category" },
+    ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),
   ]);
 
   res.json(order);
@@ -348,11 +350,7 @@ export async function updateRepairProgress(req, res) {
   await order.save();
 
   await order.populate([
-    { path: "vehicleId", select: "licensePlate model" },
-    { path: "advisorId", select: "fullName email phone role" },
-    { path: "technicianId", select: "fullName email phone role" },
-    { path: "services.serviceId", select: "name category" },
-    { path: "stepNotes.technicianId", select: "fullName email phone role" },
+    ...repairOrderPopulate.filter((item) => item.path !== "inspectionId"),
   ]);
 
   res.json({

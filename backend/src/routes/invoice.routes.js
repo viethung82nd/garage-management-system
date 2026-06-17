@@ -1,9 +1,27 @@
 import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/error.js";
-import { generateInvoiceFromRepairOrder } from "../controllers/invoice.controller.js";
+import {
+  generateInvoiceFromRepairOrder,
+  getInvoiceById,
+  listInvoices,
+} from "../controllers/invoice.controller.js";
 
 export const invoiceRouter = Router();
+
+invoiceRouter.get(
+  "",
+  requireAuth,
+  requireRole("accountant", "admin"),
+  asyncHandler(listInvoices),
+);
+
+invoiceRouter.get(
+  "/:id",
+  requireAuth,
+  requireRole("accountant", "admin"),
+  asyncHandler(getInvoiceById),
+);
 
 // Generate an invoice from a completed repair order (accountant or admin only).
 invoiceRouter.post(

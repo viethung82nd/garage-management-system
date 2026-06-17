@@ -9,8 +9,9 @@ import {
 } from '@ant-design/icons'
 import { Button, Card, Progress, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../../shared/auth'
+import { fetchAdminBookings, fetchAdminSummary, type AdminSummaryResponse } from '../api/dashboardApi'
 import { bookingOverview, bookingRecords, weeklyStatus, type BookingRecord } from '../model/mock'
 import { BackOfficeShell, adminPalette } from '../../../../widgets/backoffice-shell'
 
@@ -86,6 +87,77 @@ function channelTone(channel: BookingRecord['channel']) {
       return { bg: '#fef3c7', color: '#92400e' }
     default:
       return { bg: '#f3f4f6', color: '#6b7280' }
+  }
+}
+
+function formatCompactCurrency(value: number, currency: string) {
+  if (currency === 'VND') {
+    return `${new Intl.NumberFormat('vi-VN', {
+      notation: 'compact',
+      maximumFractionDigits: 1,
+    }).format(value)} ₫`
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency,
+    maximumFractionDigits: 0,
+  }).format(value)
+}
+
+function formatBookingDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
+}
+
+function mapBookingStatus(status: string): BookingRecord['status'] {
+  switch (status) {
+    case 'confirmed':
+      return 'Confirmed'
+    case 'completed':
+      return 'Completed'
+    case 'cancelled':
+      return 'Cancelled'
+    case 'pending':
+      return 'Pending'
+    default:
+      return 'Confirmed'
+  }
+}
+
+function mapBookingChannel(source?: string, accountType?: string): BookingRecord['channel'] {
+  if (source === 'walkIn' || accountType === 'walkIn') {
+    return 'Walk-in'
+  }
+
+  return 'Customer'
+}
+
+function mapBookingRecordFromApi(
+  booking: Awaited<ReturnType<typeof fetchAdminBookings>>['bookings'][number],
+): BookingRecord {
+  const vehicleLabel = [booking.vehicleId?.brand, booking.vehicleId?.model, booking.vehicleId?.year]
+    .filter(Boolean)
+    .join(' ')
+
+  return {
+    key: `BK-${booking._id.slice(-6).toUpperCase()}`,
+    customer: booking.customerId?.fullName || 'Walk-in customer',
+    vehicle: vehicleLabel || booking.vehicleId?.licensePlate || 'Vehicle updating',
+    service: booking.serviceId?.name || booking.note || 'Service advisor intake',
+    date: formatBookingDate(booking.bookingDate),
+    time: booking.timeSlot,
+    status: mapBookingStatus(booking.status),
+    channel: mapBookingChannel(booking.source, booking.customerId?.accountType),
+    amount: booking.serviceId?.basePrice || 0,
   }
 }
 
@@ -290,9 +362,101 @@ function HorizontalBarChart() {
 }
 
 export default function AdminDashboardPage() {
-  const { logout, user } = useAuth()
+  const { logout, token, user } = useAuth()
   const profileName = user?.fullName || 'Admin'
   const profileInitial = profileName.trim().charAt(0).toUpperCase() || 'A'
+  const [summary, setSummary] = useState<AdminSummaryResponse | null>(null)
+  const [tableRows, setTableRows] = useState<BookingRecord[]>(bookingRecords)
+  const [isLoading, setIsLoading] = useState(false)
+  const [requestError, setRequestError] = useState('')
+
+  useEffect(() => {
+    if (!token) {
+      return
+    }
+
+    let cancelled = false
+
+    const loadDashboard = async () => {
+      setIsLoading(true)
+      setRequestError('')
+
+      try {
+        const [summaryResponse, bookingsResponse] = await Promise.all([
+          fetchAdminSummary(token),
+          fetchAdminBookings(token),
+        ])
+
+        if (cancelled) {
+          return
+        }
+
+        setSummary(summaryResponse)
+        setTableRows(bookingsResponse.bookings.map(mapBookingRecordFromApi))
+      } catch (error) {
+        if (!cancelled) {
+          setRequestError(error instanceof Error ? error.message : 'Unable to load dashboard data.')
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false)
+        }
+      }
+    }
+
+    void loadDashboard()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  const overviewCards = useMemo(() => {
+    if (!summary) {
+      return bookingOverview
+    }
+
+    const { total, today, byStatus } = summary.bookings
+
+    return [
+      { label: 'Total bookings', value: total, delta: `Today ${today}`, tone: 'blue' as const },
+      {
+        label: 'Pending bookings',
+        value: byStatus.pending || 0,
+        delta: `Confirmed ${byStatus.confirmed || 0}`,
+        tone: 'amber' as const,
+      },
+      {
+        label: 'Completed visits',
+        value: byStatus.completed || 0,
+        delta: `Cancelled ${byStatus.cancelled || 0}`,
+        tone: 'emerald' as const,
+      },
+      {
+        label: 'Outstanding invoices',
+        value: formatCompactCurrency(summary.revenue.outstanding, summary.revenue.currency),
+        delta: `Collected ${formatCompactCurrency(summary.revenue.collected, summary.revenue.currency)}`,
+        tone: 'violet' as const,
+      },
+    ]
+  }, [summary])
+
+  const statusProgress = useMemo(() => {
+    if (!summary) {
+      return weeklyStatus
+    }
+
+    const total = Math.max(summary.bookings.total, 1)
+    const byStatus = summary.bookings.byStatus
+
+    return [
+      { label: 'Pending', value: Math.round(((byStatus.pending || 0) / total) * 100), color: '#f59e0b' },
+      { label: 'Confirmed', value: Math.round(((byStatus.confirmed || 0) / total) * 100), color: '#2563eb' },
+      { label: 'Completed', value: Math.round(((byStatus.completed || 0) / total) * 100), color: '#10b981' },
+      { label: 'Cancelled', value: Math.round(((byStatus.cancelled || 0) / total) * 100), color: '#8b5cf6' },
+    ]
+  }, [summary])
+
   const columns = useMemo<ColumnsType<BookingRecord>>(
     () => [
       {
@@ -405,10 +569,19 @@ export default function AdminDashboardPage() {
                   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                 }}
               >
-                {bookingOverview.map((item) => (
+                {overviewCards.map((item) => (
                   <DashboardMetricCard key={item.label} label={item.label} value={item.value} delta={item.delta} tone={item.tone} />
                 ))}
               </div>
+
+              {requestError ? (
+                <div
+                  className="rounded-[22px] border px-5 py-4 text-sm font-medium"
+                  style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}
+                >
+                  {requestError}
+                </div>
+              ) : null}
 
               <div
                 className="gap-5"
@@ -444,9 +617,10 @@ export default function AdminDashboardPage() {
                   <Table
                     rowKey="key"
                     columns={columns}
-                    dataSource={bookingRecords}
+                    dataSource={tableRows}
                     pagination={false}
                     size="middle"
+                    loading={isLoading}
                     scroll={{ x: 980 }}
                     className="admin-dashboard-table"
                   />
@@ -477,7 +651,7 @@ export default function AdminDashboardPage() {
                     </div>
 
                     <div className="mt-5 space-y-3">
-                      {weeklyStatus.map((item) => (
+                      {statusProgress.map((item) => (
                         <div key={item.label}>
                           <div className="mb-2 flex items-center justify-between text-sm">
                             <span className="font-semibold text-white/88">{item.label}</span>
