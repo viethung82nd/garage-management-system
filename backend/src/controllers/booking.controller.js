@@ -31,13 +31,13 @@ function parseBookingDate(dateStr) {
   return date;
 }
 
-/** Counts active (slot-occupying) bookings for a given day + slot. */
-async function countActive(bookingDate, timeSlot) {
-  return BookingModel.countDocuments({
-    bookingDate,
-    timeSlot,
-    status: { $in: ACTIVE_BOOKING_STATUSES },
-  });
+/** Returns the set of seat numbers already taken by occupying bookings in a slot. */
+async function takenSeats(bookingDate, timeSlot) {
+  const rows = await BookingModel.find(
+    { bookingDate, timeSlot, occupiesSlot: true },
+    { seatNo: 1, _id: 0 }
+  ).lean();
+  return new Set(rows.map((r) => r.seatNo));
 }
 
 /**
@@ -130,26 +130,46 @@ export async function createBooking(req, res) {
     }
   }
 
-  // Slot check: re-count right before insert so a slot that filled up since the
-  // client last checked is rejected. (Small race window remains under high
-  // concurrency — a transaction/optimistic lock would be the next hardening step.)
-  if ((await countActive(day, timeSlot)) >= SLOT_CAPACITY) {
+  // Fast-path rejection of a full slot before any find-or-create side effects.
+  const taken = await takenSeats(day, timeSlot);
+  if (taken.size >= SLOT_CAPACITY) {
     throw new HttpError(409, "the requested slot is fully booked");
   }
 
   const customerDoc = await resolveCustomer(customer);
   const vehicleDoc = await resolveVehicle(vehicle, customerDoc._id);
 
-  const booking = await BookingModel.create({
-    customerId: customerDoc._id,
-    vehicleId: vehicleDoc._id,
-    serviceId: serviceId || undefined,
-    bookingDate: day,
-    timeSlot,
-    source: "online",
-    status: "pending",
-    note,
-  });
+  // Claim the lowest free seat. The unique partial index makes each seat
+  // exclusive: if a concurrent request grabs the same seat first, create() fails
+  // with E11000 (code 11000) and we advance to the next free seat. Capacity can
+  // never be exceeded; running out of free seats means the slot is full.
+  let booking;
+  for (let seatNo = 1; seatNo <= SLOT_CAPACITY; seatNo += 1) {
+    if (taken.has(seatNo)) continue;
+    try {
+      booking = await BookingModel.create({
+        customerId: customerDoc._id,
+        vehicleId: vehicleDoc._id,
+        serviceId: serviceId || undefined,
+        bookingDate: day,
+        timeSlot,
+        source: "online",
+        status: "pending",
+        note,
+        seatNo,
+      });
+      break;
+    } catch (err) {
+      if (err?.code === 11000) {
+        taken.add(seatNo);
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!booking) {
+    throw new HttpError(409, "the requested slot is fully booked");
+  }
 
   await BookingHistoryModel.create({
     bookingId: booking._id,
