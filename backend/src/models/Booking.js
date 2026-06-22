@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { ACTIVE_BOOKING_STATUSES } from "../config/slots.js";
 
 export const BOOKING_SOURCES = ["online", "walkIn"];
 export const BOOKING_STATUSES = [
@@ -47,6 +48,14 @@ const bookingSchema = new Schema(
       enum: BOOKING_STATUSES,
       default: "pending",
     },
+    seatNo: {
+      type: Number,
+      min: 1,
+    },
+    occupiesSlot: {
+      type: Boolean,
+      default: true,
+    },
     note: {
       type: String,
       trim: true,
@@ -63,5 +72,27 @@ const bookingSchema = new Schema(
 //   - getSlots agg: { bookingDate, status: { $in } } grouped by timeSlot → date-bounded
 //   - admin stats:  { bookingDate }                              → uses the prefix
 bookingSchema.index({ bookingDate: 1, timeSlot: 1, status: 1 });
+
+// Keep occupiesSlot in lockstep with status: a slot is held only while the
+// booking is pending/confirmed/rescheduled. Cancelling/completing it later sets
+// this false, dropping it out of the unique index below and freeing its seat.
+// IMPORTANT: this hook only fires on document .save(). Future status changes
+// (cancel/reschedule/complete) MUST go through .save() — updateOne /
+// findOneAndUpdate / bulkWrite bypass this hook and leave occupiesSlot stale,
+// silently keeping a freed seat locked.
+bookingSchema.pre("save", function syncOccupiesSlot(next) {
+  this.occupiesSlot = ACTIVE_BOOKING_STATUSES.includes(this.status);
+  next();
+});
+
+// Capacity lock: among occupying bookings, no two may share a (day, slot, seat).
+// With seatNo in 1..SLOT_CAPACITY this caps a slot at SLOT_CAPACITY active
+// bookings — enforced atomically by the DB, so concurrent inserts cannot
+// overbook. Partial filter uses occupiesSlot (equality) because $in over status
+// is not allowed in a partialFilterExpression.
+bookingSchema.index(
+  { bookingDate: 1, timeSlot: 1, seatNo: 1 },
+  { unique: true, partialFilterExpression: { occupiesSlot: true } }
+);
 
 export const BookingModel = mongoose.model("Booking", bookingSchema);
