@@ -1,0 +1,215 @@
+@font-face {
+    font-family: "flaticon";
+    src: url("../fonts/flaticon__q_ae3d60ad7259.ttf") format("truetype"),
+url("../../assets/fonts/flaticon.woff?8fd26c8fc2dfac3f24c6cb847d93bc80") format("woff"),
+url("../../assets/fonts/flaticon.woff2?8fd26c8fc2dfac3f24c6cb847d93bc80") format("woff2"),
+url("../../assets/fonts/flaticon.eot?8fd26c8fc2dfac3f24c6cb847d93bc80#iefix") format("embedded-opentype"),
+url("../../assets/fonts/flaticon.svg?8fd26c8fc2dfac3f24c6cb847d93bc80#flaticon") format("svg");
+}
+
+i[class^="flaticon-"]:before, i[class*=" flaticon-"]:before {
+    font-family: flaticon !important;
+    font-style: normal;
+    font-weight: normal !important;
+    font-variant: normal;
+    text-transform: none;
+    line-height: 1;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+.flaticon-jeep:before {
+    content: "\f101";
+}
+.flaticon-scooter:before {
+    content: "\f102";
+}
+.flaticon-tire:before {
+    content: "\f103";
+}
+.flaticon-4wd:before {
+    content: "\f104";
+}
+.flaticon-van:before {
+    content: "\f105";
+}
+.flaticon-segway:before {
+    content: "\f106";
+}
+.flaticon-limousine:before {
+    content: "\f107";
+}
+.flaticon-tunnel:before {
+    content: "\f108";
+}
+.flaticon-cabriolet:before {
+    content: "\f109";
+}
+.flaticon-traction:before {
+    content: "\f10a";
+}
+.flaticon-traction-1:before {
+    content: "\f10b";
+}
+.flaticon-tricycle:before {
+    content: "\f10c";
+}
+.flaticon-brake:before {
+    content: "\f10d";
+}
+.flaticon-seat:before {
+    content: "\f10e";
+}
+.flaticon-generator:before {
+    content: "\f10f";
+}
+.flaticon-car-repair:before {
+    content: "\f110";
+}
+.flaticon-fog-lamp:before {
+    content: "\f111";
+}
+.flaticon-street:before {
+    content: "\f112";
+}
+.flaticon-electric-bike:before {
+    content: "\f113";
+}
+.flaticon-wheel:before {
+    content: "\f114";
+}
+.flaticon-piston:before {
+    content: "\f115";
+}
+.flaticon-vehicle:before {
+    content: "\f116";
+}
+.flaticon-scooter-1:before {
+    content: "\f117";
+}
+.flaticon-parking:before {
+    content: "\f118";
+}
+.flaticon-block:before {
+    content: "\f119";
+}
+.flaticon-electric:before {
+    content: "\f11a";
+}
+.flaticon-car-service:before {
+    content: "\f11b";
+}
+.flaticon-steering-wheel:before {
+    content: "\f11c";
+}
+.flaticon-4wd-1:before {
+    content: "\f11d";
+}
+.flaticon-plus:before {
+    content: "\f11e";
+}
+.flaticon-linkedin:before {
+    content: "\f11f";
+}
+.flaticon-left-chevron:before {
+    content: "\f120";
+}
+.flaticon-chevron:before {
+    content: "\f121";
+}
+.flaticon-tire-1:before {
+    content: "\f122";
+}
+.flaticon-facebook-logo:before {
+    content: "\f123";
+}
+.flaticon-sports-car:before {
+    content: "\f124";
+}
+.flaticon-right-arrow:before {
+    content: "\f125";
+}
+.flaticon-left-quote:before {
+    content: "\f126";
+}
+.flaticon-right-quote:before {
+    content: "\f127";
+}
+.flaticon-down-arrow:before {
+    content: "\f128";
+}
+.flaticon-play:before {
+    content: "\f129";
+}
+.flaticon-twitter:before {
+    content: "\f12a";
+}
+.flaticon-car-repair-1:before {
+    content: "\f12b";
+}
+.flaticon-instagram:before {
+    content: "\f12c";
+}
+.flaticon-battery:before {
+    content: "\f12d";
+}
+.flaticon-pickup:before {
+    content: "\f12e";
+}
+.flaticon-airbag:before {
+    content: "\f12f";
+}
+.flaticon-gearbox:before {
+    content: "\f130";
+}
+.flaticon-suv:before {
+    content: "\f131";
+}
+.flaticon-24-hours-phone-service:before {
+    content: "\f132";
+}
+.flaticon-engine:before {
+    content: "\f133";
+}
+.flaticon-atv:before {
+    content: "\f134";
+}
+.flaticon-headlight:before {
+    content: "\f135";
+}
+.flaticon-car-service-1:before {
+    content: "\f136";
+}
+.flaticon-car-service-2:before {
+    content: "\f137";
+}
+.flaticon-petrol:before {
+    content: "\f138";
+}
+.flaticon-engine-oil:before {
+    content: "\f139";
+}
+.flaticon-dashboard:before {
+    content: "\f13a";
+}
+.flaticon-driving:before {
+    content: "\f13b";
+}
+.flaticon-washer:before {
+    content: "\f13c";
+}
+.flaticon-smart-car:before {
+    content: "\f13d";
+}
+.flaticon-tire-2:before {
+    content: "\f13e";
+}
+.flaticon-engine-1:before {
+    content: "\f13f";
+}
+.flaticon-warning:before {
+    content: "\f140";
+}
+.flaticon-motorbike:before {
+    content: "\f141";
+}
