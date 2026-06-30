@@ -5,6 +5,8 @@ import { dbStatus } from "./db/connect.js";
 import { errorHandler, notFound } from "./middleware/error.js";
 import { requestLogger } from "./middleware/logger.js";
 import { authRouter } from "./routes/auth.routes.js";
+import { serviceRouter } from "./routes/service.routes.js";
+import { repairOrderRouter } from "./routes/repair-order.routes.js";
 import { bookingRouter } from "./routes/booking.routes.js";
 import { adminRouter } from "./routes/admin.routes.js";
 import { paymentRouter } from "./routes/payment.routes.js";
@@ -23,6 +25,8 @@ export function createApp() {
   });
 
   app.use("/api/auth", authRouter);
+  app.use("/api/admin/services", serviceRouter);
+  app.use("/api/repair-orders", repairOrderRouter);
   app.use("/api/bookings", bookingRouter);
   app.use("/api/admin", adminRouter);
   app.use("/api/payments", paymentRouter);
