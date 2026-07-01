@@ -1,10 +1,11 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
+﻿import { Navigate, Route, Routes } from 'react-router-dom'
 import { AdminDashboardPage } from '../pages/admin/DashboardPage'
 import { BookingRequestsPage } from '../pages/advisor/BookingRequestsPage'
 import { RepairOrderAssignmentPage } from '../pages/advisor/RepairOrderAssignmentPage'
 import { ServiceAdvisorDashboardPage } from '../pages/advisor/ServiceAdvisorDashboardPage'
 import { VehicleReceptionPage } from '../pages/advisor/VehicleReceptionPage'
 import { PlaceholderPage } from '../pages/PlaceholderPage'
+import { TechnicianInspectionPage } from '../pages/technician/TechnicianInspectionPage'
 
 export default function App() {
   return (
@@ -24,7 +25,7 @@ export default function App() {
       <Route element={<PlaceholderPage title="Theo dõi sửa chữa" />} path="/customer/repairs" />
       <Route element={<PlaceholderPage title="Hóa đơn của tôi" />} path="/customer/invoices" />
 
-      <Route element={<PlaceholderPage title="Kỹ thuật viên - Công việc" />} path="/technician/tasks" />
+      <Route element={<TechnicianInspectionPage />} path="/technician/tasks" />
       <Route element={<PlaceholderPage title="Lệnh sửa chữa được giao" />} path="/technician/work-orders" />
       <Route element={<PlaceholderPage title="Yêu cầu phụ tùng" />} path="/technician/parts-requests" />
 
