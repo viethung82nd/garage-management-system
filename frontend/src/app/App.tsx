@@ -3,6 +3,7 @@ import { AdminDashboardPage } from '../pages/admin/DashboardPage'
 import { AdditionalServiceSuggestionPage } from '../pages/advisor/AdditionalServiceSuggestionPage'
 import { BookingRequestsPage } from '../pages/advisor/BookingRequestsPage'
 import { RepairOrderAssignmentPage } from '../pages/advisor/RepairOrderAssignmentPage'
+import { RepairProgressTimelinePage } from '../pages/advisor/RepairProgressTimelinePage'
 import { ServiceAdvisorDashboardPage } from '../pages/advisor/ServiceAdvisorDashboardPage'
 import { TechnicianScheduleCoordinationPage } from '../pages/advisor/TechnicianScheduleCoordinationPage'
 import { VehicleReceptionPage } from '../pages/advisor/VehicleReceptionPage'
@@ -21,6 +22,7 @@ export default function App() {
       <Route element={<VehicleReceptionPage />} path="/advisor/reception" />
       <Route element={<RepairOrderAssignmentPage />} path="/advisor/work-orders" />
       <Route element={<AdditionalServiceSuggestionPage />} path="/advisor/additional-services" />
+      <Route element={<RepairProgressTimelinePage />} path="/advisor/repair-timeline" />
       <Route element={<TechnicianScheduleCoordinationPage />} path="/advisor/technician-schedule" />
       <Route element={<PlaceholderPage title="Khách hàng" />} path="/advisor/customers" />
       <Route element={<PlaceholderPage title="Xe" />} path="/advisor/vehicles" />
