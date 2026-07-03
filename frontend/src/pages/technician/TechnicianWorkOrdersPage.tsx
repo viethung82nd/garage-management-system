@@ -137,6 +137,10 @@ function TechnicianShell({ children }: { children: React.ReactNode }) {
             <Icon name="wrench" />
             Lệnh được giao
           </Link>
+          <Link className="flex min-h-12 items-center gap-3 px-4 text-sm font-bold text-[#555151] transition hover:bg-[#fbf9f8] hover:text-[#ba0013]" to="/technician/repair-notes">
+            <Icon name="invoice" />
+            Ghi chú sửa chữa
+          </Link>
           <Link className="flex min-h-12 items-center gap-3 px-4 text-sm font-bold text-[#555151] transition hover:bg-[#fbf9f8] hover:text-[#ba0013]" to="/technician/parts-requests">
             <Icon name="sliders" />
             Yêu cầu phụ tùng
@@ -374,3 +378,5 @@ export function TechnicianWorkOrdersPage() {
     </TechnicianShell>
   )
 }
+
+
