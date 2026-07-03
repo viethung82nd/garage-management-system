@@ -8,6 +8,7 @@ export type ServiceAdvisorNavKey =
   | 'reception'
   | 'work-orders'
   | 'additional-services'
+  | 'technician-schedule'
   | 'customers'
   | 'vehicles'
 
@@ -17,6 +18,7 @@ const navItems = [
   { key: 'reception', icon: 'clipboard', label: 'Tiếp nhận xe', to: '/advisor/reception' },
   { key: 'work-orders', icon: 'wrench', label: 'Lệnh sửa chữa', to: '/advisor/work-orders' },
   { key: 'additional-services', icon: 'plus', label: 'Dịch vụ phát sinh', to: '/advisor/additional-services' },
+  { key: 'technician-schedule', icon: 'team', label: 'Lịch KTV', to: '/advisor/technician-schedule' },
   { key: 'customers', icon: 'users', label: 'Khách hàng', to: '/advisor/customers' },
   { key: 'vehicles', icon: 'car', label: 'Phương tiện', to: '/advisor/vehicles' },
 ] satisfies Array<{ key: ServiceAdvisorNavKey; icon: IconName; label: string; to: string }>
