@@ -253,6 +253,22 @@ export default function CustomerProfilePage() {
     }
   }
 
+  function updateProfileField(field: keyof typeof profileForm, value: string) {
+    setProfileForm((current) => ({ ...current, [field]: value }))
+    setProfileFormError('')
+    setProfileFormSaved(false)
+  }
+
+  function openDeleteModal() {
+    setDeleteError('')
+    setDeleteModalOpen(true)
+  }
+
+  function closeDeleteModal() {
+    setDeleteError('')
+    setDeleteModalOpen(false)
+  }
+
   async function handleDeleteAccount() {
     if (!token) return
     setDeleteError('')
@@ -328,7 +344,7 @@ export default function CustomerProfilePage() {
                     id="profile-fullName"
                     name="fullName"
                     value={profileForm.fullName}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, fullName: event.target.value }))}
+                    onChange={(event) => updateProfileField('fullName', event.target.value)}
                   />
                 </CustomerFormField>
                 <CustomerFormField id="profile-phone" label="Phone">
@@ -337,7 +353,7 @@ export default function CustomerProfilePage() {
                     name="phone"
                     type="tel"
                     value={profileForm.phone}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
+                    onChange={(event) => updateProfileField('phone', event.target.value)}
                   />
                 </CustomerFormField>
                 <CustomerFormField id="profile-email" label="Email" required>
@@ -346,7 +362,7 @@ export default function CustomerProfilePage() {
                     name="email"
                     type="email"
                     value={profileForm.email}
-                    onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))}
+                    onChange={(event) => updateProfileField('email', event.target.value)}
                   />
                 </CustomerFormField>
                 <CustomerPrimaryButton type="submit" disabled={profileFormSaving}>
@@ -357,7 +373,7 @@ export default function CustomerProfilePage() {
               <div className="customer-profile-danger-zone">
                 <span className="customer-booking-card__label">Danger zone</span>
                 <p>Deleting your account is permanent and cannot be undone.</p>
-                <button type="button" className="customer-primary-btn customer-primary-btn--ghost" onClick={() => setDeleteModalOpen(true)}>
+                <button type="button" className="customer-primary-btn customer-primary-btn--ghost" onClick={() => openDeleteModal()}>
                   Delete account
                 </button>
               </div>
@@ -418,7 +434,7 @@ export default function CustomerProfilePage() {
       </section>
 
       {deleteModalOpen ? (
-        <div className="customer-modal-backdrop" role="presentation" onClick={() => setDeleteModalOpen(false)}>
+        <div className="customer-modal-backdrop" role="presentation" onClick={() => closeDeleteModal()}>
           <div
             className="customer-modal"
             role="dialog"
@@ -426,7 +442,7 @@ export default function CustomerProfilePage() {
             aria-labelledby="delete-account-title"
             onClick={(event) => event.stopPropagation()}
           >
-            <button type="button" className="customer-modal__close" aria-label="Close" onClick={() => setDeleteModalOpen(false)}>
+            <button type="button" className="customer-modal__close" aria-label="Close" onClick={() => closeDeleteModal()}>
               ×
             </button>
             <div className="customer-modal__content">
@@ -438,7 +454,7 @@ export default function CustomerProfilePage() {
                   type="button"
                   className="customer-primary-btn customer-primary-btn--ghost"
                   disabled={deleting}
-                  onClick={() => setDeleteModalOpen(false)}
+                  onClick={() => closeDeleteModal()}
                 >
                   Cancel
                 </button>
