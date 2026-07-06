@@ -6,6 +6,7 @@ const links = [
   { to: '/customer/bookings', label: 'Booking History' },
   { to: '/customer/invoices', label: 'Invoices' },
   { to: '/tracking', label: 'Track Repair' },
+  { to: '/customer/reviews', label: 'Reviews' },
 ]
 
 export function CustomerAccountNav() {
