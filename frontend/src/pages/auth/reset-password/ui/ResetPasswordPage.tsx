@@ -16,10 +16,12 @@ export default function ResetPasswordPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [succeeded, setSucceeded] = useState(false)
+  const [tokenInvalid, setTokenInvalid] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
+    setTokenInvalid(false)
 
     if (form.password.length < 8) {
       setError('Password must be at least 8 characters')
@@ -35,7 +37,11 @@ export default function ResetPasswordPage() {
       await resetPasswordRequest({ token, password: form.password })
       setSucceeded(true)
     } catch (requestError) {
-      setError(requestError instanceof AuthApiError ? requestError.message : 'Unable to reset your password. Please try again.')
+      if (requestError instanceof AuthApiError && (requestError.status === 400 || requestError.status === 401)) {
+        setTokenInvalid(true)
+      } else {
+        setError(requestError instanceof AuthApiError ? requestError.message : 'Unable to reset your password. Please try again.')
+      }
     } finally {
       setLoading(false)
     }
@@ -62,6 +68,14 @@ export default function ResetPasswordPage() {
                   {!token ? (
                     <div className="auth-form-message auth-form-message--error">
                       This reset link is missing its token. Please request a new password reset email.
+                    </div>
+                  ) : null}
+                  {tokenInvalid ? (
+                    <div className="auth-form-message auth-form-message--error">
+                      <p>
+                        This reset link is invalid or has expired. Please{' '}
+                        <Link to="/my-account/lost-password">request a new password reset email</Link>.
+                      </p>
                     </div>
                   ) : null}
                   {error ? <div className="auth-form-message auth-form-message--error">{error}</div> : null}
