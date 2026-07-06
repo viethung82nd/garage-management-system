@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { useAuth } from '../../../../shared/auth'
 import {
   CustomerAccountNav,
@@ -10,6 +10,7 @@ import {
   CustomerTextarea,
 } from '../../../../shared/ui/kapa-customer'
 import { fetchCustomerRepairOrders, type CustomerRepairOrderApiRecord } from '../../api/customerApi'
+import { submitServiceReview } from '../api/reviewApi'
 import { CustomerRatingInput } from './CustomerRatingInput'
 
 function vehicleLabel(order: CustomerRepairOrderApiRecord) {
@@ -31,10 +32,26 @@ function formatCompletedDate(value?: string | null) {
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
 }
 
-function ReviewFormCard({ order }: { order: CustomerRepairOrderApiRecord }) {
+function ReviewFormCard({ order, token }: { order: CustomerRepairOrderApiRecord; token: string }) {
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setSubmitting(true)
+    try {
+      await submitServiceReview(token, { repairOrderId: order._id, rating, comment: comment.trim() || undefined })
+      setSubmitted(true)
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'Unable to submit your review. Please try again.')
+    } finally {
+      setSubmitting(false)
+    }
+  }
 
   return (
     <CustomerPanel key={order._id} className="customer-review-card">
@@ -44,21 +61,18 @@ function ReviewFormCard({ order }: { order: CustomerRepairOrderApiRecord }) {
       {submitted ? (
         <p className="customer-review-card__thanks">Thanks for your feedback!</p>
       ) : (
-        <form
-          onSubmit={(event) => {
-            event.preventDefault()
-            setSubmitted(true)
-          }}
-        >
-          <CustomerRatingInput value={rating} onChange={setRating} />
+        <form onSubmit={handleSubmit}>
+          {error ? <p className="customer-review-card__error">{error}</p> : null}
+          <CustomerRatingInput value={rating} onChange={setRating} disabled={submitting} />
           <CustomerTextarea
             rows={3}
             placeholder="How was your experience with this repair?"
             value={comment}
+            disabled={submitting}
             onChange={(event) => setComment(event.target.value)}
           />
-          <CustomerPrimaryButton type="submit" disabled={rating === 0}>
-            Submit review
+          <CustomerPrimaryButton type="submit" disabled={rating === 0 || submitting}>
+            {submitting ? 'Submitting...' : 'Submit review'}
           </CustomerPrimaryButton>
         </form>
       )}
@@ -123,9 +137,7 @@ export default function CustomerReviewsPage() {
             />
           ) : null}
 
-          {completedOrders.map((order) => (
-            <ReviewFormCard key={order._id} order={order} />
-          ))}
+          {token ? completedOrders.map((order) => <ReviewFormCard key={order._id} order={order} token={token} />) : null}
         </div>
       </div>
     </CustomerPageLayout>
