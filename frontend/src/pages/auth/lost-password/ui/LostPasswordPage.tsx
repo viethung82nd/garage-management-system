@@ -1,9 +1,34 @@
-import { useState } from 'react'
+import { useState, type FormEvent } from 'react'
+import { AuthApiError, forgotPasswordRequest } from '../../../../shared/auth/api'
 import { usePageMeta } from '../../../../shared/lib/kapa-template'
 import { KapaFooter, KapaNavbar, KapaPageBanner, KapaTopbar } from '../../../../shared/ui/kapa-chrome'
 
 export default function LostPasswordPage() {
+  const [email, setEmail] = useState('')
   const [message, setMessage] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+
+  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setError('')
+    setMessage('')
+
+    if (!email.trim()) {
+      setError('Please enter your username or email address')
+      return
+    }
+
+    setLoading(true)
+    try {
+      await forgotPasswordRequest({ email: email.trim() })
+      setMessage('If an account exists for that email, a password reset link has been sent.')
+    } catch (requestError) {
+      setError(requestError instanceof AuthApiError ? requestError.message : 'Unable to request a password reset. Please try again.')
+    } finally {
+      setLoading(false)
+    }
+  }
 
   usePageMeta(
     'Lost password – Kapa',
@@ -23,15 +48,9 @@ export default function LostPasswordPage() {
               <div className="entry-content">
                 <div className="woocommerce">
                   <div className="woocommerce-notices-wrapper" />
+                  {error ? <div className="auth-form-message auth-form-message--error">{error}</div> : null}
                   {message ? <div className="auth-form-message auth-form-message--info">{message}</div> : null}
-                  <form
-                    method="post"
-                    className="woocommerce-ResetPassword lost_reset_password"
-                    onSubmit={(event) => {
-                      event.preventDefault()
-                      setMessage('Password reset chưa được tích hợp backend.')
-                    }}
-                  >
+                  <form method="post" className="woocommerce-ResetPassword lost_reset_password" onSubmit={handleSubmit}>
                     <p>
                       Lost your password? Please enter your username or email address. You will receive a link to create a new password via email.
                     </p>
@@ -43,6 +62,8 @@ export default function LostPasswordPage() {
                         name="user_login"
                         id="user_login"
                         autoComplete="username"
+                        value={email}
+                        onChange={(event) => setEmail(event.target.value)}
                       />
                     </p>
 
@@ -50,8 +71,13 @@ export default function LostPasswordPage() {
 
                     <p className="woocommerce-form-row form-row">
                       <input type="hidden" name="wc_reset_password" value="true" />
-                      <button type="submit" className="woocommerce-Button button btn btn-primary order-btn" value="Reset password">
-                        Reset Password
+                      <button
+                        type="submit"
+                        className="woocommerce-Button button btn btn-primary order-btn"
+                        value="Reset password"
+                        disabled={loading}
+                      >
+                        {loading ? 'Sending...' : 'Reset Password'}
                       </button>
                     </p>
 
