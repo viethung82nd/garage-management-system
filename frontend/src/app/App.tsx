@@ -1,7 +1,7 @@
 import { Suspense, lazy } from 'react'
 import { Navigate, Route, Routes } from 'react-router-dom'
 import { AppointmentPage } from '../pages/appointment'
-import { LostPasswordPage, MyAccountPage } from '../pages/auth'
+import { LostPasswordPage, MyAccountPage, ResetPasswordPage } from '../pages/auth'
 import { ContactUsPage } from '../pages/contact-us'
 import { HomeFivePage } from '../pages/home-five'
 import { OurBrandsPage } from '../pages/our-brands'
@@ -30,6 +30,7 @@ export default function App() {
       <Route path="/our-brands" element={<OurBrandsPage />} />
       <Route path="/my-account" element={<MyAccountPage />} />
       <Route path="/my-account/lost-password" element={<LostPasswordPage />} />
+      <Route path="/my-account/reset-password" element={<ResetPasswordPage />} />
       <Route path="/customer/login" element={<MyAccountPage />} />
       <Route path="/customer/forgot-password" element={<LostPasswordPage />} />
       <Route
