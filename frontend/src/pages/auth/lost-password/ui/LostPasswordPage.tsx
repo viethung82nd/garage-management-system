@@ -5,14 +5,13 @@ import { KapaFooter, KapaNavbar, KapaPageBanner, KapaTopbar } from '../../../../
 
 export default function LostPasswordPage() {
   const [email, setEmail] = useState('')
-  const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const [submittedEmail, setSubmittedEmail] = useState('')
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
-    setMessage('')
 
     if (!email.trim()) {
       setError('Please enter your username or email address')
@@ -22,7 +21,7 @@ export default function LostPasswordPage() {
     setLoading(true)
     try {
       await forgotPasswordRequest({ email: email.trim() })
-      setMessage('If an account exists for that email, a password reset link has been sent.')
+      setSubmittedEmail(email.trim())
     } catch (requestError) {
       setError(requestError instanceof AuthApiError ? requestError.message : 'Unable to request a password reset. Please try again.')
     } finally {
@@ -49,41 +48,49 @@ export default function LostPasswordPage() {
                 <div className="woocommerce">
                   <div className="woocommerce-notices-wrapper" />
                   {error ? <div className="auth-form-message auth-form-message--error">{error}</div> : null}
-                  {message ? <div className="auth-form-message auth-form-message--info">{message}</div> : null}
-                  <form method="post" className="woocommerce-ResetPassword lost_reset_password" onSubmit={handleSubmit}>
-                    <p>
-                      Lost your password? Please enter your username or email address. You will receive a link to create a new password via email.
-                    </p>
-                    <p className="woocommerce-form-row woocommerce-form-row--first form-row form-row-first">
-                      <label htmlFor="user_login">Username or email</label>
-                      <input
-                        className="woocommerce-Input woocommerce-Input--text input-text form-control"
-                        type="text"
-                        name="user_login"
-                        id="user_login"
-                        autoComplete="username"
-                        value={email}
-                        onChange={(event) => setEmail(event.target.value)}
-                      />
-                    </p>
+                  {submittedEmail ? (
+                    <div className="auth-form-message auth-form-message--success">
+                      <p>
+                        Check your email — if an account exists for <strong>{submittedEmail}</strong>, a password reset link has
+                        been sent. Follow the link in that email to choose a new password.
+                      </p>
+                    </div>
+                  ) : (
+                    <form method="post" className="woocommerce-ResetPassword lost_reset_password" onSubmit={handleSubmit}>
+                      <p>
+                        Lost your password? Please enter your username or email address. You will receive a link to create a new password via email.
+                      </p>
+                      <p className="woocommerce-form-row woocommerce-form-row--first form-row form-row-first">
+                        <label htmlFor="user_login">Username or email</label>
+                        <input
+                          className="woocommerce-Input woocommerce-Input--text input-text form-control"
+                          type="text"
+                          name="user_login"
+                          id="user_login"
+                          autoComplete="username"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                        />
+                      </p>
 
-                    <div className="clear" />
+                      <div className="clear" />
 
-                    <p className="woocommerce-form-row form-row">
-                      <input type="hidden" name="wc_reset_password" value="true" />
-                      <button
-                        type="submit"
-                        className="woocommerce-Button button btn btn-primary order-btn"
-                        value="Reset password"
-                        disabled={loading}
-                      >
-                        {loading ? 'Sending...' : 'Reset Password'}
-                      </button>
-                    </p>
+                      <p className="woocommerce-form-row form-row">
+                        <input type="hidden" name="wc_reset_password" value="true" />
+                        <button
+                          type="submit"
+                          className="woocommerce-Button button btn btn-primary order-btn"
+                          value="Reset password"
+                          disabled={loading}
+                        >
+                          {loading ? 'Sending...' : 'Reset Password'}
+                        </button>
+                      </p>
 
-                    <input type="hidden" id="woocommerce-lost-password-nonce" name="woocommerce-lost-password-nonce" value="55a5dc894e" />
-                    <input type="hidden" name="_wp_http_referer" value="index.html" />
-                  </form>
+                      <input type="hidden" id="woocommerce-lost-password-nonce" name="woocommerce-lost-password-nonce" value="55a5dc894e" />
+                      <input type="hidden" name="_wp_http_referer" value="index.html" />
+                    </form>
+                  )}
                 </div>
               </div>
             </div>
