@@ -1,4 +1,5 @@
 import { apiRequest } from '../../../shared/lib/api-client'
+import type { AuthUser } from '../../../shared/auth'
 
 export type CustomerBookingApiRecord = {
   _id: string
@@ -175,6 +176,27 @@ export function fetchCustomerRepairOrders(token: string) {
 export function fetchCustomerInvoices(token: string) {
   return apiRequest<{ invoices: CustomerInvoiceApiRecord[] }>('/api/invoices/mine', {
     method: 'GET',
+    token,
+  })
+}
+
+export type UpdateCustomerProfilePayload = {
+  fullName: string
+  phone?: string
+  email?: string
+}
+
+export function updateCustomerProfile(token: string, payload: UpdateCustomerProfilePayload) {
+  return apiRequest<{ user: AuthUser }>('/api/auth/me', {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(payload),
+  })
+}
+
+export function deleteCustomerAccount(token: string) {
+  return apiRequest<{ message: string }>('/api/auth/me', {
+    method: 'DELETE',
     token,
   })
 }
