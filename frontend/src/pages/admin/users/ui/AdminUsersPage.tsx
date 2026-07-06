@@ -155,7 +155,15 @@ export default function AdminUsersPage() {
             onChange={(event) => setQuery(event.target.value)}
             style={{ maxWidth: 320 }}
           />
-          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
+          <Button
+            type="primary"
+            icon={<PlusOutlined />}
+            onClick={() => {
+              setCreateError('')
+              createForm.resetFields()
+              setCreateModalOpen(true)
+            }}
+          >
             Add staff account
           </Button>
         </div>
@@ -179,7 +187,10 @@ export default function AdminUsersPage() {
       <Modal
         title="Add staff account"
         open={createModalOpen}
-        onCancel={() => setCreateModalOpen(false)}
+        onCancel={() => {
+          setCreateError('')
+          setCreateModalOpen(false)
+        }}
         onOk={() => createForm.submit()}
         confirmLoading={creating}
         okText="Create account"

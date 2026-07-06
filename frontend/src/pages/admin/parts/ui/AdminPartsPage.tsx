@@ -55,12 +55,14 @@ export default function AdminPartsPage() {
 
   function openCreateModal() {
     setEditingPart(null)
+    setRequestError('')
     form.resetFields()
     setModalOpen(true)
   }
 
   function openEditModal(part: PartRecord) {
     setEditingPart(part)
+    setRequestError('')
     form.setFieldsValue(part)
     setModalOpen(true)
   }
