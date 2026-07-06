@@ -1,10 +1,18 @@
-import { SearchOutlined } from '@ant-design/icons'
-import { Card, Input, Table, Tag } from 'antd'
+import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { Button, Card, Form, Input, Modal, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../../shared/auth'
-import { fetchAdminUsers, type AdminUserRecord } from '../api/usersApi'
+import { ApiClientError } from '../../../../shared/lib/api-client'
+import { createStaffAccount, fetchAdminUsers, type AdminUserRecord, type CreateStaffPayload } from '../api/usersApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
+
+const STAFF_ROLE_OPTIONS: Array<{ value: CreateStaffPayload['role']; label: string }> = [
+  { value: 'serviceAdvisor', label: 'Service advisor' },
+  { value: 'technician', label: 'Technician' },
+  { value: 'accountant', label: 'Accountant' },
+  { value: 'admin', label: 'Admin' },
+]
 
 function roleLabel(role: AdminUserRecord['role']) {
   switch (role) {
@@ -27,6 +35,10 @@ export default function AdminUsersPage() {
   const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [requestError, setRequestError] = useState('')
+  const [createModalOpen, setCreateModalOpen] = useState(false)
+  const [createError, setCreateError] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [createForm] = Form.useForm<CreateStaffPayload>()
 
   useEffect(() => {
     if (!token) return
@@ -64,6 +76,22 @@ export default function AdminUsersPage() {
     )
   }, [query, users])
 
+  async function handleCreateStaff(values: CreateStaffPayload) {
+    if (!token) return
+    setCreateError('')
+    setCreating(true)
+    try {
+      const response = await createStaffAccount(token, values)
+      setUsers((current) => [response.user, ...current])
+      setCreateModalOpen(false)
+      createForm.resetFields()
+    } catch (error) {
+      setCreateError(error instanceof ApiClientError ? error.message : 'Unable to create the staff account. Please try again.')
+    } finally {
+      setCreating(false)
+    }
+  }
+
   const columns = useMemo<ColumnsType<AdminUserRecord>>(
     () => [
       { title: 'Full name', dataIndex: 'fullName', key: 'fullName' },
@@ -85,14 +113,19 @@ export default function AdminUsersPage() {
   return (
     <AdminShell eyebrow="Admin" title="User management">
       <Card bordered={false} className="rounded-[32px]" styles={{ body: { padding: 24 } }} style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow }}>
-        <Input
-          allowClear
-          prefix={<SearchOutlined />}
-          placeholder="Search by name or email"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          style={{ maxWidth: 320, marginBottom: 20 }}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-4" style={{ marginBottom: 20 }}>
+          <Input
+            allowClear
+            prefix={<SearchOutlined />}
+            placeholder="Search by name or email"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            style={{ maxWidth: 320 }}
+          />
+          <Button type="primary" icon={<PlusOutlined />} onClick={() => setCreateModalOpen(true)}>
+            Add staff account
+          </Button>
+        </div>
 
         {requestError ? (
           <div className="mb-4 rounded-[18px] border px-4 py-3 text-sm font-medium" style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}>
@@ -109,6 +142,42 @@ export default function AdminUsersPage() {
           locale={{ emptyText: 'No staff accounts yet.' }}
         />
       </Card>
+
+      <Modal
+        title="Add staff account"
+        open={createModalOpen}
+        onCancel={() => setCreateModalOpen(false)}
+        onOk={() => createForm.submit()}
+        confirmLoading={creating}
+        okText="Create account"
+      >
+        {createError ? (
+          <div className="mb-4 rounded-[18px] border px-4 py-3 text-sm font-medium" style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}>
+            {createError}
+          </div>
+        ) : null}
+        <Form form={createForm} layout="vertical" onFinish={handleCreateStaff}>
+          <Form.Item name="fullName" label="Full name" rules={[{ required: true, message: 'Full name is required' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="email" label="Email" rules={[{ required: true, type: 'email', message: 'A valid email is required' }]}>
+            <Input />
+          </Form.Item>
+          <Form.Item name="phone" label="Phone">
+            <Input />
+          </Form.Item>
+          <Form.Item
+            name="password"
+            label="Temporary password"
+            rules={[{ required: true, min: 8, message: 'Password must be at least 8 characters' }]}
+          >
+            <Input.Password />
+          </Form.Item>
+          <Form.Item name="role" label="Role" rules={[{ required: true, message: 'Role is required' }]}>
+            <Select options={STAFF_ROLE_OPTIONS} placeholder="Select a role" />
+          </Form.Item>
+        </Form>
+      </Modal>
     </AdminShell>
   )
 }
