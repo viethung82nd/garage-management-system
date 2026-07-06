@@ -125,6 +125,7 @@ export default function CustomerProfilePage() {
   const [profileFormError, setProfileFormError] = useState('')
   const [profileFormSaving, setProfileFormSaving] = useState(false)
   const [profileFormSaved, setProfileFormSaved] = useState(false)
+  const [deleteModalOpen, setDeleteModalOpen] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -334,6 +335,14 @@ export default function CustomerProfilePage() {
                   {profileFormSaving ? 'Saving...' : 'Save changes'}
                 </CustomerPrimaryButton>
               </form>
+
+              <div className="customer-profile-danger-zone">
+                <span className="customer-booking-card__label">Danger zone</span>
+                <p>Deleting your account is permanent and cannot be undone.</p>
+                <button type="button" className="customer-primary-btn customer-primary-btn--ghost" onClick={() => setDeleteModalOpen(true)}>
+                  Delete account
+                </button>
+              </div>
             </CustomerInfoCard>
           </div>
 
@@ -389,6 +398,32 @@ export default function CustomerProfilePage() {
           </div>
         </CustomerInfoCard>
       </section>
+
+      {deleteModalOpen ? (
+        <div className="customer-modal-backdrop" role="presentation" onClick={() => setDeleteModalOpen(false)}>
+          <div
+            className="customer-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="delete-account-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button type="button" className="customer-modal__close" aria-label="Close" onClick={() => setDeleteModalOpen(false)}>
+              ×
+            </button>
+            <div className="customer-modal__content">
+              <h3 id="delete-account-title">Delete your account?</h3>
+              <p>This will permanently delete your account and cannot be undone.</p>
+              <div className="customer-modal__actions">
+                <button type="button" className="customer-primary-btn customer-primary-btn--ghost" onClick={() => setDeleteModalOpen(false)}>
+                  Cancel
+                </button>
+                <CustomerPrimaryButton type="button">Delete my account</CustomerPrimaryButton>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </CustomerPageLayout>
   )
 }
