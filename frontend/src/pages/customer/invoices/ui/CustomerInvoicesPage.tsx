@@ -121,6 +121,7 @@ export default function CustomerInvoicesPage() {
   const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
   const [requestError, setRequestError] = useState('')
   const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null)
+  const [downloadingSelected, setDownloadingSelected] = useState(false)
   const invoiceSheetRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -528,8 +529,21 @@ export default function CustomerInvoicesPage() {
                   </div>
 
                   <div className="customer-modal__actions">
-                    <button type="button" className="default-btn customer-primary-btn customer-primary-btn--ghost">
-                      Download invoice
+                    <button
+                      type="button"
+                      className="default-btn customer-primary-btn customer-primary-btn--ghost"
+                      disabled={downloadingSelected}
+                      onClick={async () => {
+                        if (!invoiceSheetRef.current) return
+                        setDownloadingSelected(true)
+                        try {
+                          await exportNodeToPdf(invoiceSheetRef.current, `invoice-${selectedInvoice.id}`)
+                        } finally {
+                          setDownloadingSelected(false)
+                        }
+                      }}
+                    >
+                      {downloadingSelected ? 'Preparing PDF...' : 'Download invoice'}
                       <span />
                     </button>
                     <button type="button" className="default-btn customer-primary-btn customer-primary-btn--ghost" onClick={() => setSelectedInvoiceId(null)}>
