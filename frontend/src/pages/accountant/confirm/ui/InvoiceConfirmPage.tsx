@@ -1,8 +1,9 @@
 import { CheckCircleOutlined, PrinterOutlined, SelectOutlined, SendOutlined } from '@ant-design/icons'
 import { Button, Card, Divider, Select, Space, Tag, Typography } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../../shared/auth'
+import { exportNodeToPdf } from '../../../../shared/lib/pdf-export'
 import {
   fetchInvoiceDetail,
   fetchRepairOrderDetail,
@@ -101,6 +102,18 @@ export default function InvoiceConfirmPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [requestError, setRequestError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
+  const [isPrinting, setIsPrinting] = useState(false)
+  const printableRef = useRef<HTMLDivElement>(null)
+
+  async function handlePrintCopy() {
+    if (!printableRef.current || !detailMeta) return
+    setIsPrinting(true)
+    try {
+      await exportNodeToPdf(printableRef.current, `invoice-${detailMeta.displayId}`)
+    } finally {
+      setIsPrinting(false)
+    }
+  }
 
   useEffect(() => {
     if (!token || !kind || !id) {
@@ -303,7 +316,14 @@ export default function InvoiceConfirmPage() {
             gridTemplateColumns: 'minmax(0, 1.3fr) minmax(320px, 0.7fr)',
           }}
         >
-          <Card bordered={false} className="rounded-[32px]" loading={isLoading} styles={{ body: { padding: 24 } }} style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow }}>
+          <Card
+            ref={printableRef}
+            bordered={false}
+            className="rounded-[32px]"
+            loading={isLoading}
+            styles={{ body: { padding: 24 } }}
+            style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow }}
+          >
             {requestError ? (
               <div className="mb-5 rounded-[18px] border px-4 py-3 text-sm font-medium" style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}>
                 {requestError}
@@ -478,8 +498,8 @@ export default function InvoiceConfirmPage() {
                 <Button icon={<SendOutlined />} size="large">
                   Send invoice to customer
                 </Button>
-                <Button icon={<PrinterOutlined />} size="large">
-                  Print invoice copy
+                <Button icon={<PrinterOutlined />} size="large" loading={isPrinting} disabled={!detailMeta} onClick={handlePrintCopy}>
+                  {isPrinting ? 'Preparing PDF...' : 'Print invoice copy'}
                 </Button>
               </Space>
             </Card>
