@@ -23,6 +23,7 @@ import {
 
 const GARAGE_NAME = 'Kapa Auto Care Center'
 const PRIMARY_VEHICLE_IMAGE = '/wp-content/uploads/2022/11/choose.webp'
+const EMAIL_RE = /^\S+@\S+\.\S+$/
 
 function formatMemberSince(value?: string) {
   if (!value) {
@@ -120,6 +121,7 @@ export default function CustomerProfilePage() {
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
   const [requestError, setRequestError] = useState('')
   const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', email: '' })
+  const [profileFormError, setProfileFormError] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -269,8 +271,19 @@ export default function CustomerProfilePage() {
                 className="customer-profile-form"
                 onSubmit={(event) => {
                   event.preventDefault()
+                  setProfileFormError('')
+
+                  if (!profileForm.fullName.trim()) {
+                    setProfileFormError('Full name is required')
+                    return
+                  }
+                  if (!profileForm.email.trim() || !EMAIL_RE.test(profileForm.email.trim())) {
+                    setProfileFormError('A valid email is required')
+                    return
+                  }
                 }}
               >
+                {profileFormError ? <p className="customer-profile-form__error">{profileFormError}</p> : null}
                 <CustomerFormField id="profile-fullName" label="Full name" required>
                   <CustomerInput
                     id="profile-fullName"
