@@ -1,4 +1,11 @@
-import type { AuthSession, AuthUser, LoginPayload, RegisterPayload } from './types'
+import type {
+  AuthSession,
+  AuthUser,
+  ForgotPasswordPayload,
+  LoginPayload,
+  RegisterPayload,
+  ResetPasswordPayload,
+} from './types'
 
 const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000').replace(/\/+$/, '')
 
@@ -62,6 +69,20 @@ export async function loginRequest(payload: LoginPayload) {
 
 export async function registerRequest(payload: RegisterPayload) {
   return requestJson<AuthSession>('/api/auth/register', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function forgotPasswordRequest(payload: ForgotPasswordPayload) {
+  return requestJson<{ message: string }>('/api/auth/forgot-password', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function resetPasswordRequest(payload: ResetPasswordPayload) {
+  return requestJson<{ message: string }>('/api/auth/reset-password', {
     method: 'POST',
     body: JSON.stringify(payload),
   })
