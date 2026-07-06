@@ -4,9 +4,12 @@ import { useAuth } from '../../../../shared/auth'
 import { asset } from '../../../../shared/lib/asset'
 import {
   CustomerAccountNav,
+  CustomerFormField,
   CustomerInfoCard,
+  CustomerInput,
   CustomerMetricCard,
   CustomerPageLayout,
+  CustomerPrimaryButton,
   CustomerSectionHeading,
 } from '../../../../shared/ui/kapa-customer'
 import {
@@ -116,6 +119,16 @@ export default function CustomerProfilePage() {
   const [repairOrders, setRepairOrders] = useState<CustomerRepairOrderApiRecord[]>([])
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
   const [requestError, setRequestError] = useState('')
+  const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', email: '' })
+
+  useEffect(() => {
+    if (!user) return
+    setProfileForm({
+      fullName: user.fullName || '',
+      phone: user.phone || '',
+      email: user.email || '',
+    })
+  }, [user])
 
   useEffect(() => {
     if (!token) {
@@ -252,20 +265,40 @@ export default function CustomerProfilePage() {
         <div className="row g-4">
           <div className="col-xl-6">
             <CustomerInfoCard eyebrow="Contact" title="Your details">
-              <div className="customer-profile-meta">
-                <div>
-                  <span className="customer-booking-card__label">Phone</span>
-                  <strong>{profileView.phone}</strong>
-                </div>
-                <div>
-                  <span className="customer-booking-card__label">Email</span>
-                  <strong className="customer-text-break">{profileView.email}</strong>
-                </div>
-                <div>
-                  <span className="customer-booking-card__label">Address</span>
-                  <strong>{profileView.address}</strong>
-                </div>
-              </div>
+              <form
+                className="customer-profile-form"
+                onSubmit={(event) => {
+                  event.preventDefault()
+                }}
+              >
+                <CustomerFormField id="profile-fullName" label="Full name" required>
+                  <CustomerInput
+                    id="profile-fullName"
+                    name="fullName"
+                    value={profileForm.fullName}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, fullName: event.target.value }))}
+                  />
+                </CustomerFormField>
+                <CustomerFormField id="profile-phone" label="Phone">
+                  <CustomerInput
+                    id="profile-phone"
+                    name="phone"
+                    type="tel"
+                    value={profileForm.phone}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
+                  />
+                </CustomerFormField>
+                <CustomerFormField id="profile-email" label="Email" required>
+                  <CustomerInput
+                    id="profile-email"
+                    name="email"
+                    type="email"
+                    value={profileForm.email}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))}
+                  />
+                </CustomerFormField>
+                <CustomerPrimaryButton type="submit">Save changes</CustomerPrimaryButton>
+              </form>
             </CustomerInfoCard>
           </div>
 
