@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { asset } from '../../../../shared/lib/asset'
+import { exportNodeToPdf } from '../../../../shared/lib/pdf-export'
 import {
   CustomerAccountNav,
   CustomerEmptyState,
@@ -119,6 +120,8 @@ export default function CustomerInvoicesPage() {
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
   const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
   const [requestError, setRequestError] = useState('')
+  const [pendingDownloadId, setPendingDownloadId] = useState<string | null>(null)
+  const invoiceSheetRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!token) {
@@ -231,6 +234,14 @@ export default function CustomerInvoicesPage() {
     [customerInvoices, selectedInvoiceId],
   )
 
+  useEffect(() => {
+    if (!selectedInvoice || pendingDownloadId !== selectedInvoice.id || !invoiceSheetRef.current) {
+      return
+    }
+    const node = invoiceSheetRef.current
+    void exportNodeToPdf(node, `invoice-${selectedInvoice.id}`).finally(() => setPendingDownloadId(null))
+  }, [pendingDownloadId, selectedInvoice])
+
   return (
     <CustomerPageLayout title="Customer Invoices" breadcrumb="Invoices">
       <section className="customer-section">
@@ -334,7 +345,14 @@ export default function CustomerInvoicesPage() {
                           <button type="button" className="customer-table-link" onClick={() => setSelectedInvoiceId(invoice.id)}>
                             View detail
                           </button>
-                          <button type="button" className="customer-table-link customer-table-link--ghost">
+                          <button
+                            type="button"
+                            className="customer-table-link customer-table-link--ghost"
+                            onClick={() => {
+                              setSelectedInvoiceId(invoice.id)
+                              setPendingDownloadId(invoice.id)
+                            }}
+                          >
                             Download
                           </button>
                         </div>
@@ -356,7 +374,7 @@ export default function CustomerInvoicesPage() {
             </button>
 
             <div className="customer-modal__content customer-modal__content--invoice">
-              <div className="customer-invoice-sheet">
+              <div className="customer-invoice-sheet" ref={invoiceSheetRef}>
                 <div className="customer-invoice-sheet__masthead">
                   <div className="customer-invoice-sheet__brand">
                     <img src={asset('/wp-content/uploads/2023/01/Kapa_Logo-1.svg')} alt="Kapa" />
