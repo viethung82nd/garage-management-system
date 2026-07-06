@@ -1,10 +1,10 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Card, Form, Input, Modal, Select, Table, Tag } from 'antd'
+import { Button, Card, Form, Input, Modal, Popconfirm, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../../shared/auth'
 import { ApiClientError } from '../../../../shared/lib/api-client'
-import { createStaffAccount, fetchAdminUsers, type AdminUserRecord, type CreateStaffPayload } from '../api/usersApi'
+import { createStaffAccount, deactivateUser, fetchAdminUsers, type AdminUserRecord, type CreateStaffPayload } from '../api/usersApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
 
 const STAFF_ROLE_OPTIONS: Array<{ value: CreateStaffPayload['role']; label: string }> = [
@@ -39,6 +39,7 @@ export default function AdminUsersPage() {
   const [createError, setCreateError] = useState('')
   const [creating, setCreating] = useState(false)
   const [createForm] = Form.useForm<CreateStaffPayload>()
+  const [deactivatingId, setDeactivatingId] = useState<string | null>(null)
 
   useEffect(() => {
     if (!token) return
@@ -92,6 +93,19 @@ export default function AdminUsersPage() {
     }
   }
 
+  async function handleDeactivate(user: AdminUserRecord) {
+    if (!token) return
+    setDeactivatingId(user._id)
+    try {
+      await deactivateUser(token, user._id)
+      setUsers((current) => current.map((item) => (item._id === user._id ? { ...item, isActive: false } : item)))
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : 'Unable to deactivate this account.')
+    } finally {
+      setDeactivatingId(null)
+    }
+  }
+
   const columns = useMemo<ColumnsType<AdminUserRecord>>(
     () => [
       { title: 'Full name', dataIndex: 'fullName', key: 'fullName' },
@@ -106,8 +120,27 @@ export default function AdminUsersPage() {
           <Tag color={value ? 'green' : 'default'}>{value ? 'Active' : 'Deactivated'}</Tag>
         ),
       },
+      {
+        title: 'Action',
+        key: 'action',
+        render: (_, user) =>
+          user.isActive ? (
+            <Popconfirm
+              title="Deactivate this account?"
+              description="They will no longer be able to log in."
+              okText="Deactivate"
+              onConfirm={() => handleDeactivate(user)}
+            >
+              <Button danger loading={deactivatingId === user._id} size="small">
+                Deactivate
+              </Button>
+            </Popconfirm>
+          ) : (
+            <Tag>Deactivated</Tag>
+          ),
+      },
     ],
-    [],
+    [deactivatingId],
   )
 
   return (
