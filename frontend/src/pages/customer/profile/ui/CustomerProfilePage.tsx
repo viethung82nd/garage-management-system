@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../../../../shared/auth'
 import { asset } from '../../../../shared/lib/asset'
 import {
@@ -13,6 +13,7 @@ import {
   CustomerSectionHeading,
 } from '../../../../shared/ui/kapa-customer'
 import {
+  deleteCustomerAccount,
   fetchCustomerBookings,
   fetchCustomerInvoices,
   fetchCustomerRepairOrders,
@@ -116,7 +117,8 @@ function findActiveRepair(repairOrders: CustomerRepairOrderApiRecord[]) {
 }
 
 export default function CustomerProfilePage() {
-  const { token, user, refreshProfile } = useAuth()
+  const { token, user, refreshProfile, logout } = useAuth()
+  const navigate = useNavigate()
   const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
   const [repairOrders, setRepairOrders] = useState<CustomerRepairOrderApiRecord[]>([])
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
@@ -126,6 +128,8 @@ export default function CustomerProfilePage() {
   const [profileFormSaving, setProfileFormSaving] = useState(false)
   const [profileFormSaved, setProfileFormSaved] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState('')
 
   useEffect(() => {
     if (!user) return
@@ -246,6 +250,20 @@ export default function CustomerProfilePage() {
       setProfileFormError(error instanceof Error ? error.message : 'Unable to update your profile. Please try again.')
     } finally {
       setProfileFormSaving(false)
+    }
+  }
+
+  async function handleDeleteAccount() {
+    if (!token) return
+    setDeleteError('')
+    setDeleting(true)
+    try {
+      await deleteCustomerAccount(token)
+      logout()
+      navigate('/my-account', { replace: true })
+    } catch (error) {
+      setDeleteError(error instanceof Error ? error.message : 'Unable to delete your account. Please try again.')
+      setDeleting(false)
     }
   }
 
@@ -414,11 +432,19 @@ export default function CustomerProfilePage() {
             <div className="customer-modal__content">
               <h3 id="delete-account-title">Delete your account?</h3>
               <p>This will permanently delete your account and cannot be undone.</p>
+              {deleteError ? <p className="customer-profile-form__error">{deleteError}</p> : null}
               <div className="customer-modal__actions">
-                <button type="button" className="customer-primary-btn customer-primary-btn--ghost" onClick={() => setDeleteModalOpen(false)}>
+                <button
+                  type="button"
+                  className="customer-primary-btn customer-primary-btn--ghost"
+                  disabled={deleting}
+                  onClick={() => setDeleteModalOpen(false)}
+                >
                   Cancel
                 </button>
-                <CustomerPrimaryButton type="button">Delete my account</CustomerPrimaryButton>
+                <CustomerPrimaryButton type="button" disabled={deleting} onClick={handleDeleteAccount}>
+                  {deleting ? 'Deleting...' : 'Delete my account'}
+                </CustomerPrimaryButton>
               </div>
             </div>
           </div>
