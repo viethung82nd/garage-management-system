@@ -20,6 +20,7 @@ function optional(name, fallback) {
 }
 
 export const env = {
+  nodeEnv: optional("NODE_ENV", "development"),
   port: Number(optional("PORT", "4000")),
   mongoUri: required("MONGODB_URI"),
   jwtSecret: required("JWT_SECRET"),
