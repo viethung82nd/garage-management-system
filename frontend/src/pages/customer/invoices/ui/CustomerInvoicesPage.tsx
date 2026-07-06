@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { asset } from '../../../../shared/lib/asset'
-import { exportNodeToPdf } from '../../../../shared/lib/pdf-export'
+import { exportNodeToPdf, PDF_EXPORT_IGNORE_ATTRIBUTE } from '../../../../shared/lib/pdf-export'
 import {
   CustomerAccountNav,
   CustomerEmptyState,
@@ -528,7 +528,7 @@ export default function CustomerInvoicesPage() {
                     <span>Thank you for choosing Kapa Auto Care Center.</span>
                   </div>
 
-                  <div className="customer-modal__actions">
+                  <div className="customer-modal__actions" {...{ [PDF_EXPORT_IGNORE_ATTRIBUTE]: 'true' }}>
                     <button
                       type="button"
                       className="default-btn customer-primary-btn customer-primary-btn--ghost"
