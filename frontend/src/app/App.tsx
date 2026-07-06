@@ -15,6 +15,7 @@ const CustomerProfilePage = lazy(() => import('../pages/customer/profile').then(
 const CustomerBookingsPage = lazy(() => import('../pages/customer/bookings').then((module) => ({ default: module.CustomerBookingsPage })))
 const CustomerInvoicesPage = lazy(() => import('../pages/customer/invoices').then((module) => ({ default: module.CustomerInvoicesPage })))
 const CustomerTrackingPage = lazy(() => import('../pages/customer/tracking').then((module) => ({ default: module.CustomerTrackingPage })))
+const CustomerReviewsPage = lazy(() => import('../pages/customer/reviews').then((module) => ({ default: module.CustomerReviewsPage })))
 
 function RouteFallback() {
   return <div className="min-h-screen" style={{ background: theme.color.surfaceStrong, color: theme.color.onPrimary }} />
@@ -64,6 +65,18 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['onlineCustomer']}>
                 <CustomerInvoicesPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/customer/reviews"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['onlineCustomer']}>
+                <CustomerReviewsPage />
               </RequireRole>
             </RequireAuth>
           </Suspense>
