@@ -10,7 +10,7 @@ import {
   CustomerTextarea,
 } from '../../../../shared/ui/kapa-customer'
 import { fetchCustomerRepairOrders, type CustomerRepairOrderApiRecord } from '../../api/customerApi'
-import { submitServiceReview } from '../api/reviewApi'
+import { fetchMyReviews, submitServiceReview, type CustomerReviewApiRecord } from '../api/reviewApi'
 import { CustomerRatingInput } from './CustomerRatingInput'
 
 function vehicleLabel(order: CustomerRepairOrderApiRecord) {
@@ -32,7 +32,15 @@ function formatCompletedDate(value?: string | null) {
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
 }
 
-function ReviewFormCard({ order, token }: { order: CustomerRepairOrderApiRecord; token: string }) {
+function ReviewFormCard({
+  order,
+  token,
+  existingReview,
+}: {
+  order: CustomerRepairOrderApiRecord
+  token: string
+  existingReview?: CustomerReviewApiRecord
+}) {
   const [rating, setRating] = useState(0)
   const [comment, setComment] = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -53,12 +61,19 @@ function ReviewFormCard({ order, token }: { order: CustomerRepairOrderApiRecord;
     }
   }
 
+  const alreadyReviewed = Boolean(existingReview)
+
   return (
     <CustomerPanel key={order._id} className="customer-review-card">
       <h4>{vehicleLabel(order)}</h4>
       <p className="customer-review-card__meta">Completed {formatCompletedDate(order.completedAt)}</p>
 
-      {submitted ? (
+      {alreadyReviewed && existingReview ? (
+        <div className="customer-review-card__existing">
+          <CustomerRatingInput value={existingReview.rating} onChange={() => {}} disabled />
+          {existingReview.comment ? <p>{existingReview.comment}</p> : null}
+        </div>
+      ) : submitted ? (
         <p className="customer-review-card__thanks">Thanks for your feedback!</p>
       ) : (
         <form onSubmit={handleSubmit}>
@@ -83,6 +98,7 @@ function ReviewFormCard({ order, token }: { order: CustomerRepairOrderApiRecord;
 export default function CustomerReviewsPage() {
   const { token } = useAuth()
   const [orders, setOrders] = useState<CustomerRepairOrderApiRecord[]>([])
+  const [reviews, setReviews] = useState<CustomerReviewApiRecord[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
 
@@ -94,9 +110,10 @@ export default function CustomerReviewsPage() {
       setLoading(true)
       setError('')
       try {
-        const repairOrders = await fetchCustomerRepairOrders(token)
+        const [repairOrders, reviewsResponse] = await Promise.all([fetchCustomerRepairOrders(token), fetchMyReviews(token)])
         if (cancelled) return
         setOrders(repairOrders)
+        setReviews(reviewsResponse.reviews)
       } catch (requestError) {
         if (!cancelled) {
           setError(requestError instanceof Error ? requestError.message : 'Unable to load your repair orders')
@@ -113,6 +130,7 @@ export default function CustomerReviewsPage() {
   }, [token])
 
   const completedOrders = useMemo(() => orders.filter((order) => order.status === 'completed'), [orders])
+  const reviewsByOrderId = useMemo(() => new Map(reviews.map((review) => [review.repairOrderId, review])), [reviews])
 
   return (
     <CustomerPageLayout title="Service Reviews" breadcrumb="Reviews">
@@ -137,7 +155,11 @@ export default function CustomerReviewsPage() {
             />
           ) : null}
 
-          {token ? completedOrders.map((order) => <ReviewFormCard key={order._id} order={order} token={token} />) : null}
+          {token
+            ? completedOrders.map((order) => (
+                <ReviewFormCard key={order._id} order={order} token={token} existingReview={reviewsByOrderId.get(order._id)} />
+              ))
+            : null}
         </div>
       </div>
     </CustomerPageLayout>
