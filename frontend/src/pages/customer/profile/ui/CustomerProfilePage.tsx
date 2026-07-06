@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../../../shared/auth'
 import { asset } from '../../../../shared/lib/asset'
@@ -16,6 +16,7 @@ import {
   fetchCustomerBookings,
   fetchCustomerInvoices,
   fetchCustomerRepairOrders,
+  updateCustomerProfile,
   type CustomerBookingApiRecord,
   type CustomerInvoiceApiRecord,
   type CustomerRepairOrderApiRecord,
@@ -115,13 +116,15 @@ function findActiveRepair(repairOrders: CustomerRepairOrderApiRecord[]) {
 }
 
 export default function CustomerProfilePage() {
-  const { token, user } = useAuth()
+  const { token, user, refreshProfile } = useAuth()
   const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
   const [repairOrders, setRepairOrders] = useState<CustomerRepairOrderApiRecord[]>([])
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
   const [requestError, setRequestError] = useState('')
   const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', email: '' })
   const [profileFormError, setProfileFormError] = useState('')
+  const [profileFormSaving, setProfileFormSaving] = useState(false)
+  const [profileFormSaved, setProfileFormSaved] = useState(false)
 
   useEffect(() => {
     if (!user) return
@@ -214,6 +217,37 @@ export default function CustomerProfilePage() {
     }
   }, [bookings, invoices, repairOrders, user])
 
+  async function handleProfileSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setProfileFormError('')
+    setProfileFormSaved(false)
+
+    if (!profileForm.fullName.trim()) {
+      setProfileFormError('Full name is required')
+      return
+    }
+    if (!profileForm.email.trim() || !EMAIL_RE.test(profileForm.email.trim())) {
+      setProfileFormError('A valid email is required')
+      return
+    }
+    if (!token) return
+
+    setProfileFormSaving(true)
+    try {
+      await updateCustomerProfile(token, {
+        fullName: profileForm.fullName.trim(),
+        phone: profileForm.phone.trim() || undefined,
+        email: profileForm.email.trim(),
+      })
+      await refreshProfile()
+      setProfileFormSaved(true)
+    } catch (error) {
+      setProfileFormError(error instanceof Error ? error.message : 'Unable to update your profile. Please try again.')
+    } finally {
+      setProfileFormSaving(false)
+    }
+  }
+
   return (
     <CustomerPageLayout title="Customer Profile" breadcrumb="Customer Profile">
       <section className="customer-section">
@@ -267,23 +301,9 @@ export default function CustomerProfilePage() {
         <div className="row g-4">
           <div className="col-xl-6">
             <CustomerInfoCard eyebrow="Contact" title="Your details">
-              <form
-                className="customer-profile-form"
-                onSubmit={(event) => {
-                  event.preventDefault()
-                  setProfileFormError('')
-
-                  if (!profileForm.fullName.trim()) {
-                    setProfileFormError('Full name is required')
-                    return
-                  }
-                  if (!profileForm.email.trim() || !EMAIL_RE.test(profileForm.email.trim())) {
-                    setProfileFormError('A valid email is required')
-                    return
-                  }
-                }}
-              >
+              <form className="customer-profile-form" onSubmit={handleProfileSubmit}>
                 {profileFormError ? <p className="customer-profile-form__error">{profileFormError}</p> : null}
+                {profileFormSaved ? <p className="customer-profile-form__success">Profile updated.</p> : null}
                 <CustomerFormField id="profile-fullName" label="Full name" required>
                   <CustomerInput
                     id="profile-fullName"
@@ -310,7 +330,9 @@ export default function CustomerProfilePage() {
                     onChange={(event) => setProfileForm((current) => ({ ...current, email: event.target.value }))}
                   />
                 </CustomerFormField>
-                <CustomerPrimaryButton type="submit">Save changes</CustomerPrimaryButton>
+                <CustomerPrimaryButton type="submit" disabled={profileFormSaving}>
+                  {profileFormSaving ? 'Saving...' : 'Save changes'}
+                </CustomerPrimaryButton>
               </form>
             </CustomerInfoCard>
           </div>
