@@ -5,9 +5,12 @@ import {
   CustomerEmptyState,
   CustomerPageLayout,
   CustomerPanel,
+  CustomerPrimaryButton,
   CustomerSectionHeading,
+  CustomerTextarea,
 } from '../../../../shared/ui/kapa-customer'
 import { fetchCustomerRepairOrders, type CustomerRepairOrderApiRecord } from '../../api/customerApi'
+import { CustomerRatingInput } from './CustomerRatingInput'
 
 function vehicleLabel(order: CustomerRepairOrderApiRecord) {
   const vehicle = order.vehicleId
@@ -26,6 +29,41 @@ function formatCompletedDate(value?: string | null) {
     return 'Recently completed'
   }
   return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
+}
+
+function ReviewFormCard({ order }: { order: CustomerRepairOrderApiRecord }) {
+  const [rating, setRating] = useState(0)
+  const [comment, setComment] = useState('')
+  const [submitted, setSubmitted] = useState(false)
+
+  return (
+    <CustomerPanel key={order._id} className="customer-review-card">
+      <h4>{vehicleLabel(order)}</h4>
+      <p className="customer-review-card__meta">Completed {formatCompletedDate(order.completedAt)}</p>
+
+      {submitted ? (
+        <p className="customer-review-card__thanks">Thanks for your feedback!</p>
+      ) : (
+        <form
+          onSubmit={(event) => {
+            event.preventDefault()
+            setSubmitted(true)
+          }}
+        >
+          <CustomerRatingInput value={rating} onChange={setRating} />
+          <CustomerTextarea
+            rows={3}
+            placeholder="How was your experience with this repair?"
+            value={comment}
+            onChange={(event) => setComment(event.target.value)}
+          />
+          <CustomerPrimaryButton type="submit" disabled={rating === 0}>
+            Submit review
+          </CustomerPrimaryButton>
+        </form>
+      )}
+    </CustomerPanel>
+  )
 }
 
 export default function CustomerReviewsPage() {
@@ -86,10 +124,7 @@ export default function CustomerReviewsPage() {
           ) : null}
 
           {completedOrders.map((order) => (
-            <CustomerPanel key={order._id} className="customer-review-card">
-              <h4>{vehicleLabel(order)}</h4>
-              <p className="customer-review-card__meta">Completed {formatCompletedDate(order.completedAt)}</p>
-            </CustomerPanel>
+            <ReviewFormCard key={order._id} order={order} />
           ))}
         </div>
       </div>
