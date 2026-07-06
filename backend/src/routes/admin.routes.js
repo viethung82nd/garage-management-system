@@ -1,7 +1,11 @@
 import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/error.js";
-import { getStatsSummary } from "../controllers/admin.controller.js";
+import {
+  getStatsSummary,
+  getRevenueReport,
+  getTechnicianPerformance,
+} from "../controllers/admin.controller.js";
 
 export const adminRouter = Router();
 
@@ -11,4 +15,18 @@ adminRouter.get(
   requireAuth,
   requireRole("admin", "accountant"),
   asyncHandler(getStatsSummary)
+);
+
+// Detailed reports: admins and accountants.
+adminRouter.get(
+  "/reports/revenue",
+  requireAuth,
+  requireRole("admin", "accountant"),
+  asyncHandler(getRevenueReport)
+);
+adminRouter.get(
+  "/reports/technicians",
+  requireAuth,
+  requireRole("admin", "accountant"),
+  asyncHandler(getTechnicianPerformance)
 );
