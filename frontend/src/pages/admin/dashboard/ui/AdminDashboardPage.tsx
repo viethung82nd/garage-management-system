@@ -1,19 +1,11 @@
-import {
-  BellOutlined,
-  CheckCircleOutlined,
-  ClockCircleOutlined,
-  DashboardOutlined,
-  PieChartOutlined,
-  SettingOutlined,
-  TeamOutlined,
-} from '@ant-design/icons'
+import { CheckCircleOutlined } from '@ant-design/icons'
 import { Button, Card, Progress, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../../../shared/auth'
 import { fetchAdminBookings, fetchAdminSummary, type AdminSummaryResponse } from '../api/dashboardApi'
 import { bookingOverview, bookingRecords, weeklyStatus, type BookingRecord } from '../model/mock'
-import { BackOfficeShell, adminPalette } from '../../../../widgets/backoffice-shell'
+import { AdminShell, adminPalette } from '../../ui/AdminShell'
 
 const { Text } = Typography
 const dashboardPalette = adminPalette
@@ -362,9 +354,7 @@ function HorizontalBarChart() {
 }
 
 export default function AdminDashboardPage() {
-  const { logout, token, user } = useAuth()
-  const profileName = user?.fullName || 'Admin'
-  const profileInitial = profileName.trim().charAt(0).toUpperCase() || 'A'
+  const { token } = useAuth()
   const [summary, setSummary] = useState<AdminSummaryResponse | null>(null)
   const [tableRows, setTableRows] = useState<BookingRecord[]>(bookingRecords)
   const [isLoading, setIsLoading] = useState(false)
@@ -539,29 +529,7 @@ export default function AdminDashboardPage() {
   )
 
   return (
-    <BackOfficeShell
-      palette={dashboardPalette}
-      background={`radial-gradient(circle at top left, rgba(245, 19, 4, 0.12), transparent 22%), radial-gradient(circle at top right, rgba(255, 179, 71, 0.16), transparent 22%), ${dashboardPalette.canvas}`}
-      sidebarGradient={`linear-gradient(180deg, ${dashboardPalette.ink} 0%, ${dashboardPalette.redDeep} 100%)`}
-      sidebarTitle="Admin"
-      sidebarSubtitle="Garage control room"
-      headerEyebrow="Admin dashboard"
-      headerTitle="Garage operations overview"
-      notificationIcon={<BellOutlined />}
-      profileInitial={profileInitial}
-      profileName={profileName}
-      profileRole="System administrator"
-      profileAccent={dashboardPalette.red}
-      onLogout={logout}
-      selectedMenuKeys={['dashboard']}
-      menuItems={[
-        { key: 'dashboard', icon: <DashboardOutlined />, label: 'Overview' },
-        { key: 'repair-orders', icon: <ClockCircleOutlined />, label: 'Repair orders' },
-        { key: 'users', icon: <TeamOutlined />, label: 'Users' },
-        { key: 'reports', icon: <PieChartOutlined />, label: 'Reports' },
-        { key: 'settings', icon: <SettingOutlined />, label: 'Settings' },
-      ]}
-    >
+    <AdminShell eyebrow="Admin dashboard" title="Garage operations overview">
               <div
                 className="gap-4"
                 style={{
@@ -723,6 +691,6 @@ export default function AdminDashboardPage() {
                     <VerticalBarChart />
                 </Card>
               </div>
-    </BackOfficeShell>
+    </AdminShell>
   )
 }
