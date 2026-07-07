@@ -1,4 +1,5 @@
 ﻿import { useState } from 'react'
+import { useAuth } from '../../shared/auth'
 import { TechnicianShell } from '../../widgets/technician-shell'
 import { Icon, type IconName } from '../../shared/ui/base'
 
@@ -209,6 +210,8 @@ function Timeline({ orders }: { orders: WorkOrder[] }) {
 }
 
 export function TechnicianWorkOrdersPage() {
+  const { user } = useAuth()
+  const technicianName = user?.fullName || user?.email || 'Kỹ thuật viên'
   const [orders, setOrders] = useState(initialOrders)
   const [selectedOrderId, setSelectedOrderId] = useState(initialOrders[0].id)
 
@@ -236,7 +239,7 @@ export function TechnicianWorkOrdersPage() {
             <div className="border border-[#efeded] bg-[#fbf9f8] p-5">
               <p className="font-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#6a6767]">Ca làm hôm nay</p>
               <p className="mt-2 text-3xl font-black text-[#ba0013]">08:00 - 17:30</p>
-              <p className="mt-1 text-sm font-semibold text-[#6a6767]">Cầu nâng 01 - Nguyễn Minh</p>
+              <p className="mt-1 text-sm font-semibold text-[#6a6767]">Phụ trách: {technicianName}</p>
             </div>
           </div>
         </section>
@@ -308,6 +311,7 @@ export function TechnicianWorkOrdersPage() {
     </TechnicianShell>
   )
 }
+
 
 
 

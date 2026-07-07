@@ -1,5 +1,6 @@
 ﻿import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { getRoleLabel, getUserInitials, useAuth } from '../../../shared/auth'
 import { Icon, type IconName } from '../../../shared/ui/base'
 
 export type ServiceAdvisorNavKey =
@@ -36,6 +37,11 @@ export function ServiceAdvisorShell({
   eyebrow?: string
   title: string
 }) {
+  const { user } = useAuth()
+  const displayName = user?.fullName || user?.email || 'Chưa có tên'
+  const initials = getUserInitials(user)
+  const roleLabel = getRoleLabel(user?.role || 'serviceAdvisor')
+
   return (
     <div className="min-h-screen bg-[#fbf9f8] text-[#1b1c1c]">
       <aside className="hidden min-h-screen w-64 border-r border-[#efeded] bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col">
@@ -51,8 +57,8 @@ export function ServiceAdvisorShell({
 
         <div className="border-b border-[#efeded] px-7 py-6">
           <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a8686]">Xưởng chính</p>
-          <p className="mt-2 text-sm font-black text-[#1b1c1c]">Cố vấn: Minh Anh</p>
-          <p className="mt-1 text-xs text-[#6a6767]">Ca sáng - 08:00 đến 17:30</p>
+          <p className="mt-2 text-sm font-black text-[#1b1c1c]">Cố vấn: {displayName}</p>
+          <p className="mt-1 text-xs text-[#6a6767]">{roleLabel}</p>
         </div>
 
         <nav className="flex-1 space-y-1 px-4 py-6">
@@ -105,7 +111,7 @@ export function ServiceAdvisorShell({
                   3
                 </span>
               </button>
-              <div className="flex h-11 w-11 items-center justify-center bg-[#1b1c1c] text-sm font-black text-white">MA</div>
+              <div className="flex h-11 w-11 items-center justify-center bg-[#1b1c1c] text-sm font-black text-white">{initials}</div>
             </div>
           </div>
         </header>
@@ -115,4 +121,5 @@ export function ServiceAdvisorShell({
     </div>
   )
 }
+
 

@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import { TechnicianShell } from '../../widgets/technician-shell'
 import { Icon, type IconName } from '../../shared/ui/base'
 
@@ -44,7 +45,7 @@ const initialSteps: RepairStep[] = [
       { label: 'Nhiên liệu', unit: '%', value: '58' },
     ],
     order: 1,
-    owner: 'Nguyễn Minh',
+    owner: 'Kỹ thuật viên',
     startedAt: '09:00',
     status: 'completed',
     summary: 'Xe đã được đưa vào cầu nâng 01, tình trạng ngoại thất khớp phiếu kiểm tra ban đầu.',
@@ -68,7 +69,7 @@ const initialSteps: RepairStep[] = [
       { label: 'Đĩa phanh', unit: 'mm', value: '30.2' },
     ],
     order: 2,
-    owner: 'Nguyễn Minh',
+    owner: 'Kỹ thuật viên',
     startedAt: '09:12',
     status: 'active',
     summary: 'Đang kiểm tra hệ thống phanh trước do khách báo rung vô lăng khi phanh ở tốc độ cao.',
@@ -91,7 +92,7 @@ const initialSteps: RepairStep[] = [
       { label: 'Torque bánh', unit: 'Nm', value: '140' },
     ],
     order: 3,
-    owner: 'Nguyễn Minh',
+    owner: 'Kỹ thuật viên',
     status: 'waiting',
     summary: 'Bước tiếp theo sau khi cố vấn xác nhận thay má phanh trước.',
     title: 'Tháo má phanh và đo độ mòn',
@@ -113,7 +114,7 @@ const initialSteps: RepairStep[] = [
       { label: 'Rung vô lăng', unit: '', value: 'Chờ xác nhận' },
     ],
     order: 4,
-    owner: 'Nguyễn Minh',
+    owner: 'Kỹ thuật viên',
     status: 'waiting',
     summary: 'Hoàn thiện sửa chữa và ghi nhận kết quả chạy thử trước khi bàn giao lại cho SA.',
     title: 'Lắp má phanh mới và chạy thử',
@@ -154,7 +155,7 @@ function SummaryCard({ icon, label, value }: { icon: IconName; label: string; va
   )
 }
 
-function StepButton({ active, onSelect, step }: { active: boolean; onSelect: () => void; step: RepairStep }) {
+function StepButton({ active, onSelect, ownerName, step }: { active: boolean; onSelect: () => void; ownerName: string; step: RepairStep }) {
   return (
     <button
       className={active ? 'w-full border-l-4 border-[#ba0013] bg-[#fffafa] p-5 text-left shadow-[0_10px_30px_rgba(27,28,28,0.05)]' : 'w-full border border-[#efeded] bg-white p-5 text-left transition hover:border-[#ba0013] hover:bg-[#fffafa]'}
@@ -177,7 +178,7 @@ function StepButton({ active, onSelect, step }: { active: boolean; onSelect: () 
       <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-[#6a6767]">
         {step.startedAt ? <span className="bg-[#fbf9f8] px-3 py-2">Bắt đầu {step.startedAt}</span> : null}
         {step.completedAt ? <span className="bg-green-50 px-3 py-2 text-green-700">Xong {step.completedAt}</span> : null}
-        <span className="bg-[#fbf9f8] px-3 py-2">Phụ trách: {step.owner}</span>
+        <span className="bg-[#fbf9f8] px-3 py-2">Phụ trách: {ownerName}</span>
       </div>
     </button>
   )
@@ -191,6 +192,7 @@ function StepDetail({
   onStart,
   onToggleChecklist,
   step,
+  technicianInitials,
 }: {
   checkedItems: string[]
   note: string
@@ -199,6 +201,7 @@ function StepDetail({
   onStart: () => void
   onToggleChecklist: (item: string) => void
   step: RepairStep
+  technicianInitials: string
 }) {
   return (
     <aside className="sticky top-28 space-y-7">
@@ -218,7 +221,7 @@ function StepDetail({
           </div>
           <div className="bg-white/10 p-4">
             <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-white/55">Kỹ thuật viên</p>
-            <p className="mt-2 text-xl font-black">NM</p>
+            <p className="mt-2 text-xl font-black">{technicianInitials}</p>
           </div>
         </div>
       </section>
@@ -268,6 +271,9 @@ function StepDetail({
 }
 
 export function TechnicianRepairNotesPage() {
+  const { user } = useAuth()
+  const technicianInitials = getUserInitials(user)
+  const technicianName = user?.fullName || user?.email || 'Kỹ thuật viên'
   const [steps, setSteps] = useState(initialSteps)
   const [selectedStepId, setSelectedStepId] = useState(initialSteps[1].id)
   const [notes, setNotes] = useState<Record<string, string>>({
@@ -374,7 +380,7 @@ export function TechnicianRepairNotesPage() {
 
             <section className="grid gap-4">
               {steps.map((step) => (
-                <StepButton active={step.id === selectedStep.id} key={step.id} onSelect={() => setSelectedStepId(step.id)} step={step} />
+                <StepButton active={step.id === selectedStep.id} key={step.id} onSelect={() => setSelectedStepId(step.id)} ownerName={technicianName} step={step} />
               ))}
             </section>
 
@@ -433,10 +439,14 @@ export function TechnicianRepairNotesPage() {
             onStart={() => updateStepStatus('active')}
             onToggleChecklist={toggleChecklist}
             step={selectedStep}
+            technicianInitials={technicianInitials}
           />
         </div>
       </div>
     </TechnicianShell>
   )
 }
+
+
+
 
