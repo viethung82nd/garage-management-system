@@ -21,6 +21,38 @@ const AdminUsersPage = lazy(() => import('../pages/admin/users').then((module) =
 const AdminServicesPage = lazy(() => import('../pages/admin/services').then((module) => ({ default: module.AdminServicesPage })))
 const AdminPartsPage = lazy(() => import('../pages/admin/parts').then((module) => ({ default: module.AdminPartsPage })))
 const AdminConfigPage = lazy(() => import('../pages/admin/config').then((module) => ({ default: module.AdminConfigPage })))
+const ServiceAdvisorDashboardPage = lazy(() =>
+  import('../pages/advisor/ServiceAdvisorDashboardPage').then((module) => ({ default: module.ServiceAdvisorDashboardPage })),
+)
+const BookingRequestsPage = lazy(() =>
+  import('../pages/advisor/BookingRequestsPage').then((module) => ({ default: module.BookingRequestsPage })),
+)
+const VehicleReceptionPage = lazy(() =>
+  import('../pages/advisor/VehicleReceptionPage').then((module) => ({ default: module.VehicleReceptionPage })),
+)
+const RepairOrderAssignmentPage = lazy(() =>
+  import('../pages/advisor/RepairOrderAssignmentPage').then((module) => ({ default: module.RepairOrderAssignmentPage })),
+)
+const AdditionalServiceSuggestionPage = lazy(() =>
+  import('../pages/advisor/AdditionalServiceSuggestionPage').then((module) => ({ default: module.AdditionalServiceSuggestionPage })),
+)
+const RepairProgressTimelinePage = lazy(() =>
+  import('../pages/advisor/RepairProgressTimelinePage').then((module) => ({ default: module.RepairProgressTimelinePage })),
+)
+const TechnicianScheduleCoordinationPage = lazy(() =>
+  import('../pages/advisor/TechnicianScheduleCoordinationPage').then((module) => ({
+    default: module.TechnicianScheduleCoordinationPage,
+  })),
+)
+const TechnicianInspectionPage = lazy(() =>
+  import('../pages/technician/TechnicianInspectionPage').then((module) => ({ default: module.TechnicianInspectionPage })),
+)
+const TechnicianWorkOrdersPage = lazy(() =>
+  import('../pages/technician/TechnicianWorkOrdersPage').then((module) => ({ default: module.TechnicianWorkOrdersPage })),
+)
+const TechnicianRepairNotesPage = lazy(() =>
+  import('../pages/technician/TechnicianRepairNotesPage').then((module) => ({ default: module.TechnicianRepairNotesPage })),
+)
 
 function RouteFallback() {
   return <div className="min-h-screen" style={{ background: theme.color.surfaceStrong, color: theme.color.onPrimary }} />
@@ -192,6 +224,131 @@ export default function App() {
       />
       <Route path="/admin/login" element={<MyAccountPage />} />
       <Route path="/admin/forgot-password" element={<LostPasswordPage />} />
+
+      <Route path="/advisor" element={<Navigate to="/advisor/dashboard" replace />} />
+      <Route
+        path="/advisor/dashboard"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <ServiceAdvisorDashboardPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/bookings"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <BookingRequestsPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/reception"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <VehicleReceptionPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/work-orders"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <RepairOrderAssignmentPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/additional-services"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <AdditionalServiceSuggestionPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/repair-timeline"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <RepairProgressTimelinePage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/technician-schedule"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <TechnicianScheduleCoordinationPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+
+      <Route path="/technician" element={<Navigate to="/technician/tasks" replace />} />
+      <Route
+        path="/technician/tasks"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['technician']}>
+                <TechnicianInspectionPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/technician/work-orders"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['technician']}>
+                <TechnicianWorkOrdersPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/technician/repair-notes"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['technician']}>
+                <TechnicianRepairNotesPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+
       <Route path="*" element={<Navigate to="/my-account" replace />} />
     </Routes>
   )
