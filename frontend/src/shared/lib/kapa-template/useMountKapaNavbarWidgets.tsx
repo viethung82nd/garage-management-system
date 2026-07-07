@@ -1,33 +1,62 @@
-import { useEffect, useRef } from 'react'
-import { createRoot, type Root } from 'react-dom/client'
-import { useAuth } from '../../auth'
-import { KapaAccountCta } from '../../ui/kapa-chrome/KapaAccountCta'
+import { useEffect } from 'react'
+import { getPostLoginPath, useAuth, type AuthUser } from '../../auth'
 import { apiRequest } from '../api-client'
 import { ACCOUNT_CTA_MOUNT_CLASS, SERVICES_DROPDOWN_SLOT_ID } from './pruneKapaNavbar'
 
 type ServiceCategoryLite = { _id: string; name: string; isActive: boolean }
 
 /**
- * Mounts the real, auth-aware navbar widgets into the slots `pruneKapaNavbar`
- * leaves in a cloned template page: the account CTA/logout button (possibly
- * more than one copy — desktop nav + the responsive nav both have their own),
- * and the live service categories inside the Services dropdown. Call once
- * `pageSpec` is ready (the cloned markup is in the DOM).
- *
- * Reads auth state itself (this hook runs inside the page component, which
- * is inside AuthProvider) and passes it into KapaAccountCta as props, since
- * that component is mounted into its own createRoot() and can't read context
- * on its own — see the comment on KapaAccountCta for why.
+ * Fills a `.kapa-account-cta-mount` node with plain DOM elements — not a
+ * React tree. A separate createRoot() mounted into a node that's merely
+ * nested (in the DOM) inside the app's real root does NOT inherit React
+ * context: useAuth()/<Link> inside it would read AuthProvider's/Router's
+ * *default* context value instead of the real one and throw, so nothing
+ * would ever render. Plain DOM avoids that whole class of problem.
+ */
+function renderAccountCta(
+  node: Element,
+  { isAuthenticated, user, onLogout }: { isAuthenticated: boolean; user: AuthUser | null; onLogout: () => void },
+) {
+  node.innerHTML = ''
+
+  if (isAuthenticated) {
+    const logoutBtn = document.createElement('button')
+    logoutBtn.type = 'button'
+    logoutBtn.className = 'kapa-navbar-logout-link'
+    logoutBtn.textContent = 'Logout'
+    logoutBtn.addEventListener('click', onLogout)
+    node.appendChild(logoutBtn)
+  }
+
+  const contactHref = '/contact-us'
+  const accountRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? contactHref : contactHref
+  const link = document.createElement('a')
+  link.setAttribute('href', isAuthenticated ? accountRoute : contactHref)
+  link.className = 'default-btn'
+  link.textContent = isAuthenticated ? 'Account' : 'Get Free Quote'
+  node.appendChild(link)
+}
+
+/**
+ * Brings the slots `pruneKapaNavbar` leaves in a cloned template page to
+ * life: the account CTA/logout button (there can be more than one copy —
+ * desktop nav + the responsive nav each have their own), and the live
+ * service categories inside the Services dropdown. Call with `ready` once
+ * `pageSpec` is set (the cloned markup is in the DOM).
  */
 export function useMountKapaNavbarWidgets(ready: boolean) {
   const { isAuthenticated, user, logout } = useAuth()
-  const rootsRef = useRef<Root[]>([])
 
   useEffect(() => {
     if (!ready) return
 
-    const ctaMounts = Array.from(document.querySelectorAll(`.${ACCOUNT_CTA_MOUNT_CLASS}`))
-    rootsRef.current = ctaMounts.map((node) => createRoot(node))
+    document.querySelectorAll(`.${ACCOUNT_CTA_MOUNT_CLASS}`).forEach((node) => {
+      renderAccountCta(node, { isAuthenticated, user, onLogout: logout })
+    })
+  }, [ready, isAuthenticated, user, logout])
+
+  useEffect(() => {
+    if (!ready) return
 
     let cancelled = false
     apiRequest<ServiceCategoryLite[]>('/api/services/categories')
@@ -50,16 +79,6 @@ export function useMountKapaNavbarWidgets(ready: boolean) {
 
     return () => {
       cancelled = true
-      rootsRef.current.forEach((root) => root.unmount())
-      rootsRef.current = []
     }
   }, [ready])
-
-  // Re-render the already-mounted CTA whenever auth state changes (login,
-  // logout, session hydration finishing after the initial mount).
-  useEffect(() => {
-    rootsRef.current.forEach((root) => {
-      root.render(<KapaAccountCta isAuthenticated={isAuthenticated} user={user} onLogout={logout} />)
-    })
-  })
 }

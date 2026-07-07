@@ -1,7 +1,7 @@
 /** Top-level nav labels from the original theme that don't point anywhere real in this app. */
 const DEAD_TOP_LEVEL_LABELS = ['Pages', 'Shop', 'Blog', 'Projects']
 
-/** Class used to mark the spot where <KapaAccountCta /> should be mounted after render. */
+/** Class used to mark the spot where the account CTA/logout widget gets mounted after render. */
 export const ACCOUNT_CTA_MOUNT_CLASS = 'kapa-account-cta-mount'
 
 /** Id of the <ul> left behind for the Services dropdown, populated live from the category API. */
@@ -11,15 +11,31 @@ function directChildLink(li: Element) {
   return li.querySelector(':scope > a')
 }
 
+/** Builds a plain top-level nav <li> matching the theme's own markup shape. */
+function buildNavLink(doc: Document, label: string, href: string) {
+  const li = doc.createElement('li')
+  li.className = 'menu-item menu-item-type-post_type menu-item-object-page nav-item'
+  const link = doc.createElement('a')
+  link.setAttribute('title', label)
+  link.setAttribute('href', href)
+  link.className = 'nav-link'
+  link.textContent = label
+  li.appendChild(link)
+  return li
+}
+
 /**
  * Strips the dead template nav items (Pages/Shop/Blog/Projects, the fake cart
  * icon) out of a cloned Kapa theme page's navbar, simplifies "Home" from a
- * dropdown into a plain link, and leaves behind a couple of slots — one for
- * the live services dropdown, one for the auth-aware CTA button/logout — that
- * get mounted with real React content after the page renders. Run this inside
- * a page's `transformDocument` callback, on the raw cloned `body`.
+ * dropdown into a plain link, adds real Appointment/Track Repair links, and
+ * leaves behind a couple of slots — one for the live services dropdown, one
+ * for the auth-aware CTA button/logout — that get mounted with real content
+ * after the page renders. Run this inside a page's `transformDocument`
+ * callback, on the raw cloned `body`.
  */
 export function pruneKapaNavbar(doc: Document, body: HTMLElement) {
+  let servicesLi: Element | null = null
+
   body.querySelectorAll('#menu-navbar-left-menu > li.nav-item, #menu-navbar-right-menu > li.nav-item').forEach((li) => {
     const label = directChildLink(li)?.textContent?.trim()
 
@@ -44,6 +60,7 @@ export function pruneKapaNavbar(doc: Document, body: HTMLElement) {
         dropdown.id = SERVICES_DROPDOWN_SLOT_ID
         dropdown.innerHTML = '<li class="nav-item"><a class="dropdown-item" href="/services">All services</a></li>'
       }
+      servicesLi = li
       return
     }
 
@@ -51,6 +68,13 @@ export function pruneKapaNavbar(doc: Document, body: HTMLElement) {
       li.remove()
     }
   })
+
+  if (servicesLi) {
+    ;(servicesLi as Element).after(
+      buildNavLink(doc, 'Appointment', '/appointment'),
+      buildNavLink(doc, 'Track Repair', '/tracking'),
+    )
+  }
 
   body.querySelectorAll('.cart-btn').forEach((cartBtn) => {
     cartBtn.closest('.option-item')?.remove()
