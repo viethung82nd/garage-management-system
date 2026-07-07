@@ -2,4 +2,5 @@ export { parseTemplatePage, type KapaScriptSpec, type ParsedTemplatePage, type T
 export { rewriteKapaRouteLinks } from './rewriteKapaRouteLinks'
 export { pruneKapaNavbar, ACCOUNT_CTA_MOUNT_CLASS, SERVICES_DROPDOWN_SLOT_ID } from './pruneKapaNavbar'
 export { useClonedKapaPage, type UseClonedKapaPageConfig } from './useClonedKapaPage'
+export { useMountKapaNavbarWidgets } from './useMountKapaNavbarWidgets'
 export { authPageBodyClass, usePageMeta } from './usePageMeta'

@@ -1,6 +1,12 @@
 import { useCallback, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { rewriteKapaRouteLinks, useClonedKapaPage, type TransformTemplateDocument } from '../../../shared/lib/kapa-template'
+import {
+  pruneKapaNavbar,
+  rewriteKapaRouteLinks,
+  useClonedKapaPage,
+  useMountKapaNavbarWidgets,
+  type TransformTemplateDocument,
+} from '../../../shared/lib/kapa-template'
 import { useAuth } from '../../../shared/auth'
 import EstimateSection from '../../../widgets/home-five-estimate/ui/EstimateSection'
 
@@ -18,6 +24,7 @@ export default function HomeFivePage() {
   const { user } = useAuth()
   const transformDocument = useCallback<TransformTemplateDocument>((doc, body) => {
     rewriteKapaRouteLinks(body, HOME_FIVE_REMOTE_URL)
+    pruneKapaNavbar(doc, body)
 
     body.querySelectorAll('.estimate-left-content').forEach((element) => {
       const slot = doc.createElement('div')
@@ -49,6 +56,8 @@ export default function HomeFivePage() {
       root.unmount()
     }
   }, [markup, pageSpec, user])
+
+  useMountKapaNavbarWidgets(Boolean(pageSpec))
 
   return <div className="home-five-root" dangerouslySetInnerHTML={{ __html: markup }} aria-busy={!pageSpec} />
 }

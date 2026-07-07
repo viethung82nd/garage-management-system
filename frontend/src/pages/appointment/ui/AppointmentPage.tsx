@@ -1,6 +1,12 @@
 import { useCallback, useEffect } from 'react'
 import { createRoot } from 'react-dom/client'
-import { rewriteKapaRouteLinks, useClonedKapaPage, type TransformTemplateDocument } from '../../../shared/lib/kapa-template'
+import {
+  pruneKapaNavbar,
+  rewriteKapaRouteLinks,
+  useClonedKapaPage,
+  useMountKapaNavbarWidgets,
+  type TransformTemplateDocument,
+} from '../../../shared/lib/kapa-template'
 import { useAuth } from '../../../shared/auth'
 import { AppointmentBookingForm } from '../../../widgets/appointment-booking'
 
@@ -15,6 +21,7 @@ export default function AppointmentPage() {
   const { user } = useAuth()
   const transformDocument = useCallback<TransformTemplateDocument>((doc, body) => {
     rewriteKapaRouteLinks(body, APPOINTMENT_REMOTE_URL)
+    pruneKapaNavbar(doc, body)
 
     body.querySelectorAll('.estimate-form .wpcf7.js').forEach((element) => {
       const slot = doc.createElement('div')
@@ -45,6 +52,8 @@ export default function AppointmentPage() {
       root.unmount()
     }
   }, [markup, pageSpec, user])
+
+  useMountKapaNavbarWidgets(Boolean(pageSpec))
 
   return <div className="appointment-root" dangerouslySetInnerHTML={{ __html: markup }} aria-busy={!pageSpec} />
 }
