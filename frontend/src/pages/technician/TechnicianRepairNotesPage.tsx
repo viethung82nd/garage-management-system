@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { TechnicianShell } from '../../widgets/technician-shell'
 import { Icon, type IconName } from '../../shared/ui/base'
 
 type RepairStepStatus = 'completed' | 'active' | 'waiting'
@@ -135,81 +136,6 @@ function statusClass(status: RepairStepStatus) {
 
 function nowTime() {
   return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date())
-}
-
-function TechnicianShell({ children }: { children: React.ReactNode }) {
-  const navItems: Array<{ href: string; icon: IconName; label: string }> = [
-    { href: '/technician/tasks', icon: 'clipboard', label: 'Phiếu kiểm tra' },
-    { href: '/technician/work-orders', icon: 'wrench', label: 'Lệnh được giao' },
-    { href: '/technician/repair-notes', icon: 'invoice', label: 'Ghi chú sửa chữa' },
-    { href: '/technician/parts-requests', icon: 'sliders', label: 'Yêu cầu phụ tùng' },
-  ]
-
-  return (
-    <div className="min-h-screen bg-[#fbf9f8] text-[#1b1c1c]">
-      <aside className="hidden min-h-screen w-64 border-r border-[#efeded] bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col">
-        <div className="flex h-20 items-center gap-3 border-b border-[#efeded] px-7">
-          <div className="flex h-11 w-11 items-center justify-center bg-[#ba0013] text-white">
-            <Icon name="wrench" />
-          </div>
-          <div>
-            <p className="text-lg font-black leading-none text-[#171717]">Kapa Workshop</p>
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#8a8686]">Technician</p>
-          </div>
-        </div>
-
-        <div className="border-b border-[#efeded] px-7 py-6">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a8686]">Kỹ thuật viên</p>
-          <p className="mt-2 text-sm font-black text-[#1b1c1c]">Nguyễn Minh</p>
-          <p className="mt-1 text-xs text-[#6a6767]">Cầu nâng 01 - Ca sáng</p>
-        </div>
-
-        <nav className="flex-1 space-y-1 px-4 py-6">
-          {navItems.map((item) => {
-            const active = item.href === '/technician/repair-notes'
-
-            return (
-              <Link
-                className={active ? 'flex min-h-12 items-center gap-3 border-l-4 border-[#ba0013] bg-[#fff1f1] px-4 text-sm font-black text-[#ba0013]' : 'flex min-h-12 items-center gap-3 px-4 text-sm font-bold text-[#555151] transition hover:bg-[#fbf9f8] hover:text-[#ba0013]'}
-                key={item.href}
-                to={item.href}
-              >
-                <Icon name={item.icon} />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="border-t border-[#efeded] p-5">
-          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" type="button">
-            <Icon name="logout" />
-            Đăng xuất
-          </button>
-        </div>
-      </aside>
-
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 border-b border-[#efeded] bg-white/90 backdrop-blur-xl">
-          <div className="flex min-h-20 items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
-            <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ba0013]">Technician Repair Notes</p>
-              <h1 className="text-2xl font-black text-[#171717] sm:text-3xl">Ghi chú sửa chữa từng bước</h1>
-            </div>
-            <div className="hidden items-center gap-4 sm:flex">
-              <button aria-label="Thông báo" className="relative flex h-11 w-11 items-center justify-center border border-[#dedada] text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
-                <Icon name="bell" />
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center bg-[#ba0013] px-1 text-[10px] font-black text-white">2</span>
-              </button>
-              <div className="flex h-11 w-11 items-center justify-center bg-[#1b1c1c] text-sm font-black text-white">NM</div>
-            </div>
-          </div>
-        </header>
-
-        <main className="w-full px-5 py-7 sm:px-8 lg:px-10">{children}</main>
-      </div>
-    </div>
-  )
 }
 
 function SummaryCard({ icon, label, value }: { icon: IconName; label: string; value: string }) {
@@ -401,7 +327,7 @@ export function TechnicianRepairNotesPage() {
   }
 
   return (
-    <TechnicianShell>
+    <TechnicianShell active="repair-notes" eyebrow="Technician Repair Notes" notificationCount={2} title="Ghi chú sửa chữa từng bước">
       <div className="space-y-7">
         <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
           <div className="grid gap-6 xl:grid-cols-[1fr_340px] xl:items-center">
@@ -513,3 +439,4 @@ export function TechnicianRepairNotesPage() {
     </TechnicianShell>
   )
 }
+
