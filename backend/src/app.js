@@ -1,5 +1,6 @@
 import express from "express";
 import cors from "cors";
+import path from "path";
 import { env } from "./config/env.js";
 import { dbStatus } from "./db/connect.js";
 import { errorHandler, notFound } from "./middleware/error.js";
@@ -14,6 +15,7 @@ import { trackingRouter } from "./routes/tracking.routes.js";
 import { invoiceRouter } from "./routes/invoice.routes.js";
 import { reviewRouter } from "./routes/review.routes.js";
 import { notificationRouter } from "./routes/notification.routes.js";
+import { inspectionReportRouter } from "./routes/inspection-report.routes.js";
 
 /** Builds the Express application (no listening — see server.js). */
 export function createApp() {
@@ -35,10 +37,13 @@ export function createApp() {
   app.use("/api/services", serviceRouter);
   app.use("/api/admin/services", serviceRouter);
   app.use("/api/repair-orders", repairOrderRouter);
+  app.use("/api/inspection-reports", inspectionReportRouter);
   app.use("/api/tracking", trackingRouter);
   app.use("/api/invoices", invoiceRouter);
   app.use("/api/reviews", reviewRouter);
   app.use("/api/notifications", notificationRouter);
+
+  app.use("/uploads", express.static(path.resolve("uploads")));
 
   app.use(notFound);
   app.use(errorHandler);
