@@ -1,9 +1,13 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getPostLoginPath, useAuth } from '../../auth'
+import { apiRequest } from '../../lib/api-client'
 import { asset } from '../../lib/asset'
 
 type LegacyCurrentPage = 'account' | 'lost-password'
 type ActiveSection = 'shop' | 'contact' | 'customer' | null
+
+type ServiceCategoryLite = { _id: string; name: string; isActive: boolean }
 
 function MenuLink({
   label,
@@ -43,12 +47,27 @@ export function KapaNavbar({
 }) {
   const { isAuthenticated, logout, user } = useAuth()
   const resolvedActiveSection = current === 'account' || current === 'lost-password' ? 'shop' : activeSection === 'customer' ? 'shop' : activeSection
-  const isShopActive = resolvedActiveSection === 'shop'
+  const isServicesActive = resolvedActiveSection === 'shop'
   const isContactActive = activeSection === 'contact'
   const accountRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? accountHref : accountHref
   const logoRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? logoHref : logoHref
   const ctaLabel = isAuthenticated ? 'Account' : 'Get Free Quote'
-  const dashboardLabel = user?.role === 'onlineCustomer' ? 'My account' : 'Workspace'
+
+  const [categories, setCategories] = useState<ServiceCategoryLite[]>([])
+
+  useEffect(() => {
+    let cancelled = false
+    apiRequest<ServiceCategoryLite[]>('/api/services/categories')
+      .then((response) => {
+        if (!cancelled) setCategories(response.filter((category) => category.isActive))
+      })
+      .catch(() => {
+        // Public menu data is a nice-to-have — a failed fetch just leaves the "All services" link.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   return (
     <>
@@ -70,71 +89,37 @@ export function KapaNavbar({
             <nav className="navbar navbar-expand-md navbar-light">
               <div className="collapse navbar-collapse mean-menu" id="navbarSupportedContent" style={{ display: 'block' }}>
                 <ul id="menu-navbar-left-menu" className="navbar-nav me-auto">
+                  <li className="menu-item menu-item-type-custom menu-item-object-custom nav-item">
+                    <Link title="Home" to="/" className="nav-link">
+                      Home
+                    </Link>
+                  </li>
                   <li className="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children dropdown nav-item">
-                    <MenuLink label="Home" />
+                    <MenuLink label="Services" href="/services" active={isServicesActive} />
                     <ul className="dropdown-menu" role="menu">
                       <li className="nav-item">
-                        <a className="dropdown-item" href="#">
-                          Home 1
-                        </a>
-                      </li>
-                      <li className="nav-item">
-                        <a className="dropdown-item" href="#">
-                          Home 2
-                        </a>
-                      </li>
-                      <li className="nav-item">
-                        <a className="dropdown-item" href="#">
-                          Home 3
-                        </a>
-                      </li>
-                    </ul>
-                  </li>
-                  <li className="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children dropdown nav-item">
-                    <MenuLink label="Pages" />
-                  </li>
-                  <li className="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children dropdown nav-item">
-                    <MenuLink label="Services" />
-                  </li>
-                  <li className="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children dropdown nav-item">
-                    <MenuLink label="Shop" active={isShopActive} />
-                    <ul className="dropdown-menu" role="menu">
-                      <li className="nav-item">
-                        <a className="dropdown-item" href="#">
-                          Shop
-                        </a>
-                      </li>
-                      <li className="nav-item">
-                        <a className="dropdown-item" href="#">
-                          Product Details
-                        </a>
-                      </li>
-                      <li className="nav-item">
-                        <a className="dropdown-item" href="#">
-                          Cart
-                        </a>
-                      </li>
-                      <li className="nav-item">
-                        <a className="dropdown-item" href="#">
-                          Checkout
-                        </a>
-                      </li>
-                      <li className="nav-item">
-                        <Link className="dropdown-item" to={accountRoute}>
-                          {dashboardLabel}
+                        <Link className="dropdown-item" to="/services">
+                          All services
                         </Link>
                       </li>
-                      {isAuthenticated && (
-                        <li className="nav-item">
-                          <button type="button" className="dropdown-item kapa-navbar-dropdown-button" onClick={logout}>
-                            Logout
-                          </button>
+                      {categories.map((category) => (
+                        <li className="nav-item" key={category._id}>
+                          <Link className="dropdown-item" to={`/services?category=${encodeURIComponent(category.name)}`}>
+                            {category.name}
+                          </Link>
                         </li>
-                      )}
+                      ))}
                     </ul>
                   </li>
-                  <li className="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children dropdown nav-item">
-                    <MenuLink label="Blog" />
+                  <li className="menu-item menu-item-type-post_type menu-item-object-page nav-item">
+                    <Link title="Appointment" to="/appointment" className="nav-link">
+                      Appointment
+                    </Link>
+                  </li>
+                  <li className="menu-item menu-item-type-post_type menu-item-object-page nav-item">
+                    <Link title="Track Repair" to="/tracking" className="nav-link">
+                      Track Repair
+                    </Link>
                   </li>
                 </ul>
 
@@ -145,9 +130,6 @@ export function KapaNavbar({
                 </div>
 
                 <ul id="menu-navbar-right-menu" className="navbar-nav ms-auto">
-                  <li className="menu-item menu-item-type-custom menu-item-object-custom menu-item-has-children dropdown nav-item">
-                    <MenuLink label="Projects" />
-                  </li>
                   <li className="menu-item menu-item-type-post_type menu-item-object-page nav-item">
                     <Link title="Contact Us" to={contactHref} className={`nav-link${isContactActive ? ' active' : ''}`}>
                       Contact Us
@@ -156,14 +138,13 @@ export function KapaNavbar({
                 </ul>
 
                 <div className="others-options d-flex align-items-center">
-                  <div className="option-item">
-                    <div className="cart-btn">
-                      <a href="#">
-                        <i className="ri-shopping-cart-fill" />
-                        <span className="mini-cart-count">0</span>
-                      </a>
+                  {isAuthenticated ? (
+                    <div className="option-item">
+                      <button type="button" className="kapa-navbar-logout-link" onClick={logout}>
+                        Logout
+                      </button>
                     </div>
-                  </div>
+                  ) : null}
                   <div className="option-item">
                     <Link to={isAuthenticated ? accountRoute : contactHref} className="default-btn">
                       {ctaLabel}
@@ -178,14 +159,13 @@ export function KapaNavbar({
         <div className="others-option-for-responsive">
           <div className="container">
             <div className="others-options">
-              <div className="option-item">
-                <div className="cart-btn">
-                  <a href="#">
-                    <i className="ri-shopping-cart-fill" />
-                    <span className="mini-cart-count">0</span>
-                  </a>
+              {isAuthenticated ? (
+                <div className="option-item">
+                  <button type="button" className="kapa-navbar-logout-link" onClick={logout}>
+                    Logout
+                  </button>
                 </div>
-              </div>
+              ) : null}
               <div className="option-item">
                 <Link to={isAuthenticated ? accountRoute : contactHref} className="default-btn">
                   {ctaLabel}
