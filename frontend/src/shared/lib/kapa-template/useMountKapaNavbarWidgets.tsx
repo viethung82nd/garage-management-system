@@ -1,5 +1,6 @@
-import { useEffect } from 'react'
-import { createRoot } from 'react-dom/client'
+import { useEffect, useRef } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
+import { useAuth } from '../../auth'
 import { KapaAccountCta } from '../../ui/kapa-chrome/KapaAccountCta'
 import { apiRequest } from '../api-client'
 import { ACCOUNT_CTA_MOUNT_CLASS, SERVICES_DROPDOWN_SLOT_ID } from './pruneKapaNavbar'
@@ -12,17 +13,21 @@ type ServiceCategoryLite = { _id: string; name: string; isActive: boolean }
  * more than one copy — desktop nav + the responsive nav both have their own),
  * and the live service categories inside the Services dropdown. Call once
  * `pageSpec` is ready (the cloned markup is in the DOM).
+ *
+ * Reads auth state itself (this hook runs inside the page component, which
+ * is inside AuthProvider) and passes it into KapaAccountCta as props, since
+ * that component is mounted into its own createRoot() and can't read context
+ * on its own — see the comment on KapaAccountCta for why.
  */
 export function useMountKapaNavbarWidgets(ready: boolean) {
+  const { isAuthenticated, user, logout } = useAuth()
+  const rootsRef = useRef<Root[]>([])
+
   useEffect(() => {
     if (!ready) return
 
     const ctaMounts = Array.from(document.querySelectorAll(`.${ACCOUNT_CTA_MOUNT_CLASS}`))
-    const roots = ctaMounts.map((node) => {
-      const root = createRoot(node)
-      root.render(<KapaAccountCta />)
-      return root
-    })
+    rootsRef.current = ctaMounts.map((node) => createRoot(node))
 
     let cancelled = false
     apiRequest<ServiceCategoryLite[]>('/api/services/categories')
@@ -45,7 +50,16 @@ export function useMountKapaNavbarWidgets(ready: boolean) {
 
     return () => {
       cancelled = true
-      roots.forEach((root) => root.unmount())
+      rootsRef.current.forEach((root) => root.unmount())
+      rootsRef.current = []
     }
   }, [ready])
+
+  // Re-render the already-mounted CTA whenever auth state changes (login,
+  // logout, session hydration finishing after the initial mount).
+  useEffect(() => {
+    rootsRef.current.forEach((root) => {
+      root.render(<KapaAccountCta isAuthenticated={isAuthenticated} user={user} onLogout={logout} />)
+    })
+  })
 }
