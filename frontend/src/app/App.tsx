@@ -16,6 +16,7 @@ const CustomerBookingsPage = lazy(() => import('../pages/customer/bookings').the
 const CustomerInvoicesPage = lazy(() => import('../pages/customer/invoices').then((module) => ({ default: module.CustomerInvoicesPage })))
 const CustomerTrackingPage = lazy(() => import('../pages/customer/tracking').then((module) => ({ default: module.CustomerTrackingPage })))
 const CustomerReviewsPage = lazy(() => import('../pages/customer/reviews').then((module) => ({ default: module.CustomerReviewsPage })))
+const ServicesPage = lazy(() => import('../pages/services').then((module) => ({ default: module.ServicesPage })))
 const AdminUsersPage = lazy(() => import('../pages/admin/users').then((module) => ({ default: module.AdminUsersPage })))
 const AdminServicesPage = lazy(() => import('../pages/admin/services').then((module) => ({ default: module.AdminServicesPage })))
 const AdminPartsPage = lazy(() => import('../pages/admin/parts').then((module) => ({ default: module.AdminPartsPage })))
@@ -91,6 +92,14 @@ export default function App() {
         element={
           <Suspense fallback={<RouteFallback />}>
             <CustomerTrackingPage />
+          </Suspense>
+        }
+      />
+      <Route
+        path="/services"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <ServicesPage />
           </Suspense>
         }
       />
