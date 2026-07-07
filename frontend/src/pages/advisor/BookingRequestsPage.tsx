@@ -128,11 +128,13 @@ function StatusBadge({ status }: { status: BookingStatus }) {
 }
 
 function FilterBar({
+  onExport,
   onQueryChange,
   onServiceChange,
   query,
   service,
 }: {
+  onExport: () => void
   onQueryChange: (value: string) => void
   onServiceChange: (value: string) => void
   query: string
@@ -162,12 +164,17 @@ function FilterBar({
         <option value="maintenance">Bảo dưỡng tổng quát</option>
       </select>
 
-      <button className="flex h-12 items-center justify-center gap-2 border border-[#d8d5d5] px-5 text-sm font-black text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
+      <button
+        className="flex h-12 cursor-not-allowed items-center justify-center gap-2 border border-[#d8d5d5] px-5 text-sm font-black text-[#c8c6c5]"
+        disabled
+        title="Tính năng đang được phát triển"
+        type="button"
+      >
         <Icon name="sliders" />
         Bộ lọc nâng cao
       </button>
 
-      <button className="flex h-12 items-center justify-center gap-2 bg-[#ba0013] px-5 text-sm font-black text-white transition hover:bg-[#94000f]" type="button">
+      <button className="flex h-12 items-center justify-center gap-2 bg-[#ba0013] px-5 text-sm font-black text-white transition hover:bg-[#94000f]" onClick={onExport} type="button">
         <Icon name="download" />
         Xuất danh sách
       </button>
@@ -258,6 +265,34 @@ function BookingTable({
   )
 }
 
+function exportBookingsToCsv(bookings: BookingRequest[]) {
+  const header = ['Khách hàng', 'Điện thoại', 'Xe', 'Biển số', 'VIN', 'Dịch vụ', 'Ngày', 'Giờ', 'Cố vấn', 'Trạng thái']
+  const rows = bookings.map((booking) => [
+    booking.customer,
+    booking.phone,
+    booking.vehicle,
+    booking.plate,
+    booking.vin,
+    booking.service,
+    booking.date,
+    booking.time,
+    booking.advisor,
+    statusLabels[booking.status],
+  ])
+
+  const csvContent = [header, ...rows]
+    .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
+    .join('\r\n')
+
+  const blob = new Blob([`﻿${csvContent}`], { type: 'text/csv;charset=utf-8;' })
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = `danh-sach-dat-lich-${new Date().toISOString().slice(0, 10)}.csv`
+  link.click()
+  URL.revokeObjectURL(url)
+}
+
 export function BookingRequestsPage() {
   const [bookings, setBookings] = useState(initialBookings)
   const [query, setQuery] = useState('')
@@ -301,7 +336,13 @@ export function BookingRequestsPage() {
           <StatCard icon="users" label="Khách hàng mới" note="Trong 7 ngày gần nhất" value="05" />
         </section>
 
-        <FilterBar onQueryChange={setQuery} onServiceChange={setService} query={query} service={service} />
+        <FilterBar
+          onExport={() => exportBookingsToCsv(filteredBookings)}
+          onQueryChange={setQuery}
+          onServiceChange={setService}
+          query={query}
+          service={service}
+        />
         <BookingTable bookings={filteredBookings} onStatusChange={updateStatus} />
 
         <footer className="grid gap-6 bg-[#1b1c1c] p-8 text-white lg:grid-cols-[1fr_auto_auto] lg:items-center">

@@ -1,5 +1,6 @@
 ﻿import { useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 
 type RepairStepStatus = 'completed' | 'active' | 'waiting'
@@ -138,6 +139,7 @@ function nowTime() {
 }
 
 function TechnicianShell({ children }: { children: React.ReactNode }) {
+  const { logout } = useAuth()
   const navItems: Array<{ href: string; icon: IconName; label: string }> = [
     { href: '/technician/tasks', icon: 'clipboard', label: 'Phiếu kiểm tra' },
     { href: '/technician/work-orders', icon: 'wrench', label: 'Lệnh được giao' },
@@ -166,6 +168,21 @@ function TechnicianShell({ children }: { children: React.ReactNode }) {
 
         <nav className="flex-1 space-y-1 px-4 py-6">
           {navItems.map((item) => {
+            if (item.href === '/technician/parts-requests') {
+              return (
+                <span
+                  aria-disabled="true"
+                  className="flex min-h-12 cursor-not-allowed items-center gap-3 px-4 text-sm font-bold text-[#c8c6c5]"
+                  key={item.href}
+                  title="Tính năng đang được phát triển"
+                >
+                  <Icon name={item.icon} />
+                  {item.label}
+                  <span className="ml-auto text-[10px] font-black uppercase tracking-[0.08em] text-[#c8c6c5]">Sắp ra mắt</span>
+                </span>
+              )
+            }
+
             const active = item.href === '/technician/repair-notes'
 
             return (
@@ -182,7 +199,7 @@ function TechnicianShell({ children }: { children: React.ReactNode }) {
         </nav>
 
         <div className="border-t border-[#efeded] p-5">
-          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" type="button">
+          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" onClick={logout} type="button">
             <Icon name="logout" />
             Đăng xuất
           </button>

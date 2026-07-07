@@ -1,5 +1,6 @@
 ﻿import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../../shared/auth'
 import { Icon, type IconName } from '../../../shared/ui/base'
 
 export type ServiceAdvisorNavKey =
@@ -36,6 +37,8 @@ export function ServiceAdvisorShell({
   eyebrow?: string
   title: string
 }) {
+  const { logout } = useAuth()
+
   return (
     <div className="min-h-screen bg-[#fbf9f8] text-[#1b1c1c]">
       <aside className="hidden min-h-screen w-64 border-r border-[#efeded] bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col">
@@ -80,7 +83,7 @@ export function ServiceAdvisorShell({
             <Icon name="plus" />
             Tiếp nhận xe mới
           </Link>
-          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" type="button">
+          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" onClick={logout} type="button">
             <Icon name="logout" />
             Đăng xuất
           </button>

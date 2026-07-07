@@ -1,4 +1,4 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 import { Field, SelectField, TextAreaField } from '../../widgets/vehicle-reception/ui/FormFields'
@@ -190,6 +190,15 @@ export function VehicleReceptionPage() {
   const [form, setForm] = useState<ReceptionForm>(emptyForm)
   const [plateStatus, setPlateStatus] = useState<PlateStatus>('idle')
   const [appliedSuggestionId, setAppliedSuggestionId] = useState<string>()
+  const pendingCheckTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    return () => {
+      if (pendingCheckTimeoutRef.current) {
+        window.clearTimeout(pendingCheckTimeoutRef.current)
+      }
+    }
+  }, [])
 
   const matchingSuggestions = useMemo(() => {
     const normalizedPlate = normalizePlate(form.plate)
@@ -207,6 +216,10 @@ export function VehicleReceptionPage() {
     if (key === 'plate') {
       setPlateStatus('idle')
       setAppliedSuggestionId(undefined)
+      if (pendingCheckTimeoutRef.current) {
+        window.clearTimeout(pendingCheckTimeoutRef.current)
+        pendingCheckTimeoutRef.current = undefined
+      }
     }
   }
 
@@ -231,7 +244,11 @@ export function VehicleReceptionPage() {
 
   function checkPlate() {
     setPlateStatus('checking')
-    window.setTimeout(() => {
+    if (pendingCheckTimeoutRef.current) {
+      window.clearTimeout(pendingCheckTimeoutRef.current)
+    }
+    pendingCheckTimeoutRef.current = window.setTimeout(() => {
+      pendingCheckTimeoutRef.current = undefined
       const exactMatch = historySuggestions.find((suggestion) => normalizePlate(suggestion.plate) === normalizePlate(form.plate))
       const fallbackMatch = matchingSuggestions[0]
       const suggestion = exactMatch ?? fallbackMatch

@@ -1,5 +1,6 @@
 ﻿import { useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 
 type InspectionStatus = 'done' | 'active' | 'waiting'
@@ -76,6 +77,8 @@ function formatFileSize(size: number) {
 }
 
 function TechnicianShell({ children }: { children: React.ReactNode }) {
+  const { logout } = useAuth()
+
   return (
     <div className="min-h-screen bg-[#fbf9f8] text-[#1b1c1c]">
       <aside className="hidden min-h-screen w-64 border-r border-[#efeded] bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col">
@@ -108,14 +111,19 @@ function TechnicianShell({ children }: { children: React.ReactNode }) {
             <Icon name="invoice" />
             Ghi chú sửa chữa
           </Link>
-          <Link className="flex min-h-12 items-center gap-3 px-4 text-sm font-bold text-[#555151] transition hover:bg-[#fbf9f8] hover:text-[#ba0013]" to="/technician/parts-requests">
+          <span
+            aria-disabled="true"
+            className="flex min-h-12 cursor-not-allowed items-center gap-3 px-4 text-sm font-bold text-[#c8c6c5]"
+            title="Tính năng đang được phát triển"
+          >
             <Icon name="sliders" />
             Yêu cầu phụ tùng
-          </Link>
+            <span className="ml-auto text-[10px] font-black uppercase tracking-[0.08em] text-[#c8c6c5]">Sắp ra mắt</span>
+          </span>
         </nav>
 
         <div className="border-t border-[#efeded] p-5">
-          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" type="button">
+          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" onClick={logout} type="button">
             <Icon name="logout" />
             Đăng xuất
           </button>
