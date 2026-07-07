@@ -13,6 +13,7 @@ export * from "./Invoice.js";
 export * from "./Payment.js";
 export * from "./Notification.js";
 export * from "./Review.js";
+export * from "./Otp.js";
 export * from "./Schedule.js";
 export * from "./RevenueReport.js";
 export * from "./LookupSession.js";

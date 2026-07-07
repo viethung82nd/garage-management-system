@@ -5,6 +5,7 @@ import {
   UserModel,
   VehicleModel,
 } from "../models/index.js";
+import { BOOKING_STATUSES } from "../models/Booking.js";
 import { HttpError } from "../middleware/error.js";
 import {
   SLOT_CAPACITY,
@@ -13,8 +14,13 @@ import {
   isValidSlot,
 } from "../config/slots.js";
 import { todayUtc } from "../utils/date.js";
+import { createNotification, notifyRole } from "../utils/notify.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const OID_RE = /^[0-9a-fA-F]{24}$/;
+
+/** Roles allowed to manage any booking (confirm, and act on behalf of anyone). */
+const STAFF_BOOKING_ROLES = ["serviceAdvisor", "admin"];
 
 /**
  * Parses a "YYYY-MM-DD" string into a normalized UTC-midnight Date. Bookings are
@@ -29,50 +35,6 @@ function parseBookingDate(dateStr) {
     throw new HttpError(400, "date is not a valid calendar date");
   }
   return date;
-}
-
-/**
- * GET /api/bookings — authenticated booking list for back-office screens.
- * Query: status, source, limit
- */
-export async function listBookings(req, res) {
-  const { status, source } = req.query ?? {};
-  const rawLimit = Number.parseInt(String(req.query?.limit ?? "20"), 10);
-  const limit = Number.isFinite(rawLimit)
-    ? Math.min(Math.max(rawLimit, 1), 100)
-    : 20;
-
-  const filter = {};
-  if (status) {
-    filter.status = status;
-  }
-  if (source) {
-    filter.source = source;
-  }
-
-  const bookings = await BookingModel.find(filter)
-    .populate("customerId", "fullName phone email accountType role")
-    .populate("vehicleId", "licensePlate brand model year")
-    .populate("serviceId", "name basePrice estimatedDuration")
-    .populate("advisorId", "fullName role")
-    .sort({ bookingDate: -1, timeSlot: -1 })
-    .limit(limit);
-
-  res.json({ bookings });
-}
-
-/**
- * GET /api/bookings/mine — authenticated online customer's own bookings.
- */
-export async function listMyBookings(req, res) {
-  const bookings = await BookingModel.find({ customerId: req.user.sub })
-    .populate("customerId", "fullName phone email accountType role")
-    .populate("vehicleId", "licensePlate brand model year chassisNumber engineNumber color")
-    .populate("serviceId", "name basePrice estimatedDuration")
-    .populate("advisorId", "fullName role")
-    .sort({ bookingDate: -1, timeSlot: -1 });
-
-  res.json({ bookings });
 }
 
 /** Returns the set of seat numbers already taken by occupying bookings in a slot. */
@@ -237,11 +199,251 @@ export async function createBooking(req, res) {
     action: "created",
   });
 
-  const populated = await booking.populate([
+  // Alert every service advisor that a booking is waiting to be confirmed.
+  await notifyRole("serviceAdvisor", {
+    type: "bookingCreated",
+    title: "New booking pending confirmation",
+    message: `Booking for ${bookingDate} at ${timeSlot} awaiting confirmation.`,
+    refId: booking._id,
+    refModel: "Booking",
+  });
+
+  res.status(201).json({ booking: await populateBooking(booking) });
+}
+
+// ============= BOOKING LIFECYCLE (confirm / cancel / reschedule) =============
+
+/** Populates a booking with the fields clients need for display. */
+function populateBooking(booking) {
+  return booking.populate([
     { path: "customerId", select: "fullName phone" },
     { path: "vehicleId", select: "licensePlate brand model" },
     { path: "serviceId", select: "name basePrice estimatedDuration" },
+    { path: "advisorId", select: "fullName" },
   ]);
+}
 
-  res.status(201).json({ booking: populated });
+/** Loads a booking by id or throws a clean 400/404. */
+async function loadBooking(id) {
+  if (!OID_RE.test(String(id))) {
+    throw new HttpError(400, "Invalid booking ID format");
+  }
+  const booking = await BookingModel.findById(id);
+  if (!booking) {
+    throw new HttpError(404, "Booking not found");
+  }
+  return booking;
+}
+
+/** True for staff who may act on any booking. */
+function isStaff(user) {
+  return STAFF_BOOKING_ROLES.includes(user.role);
+}
+
+/** Staff may manage any booking; a customer only their own. Otherwise 403. */
+function assertCanManage(booking, user) {
+  if (isStaff(user)) return;
+  if (String(booking.customerId) === String(user.sub)) return;
+  throw new HttpError(403, "You do not have permission to modify this booking");
+}
+
+/**
+ * Notifies the party who did NOT perform an action (customer ⇄ advisor), so a
+ * staff cancel reaches the customer and a customer cancel reaches the advisor.
+ */
+async function notifyCounterparty(booking, actor, payload) {
+  const actorId = String(actor.sub);
+  const targets = new Set();
+  if (String(booking.customerId) !== actorId) targets.add(String(booking.customerId));
+  if (booking.advisorId && String(booking.advisorId) !== actorId) {
+    targets.add(String(booking.advisorId));
+  }
+  for (const userId of targets) {
+    await createNotification({ userId, refId: booking._id, refModel: "Booking", ...payload });
+  }
+}
+
+/**
+ * GET /api/bookings — staff-only list with optional filters.
+ * Query: status, date (YYYY-MM-DD), from, to (date range, inclusive).
+ */
+export async function listBookings(req, res) {
+  const { status, date, from, to } = req.query;
+  const filter = {};
+
+  if (status) {
+    if (!BOOKING_STATUSES.includes(status)) {
+      throw new HttpError(400, `status must be one of: ${BOOKING_STATUSES.join(", ")}`);
+    }
+    filter.status = status;
+  }
+
+  if (date) {
+    filter.bookingDate = parseBookingDate(date);
+  } else if (from || to) {
+    filter.bookingDate = {};
+    if (from) filter.bookingDate.$gte = parseBookingDate(from);
+    if (to) filter.bookingDate.$lte = parseBookingDate(to);
+  }
+
+  const bookings = await BookingModel.find(filter)
+    .populate("customerId", "fullName phone")
+    .populate("vehicleId", "licensePlate brand model")
+    .populate("serviceId", "name basePrice estimatedDuration")
+    .populate("advisorId", "fullName")
+    .sort({ bookingDate: 1, timeSlot: 1 });
+
+  res.json({ bookings });
+}
+
+/** GET /api/bookings/mine — the authenticated customer's own bookings. */
+export async function myBookings(req, res) {
+  const bookings = await BookingModel.find({ customerId: req.user.sub })
+    .populate("vehicleId", "licensePlate brand model")
+    .populate("serviceId", "name basePrice estimatedDuration")
+    .populate("advisorId", "fullName")
+    .sort({ bookingDate: -1, timeSlot: 1 });
+
+  res.json({ bookings });
+}
+
+/**
+ * PATCH /api/bookings/:id/confirm — service advisor confirms a pending booking
+ * (Service Advisor "Confirm Booked Appointment"). Only pending → confirmed.
+ */
+export async function confirmBooking(req, res) {
+  const booking = await loadBooking(req.params.id);
+  if (booking.status !== "pending") {
+    throw new HttpError(409, `Cannot confirm a ${booking.status} booking`);
+  }
+
+  booking.status = "confirmed";
+  booking.advisorId = req.user.sub;
+  await booking.save();
+
+  await BookingHistoryModel.create({
+    bookingId: booking._id,
+    changedBy: req.user.sub,
+    action: "confirmed",
+  });
+
+  await createNotification({
+    userId: booking.customerId,
+    type: "bookingConfirmed",
+    title: "Appointment confirmed",
+    message: "Your appointment has been confirmed by our service advisor.",
+    refId: booking._id,
+    refModel: "Booking",
+  });
+
+  res.json({ booking: await populateBooking(booking) });
+}
+
+/**
+ * PATCH /api/bookings/:id/cancel — customer cancels their own booking, or staff
+ * cancels any. Frees the slot: saving with a non-active status flips
+ * occupiesSlot false via the model hook, dropping the seat from the unique index.
+ */
+export async function cancelBooking(req, res) {
+  const booking = await loadBooking(req.params.id);
+  assertCanManage(booking, req.user);
+
+  if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
+    throw new HttpError(409, `Cannot cancel a ${booking.status} booking`);
+  }
+
+  booking.status = "cancelled";
+  await booking.save();
+
+  await BookingHistoryModel.create({
+    bookingId: booking._id,
+    changedBy: req.user.sub,
+    action: "cancelled",
+    reason: req.body?.reason?.trim(),
+  });
+
+  await notifyCounterparty(booking, req.user, {
+    type: "bookingCancelled",
+    title: "Appointment cancelled",
+    message: "An appointment has been cancelled.",
+  });
+
+  res.json({ booking: await populateBooking(booking) });
+}
+
+/**
+ * PATCH /api/bookings/:id/reschedule — move an active booking to a new
+ * date/slot. Re-checks capacity and claims a fresh seat in the target slot with
+ * the same E11000 retry the create path uses; the old seat frees automatically
+ * because the same document moves off its previous (date, slot, seat).
+ * Body: { bookingDate: "YYYY-MM-DD", timeSlot: "HH:00", reason? }
+ */
+export async function rescheduleBooking(req, res) {
+  const booking = await loadBooking(req.params.id);
+  assertCanManage(booking, req.user);
+
+  if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
+    throw new HttpError(409, `Cannot reschedule a ${booking.status} booking`);
+  }
+
+  const { bookingDate, timeSlot, reason } = req.body ?? {};
+  if (!isValidSlot(timeSlot)) {
+    throw new HttpError(400, `timeSlot must be one of: ${getSlotTimes().join(", ")}`);
+  }
+  const day = parseBookingDate(bookingDate);
+  const slotStart = new Date(`${bookingDate}T${timeSlot}:00.000Z`);
+  if (slotStart < new Date()) {
+    throw new HttpError(400, "the requested slot is in the past");
+  }
+
+  const previousDate = booking.bookingDate;
+  const previousSlot = booking.timeSlot;
+  if (previousDate.getTime() === day.getTime() && previousSlot === timeSlot) {
+    throw new HttpError(400, "New slot is the same as the current one");
+  }
+
+  const taken = await takenSeats(day, timeSlot);
+  if (taken.size >= SLOT_CAPACITY) {
+    throw new HttpError(409, "the requested slot is fully booked");
+  }
+
+  let saved = false;
+  for (let seatNo = 1; seatNo <= SLOT_CAPACITY; seatNo += 1) {
+    if (taken.has(seatNo)) continue;
+    booking.bookingDate = day;
+    booking.timeSlot = timeSlot;
+    booking.seatNo = seatNo;
+    booking.status = "rescheduled";
+    try {
+      await booking.save();
+      saved = true;
+      break;
+    } catch (err) {
+      if (err?.code === 11000) {
+        taken.add(seatNo);
+        continue;
+      }
+      throw err;
+    }
+  }
+  if (!saved) {
+    throw new HttpError(409, "the requested slot is fully booked");
+  }
+
+  await BookingHistoryModel.create({
+    bookingId: booking._id,
+    changedBy: req.user.sub,
+    action: "rescheduled",
+    previousDate,
+    previousSlot,
+    reason: reason?.trim(),
+  });
+
+  await notifyCounterparty(booking, req.user, {
+    type: "bookingRescheduled",
+    title: "Appointment rescheduled",
+    message: `An appointment was moved to ${bookingDate} at ${timeSlot}.`,
+  });
+
+  res.json({ booking: await populateBooking(booking) });
 }

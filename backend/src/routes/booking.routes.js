@@ -5,25 +5,35 @@ import {
   getSlots,
   createBooking,
   listBookings,
-  listMyBookings,
+  myBookings,
+  confirmBooking,
+  cancelBooking,
+  rescheduleBooking,
 } from "../controllers/booking.controller.js";
 
 export const bookingRouter = Router();
 
+// Public: customers browse availability and book without an account.
+bookingRouter.get("/slots", asyncHandler(getSlots));
+bookingRouter.post("/", asyncHandler(createBooking));
+
+// Authenticated customer: view own bookings.
+bookingRouter.get("/mine", requireAuth, asyncHandler(myBookings));
+
+// Staff: list/filter all bookings and confirm pending ones.
 bookingRouter.get(
   "/",
   requireAuth,
-  requireRole("admin", "accountant", "serviceAdvisor"),
-  asyncHandler(listBookings),
+  requireRole("serviceAdvisor", "admin"),
+  asyncHandler(listBookings)
 );
-
-bookingRouter.get(
-  "/mine",
+bookingRouter.patch(
+  "/:id/confirm",
   requireAuth,
-  requireRole("onlineCustomer"),
-  asyncHandler(listMyBookings),
+  requireRole("serviceAdvisor", "admin"),
+  asyncHandler(confirmBooking)
 );
 
-// Both endpoints are public: customers book without an account.
-bookingRouter.get("/slots", asyncHandler(getSlots));
-bookingRouter.post("/", asyncHandler(createBooking));
+// Owner customer or staff: cancel / reschedule (ownership enforced in controller).
+bookingRouter.patch("/:id/cancel", requireAuth, asyncHandler(cancelBooking));
+bookingRouter.patch("/:id/reschedule", requireAuth, asyncHandler(rescheduleBooking));
