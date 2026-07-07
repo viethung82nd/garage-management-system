@@ -1,4 +1,4 @@
-import { ClockCircleOutlined, DashboardOutlined, PieChartOutlined, SettingOutlined, TeamOutlined, ToolOutlined } from '@ant-design/icons'
+import { AppstoreOutlined, DashboardOutlined, PieChartOutlined, SettingOutlined, TeamOutlined, ToolOutlined } from '@ant-design/icons'
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../../shared/auth'
@@ -8,6 +8,7 @@ export { adminPalette }
 
 function activeMenuKey(pathname: string) {
   if (pathname.startsWith('/admin/users')) return 'users'
+  if (pathname.startsWith('/admin/services')) return 'services'
   if (pathname.startsWith('/admin/parts')) return 'parts'
   if (pathname.startsWith('/admin/config')) return 'config'
   return 'dashboard'
@@ -37,7 +38,7 @@ export function AdminShell({ title, eyebrow, children }: { title: string; eyebro
       selectedMenuKeys={[activeMenuKey(location.pathname)]}
       menuItems={[
         { key: 'dashboard', icon: <DashboardOutlined />, label: <Link to="/admin/dashboard">Overview</Link> },
-        { key: 'repair-orders', icon: <ClockCircleOutlined />, label: 'Repair orders' },
+        { key: 'services', icon: <AppstoreOutlined />, label: <Link to="/admin/services">Service catalog</Link> },
         { key: 'users', icon: <TeamOutlined />, label: <Link to="/admin/users">Users</Link> },
         { key: 'parts', icon: <ToolOutlined />, label: <Link to="/admin/parts">Parts catalog</Link> },
         { key: 'reports', icon: <PieChartOutlined />, label: 'Reports' },
