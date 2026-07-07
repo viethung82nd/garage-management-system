@@ -4,41 +4,45 @@ import { AuthApiError, resetPasswordRequest } from '../../../../shared/auth/api'
 import { usePageMeta } from '../../../../shared/lib/kapa-template'
 import { KapaFooter, KapaNavbar, KapaPageBanner, KapaTopbar, PasswordField } from '../../../../shared/ui/kapa-chrome'
 
-const initialForm = {
-  password: '',
-  confirmPassword: '',
-}
-
 export default function ResetPasswordPage() {
   const [searchParams] = useSearchParams()
-  const token = searchParams.get('token') ?? ''
-  const [form, setForm] = useState(initialForm)
+  const [email, setEmail] = useState(searchParams.get('email') ?? '')
+  const [otp, setOtp] = useState('')
+  const [form, setForm] = useState({ newPassword: '', confirmPassword: '' })
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [succeeded, setSucceeded] = useState(false)
-  const [tokenInvalid, setTokenInvalid] = useState(false)
+  const [otpInvalid, setOtpInvalid] = useState(false)
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     setError('')
-    setTokenInvalid(false)
+    setOtpInvalid(false)
 
-    if (form.password.length < 8) {
+    if (!email.trim()) {
+      setError('Email is required')
+      return
+    }
+    if (!otp.trim()) {
+      setError('Enter the OTP code sent to your email')
+      return
+    }
+    if (form.newPassword.length < 8) {
       setError('Password must be at least 8 characters')
       return
     }
-    if (form.password !== form.confirmPassword) {
+    if (form.newPassword !== form.confirmPassword) {
       setError('Password confirmation does not match')
       return
     }
 
     setLoading(true)
     try {
-      await resetPasswordRequest({ token, password: form.password })
+      await resetPasswordRequest({ email: email.trim(), otp: otp.trim(), newPassword: form.newPassword })
       setSucceeded(true)
     } catch (requestError) {
       if (requestError instanceof AuthApiError && (requestError.status === 400 || requestError.status === 401)) {
-        setTokenInvalid(true)
+        setOtpInvalid(true)
       } else {
         setError(requestError instanceof AuthApiError ? requestError.message : 'Unable to reset your password. Please try again.')
       }
@@ -65,16 +69,11 @@ export default function ResetPasswordPage() {
               <div className="entry-content">
                 <div className="woocommerce">
                   <div className="woocommerce-notices-wrapper" />
-                  {!token ? (
-                    <div className="auth-form-message auth-form-message--error">
-                      This reset link is missing its token. Please request a new password reset email.
-                    </div>
-                  ) : null}
-                  {tokenInvalid ? (
+                  {otpInvalid ? (
                     <div className="auth-form-message auth-form-message--error">
                       <p>
-                        This reset link is invalid or has expired. Please{' '}
-                        <Link to="/my-account/lost-password">request a new password reset email</Link>.
+                        This OTP code is invalid or has expired. Please{' '}
+                        <Link to="/my-account/lost-password">request a new one</Link>.
                       </p>
                     </div>
                   ) : null}
@@ -87,17 +86,48 @@ export default function ResetPasswordPage() {
                     </div>
                   ) : (
                     <form method="post" className="woocommerce-ResetPassword reset_password" onSubmit={handleSubmit}>
-                      <p>Enter your new password below.</p>
+                      <p>Enter the OTP code sent to your email and choose a new password.</p>
+                      <p className="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+                        <label htmlFor="reset-email">
+                          Email&nbsp;<span className="required">*</span>
+                        </label>
+                        <input
+                          className="woocommerce-Input woocommerce-Input--text input-text form-control"
+                          type="email"
+                          id="reset-email"
+                          name="email"
+                          autoComplete="email"
+                          value={email}
+                          onChange={(event) => setEmail(event.target.value)}
+                        />
+                      </p>
+
+                      <p className="woocommerce-form-row woocommerce-form-row--wide form-row form-row-wide">
+                        <label htmlFor="reset-otp">
+                          OTP code&nbsp;<span className="required">*</span>
+                        </label>
+                        <input
+                          className="woocommerce-Input woocommerce-Input--text input-text form-control"
+                          type="text"
+                          id="reset-otp"
+                          name="otp"
+                          inputMode="numeric"
+                          autoComplete="one-time-code"
+                          value={otp}
+                          onChange={(event) => setOtp(event.target.value)}
+                        />
+                      </p>
+
                       <p className="woocommerce-form-row woocommerce-form-row--first form-row form-row-first">
                         <label htmlFor="reset-password">
                           New password&nbsp;<span className="required">*</span>
                         </label>
                         <PasswordField
                           id="reset-password"
-                          name="password"
+                          name="newPassword"
                           autoComplete="new-password"
-                          value={form.password}
-                          onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+                          value={form.newPassword}
+                          onChange={(event) => setForm((current) => ({ ...current, newPassword: event.target.value }))}
                         />
                       </p>
 
@@ -121,7 +151,7 @@ export default function ResetPasswordPage() {
                           type="submit"
                           className="woocommerce-Button button btn btn-primary order-btn"
                           value="Reset password"
-                          disabled={loading || !token}
+                          disabled={loading}
                         >
                           {loading ? 'Resetting...' : 'Reset Password'}
                         </button>

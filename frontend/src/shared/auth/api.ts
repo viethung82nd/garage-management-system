@@ -75,7 +75,7 @@ export async function registerRequest(payload: RegisterPayload) {
 }
 
 export async function forgotPasswordRequest(payload: ForgotPasswordPayload) {
-  return requestJson<{ message: string }>('/api/auth/forgot-password', {
+  return requestJson<{ message: string; devCode?: string }>('/api/auth/forgot-password', {
     method: 'POST',
     body: JSON.stringify(payload),
   })

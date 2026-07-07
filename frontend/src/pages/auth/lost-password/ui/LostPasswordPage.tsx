@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { Link } from 'react-router-dom'
 import { AuthApiError, forgotPasswordRequest } from '../../../../shared/auth/api'
 import { usePageMeta } from '../../../../shared/lib/kapa-template'
 import { KapaFooter, KapaNavbar, KapaPageBanner, KapaTopbar } from '../../../../shared/ui/kapa-chrome'
@@ -8,6 +9,7 @@ export default function LostPasswordPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
   const [submittedEmail, setSubmittedEmail] = useState('')
+  const [devCode, setDevCode] = useState('')
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -20,8 +22,9 @@ export default function LostPasswordPage() {
 
     setLoading(true)
     try {
-      await forgotPasswordRequest({ email: email.trim() })
+      const response = await forgotPasswordRequest({ email: email.trim() })
       setSubmittedEmail(email.trim())
+      setDevCode(response.devCode ?? '')
     } catch (requestError) {
       setError(requestError instanceof AuthApiError ? requestError.message : 'Unable to request a password reset. Please try again.')
     } finally {
@@ -51,14 +54,23 @@ export default function LostPasswordPage() {
                   {submittedEmail ? (
                     <div className="auth-form-message auth-form-message--success">
                       <p>
-                        Check your email — if an account exists for <strong>{submittedEmail}</strong>, a password reset link has
-                        been sent. Follow the link in that email to choose a new password.
+                        Check your email — if an account exists for <strong>{submittedEmail}</strong>, an OTP code has been sent.
+                      </p>
+                      {devCode ? (
+                        <p>
+                          Dev mode: your OTP code is <strong>{devCode}</strong>.
+                        </p>
+                      ) : null}
+                      <p>
+                        <Link to={`/my-account/reset-password?email=${encodeURIComponent(submittedEmail)}`}>
+                          Enter your OTP code and choose a new password
+                        </Link>
                       </p>
                     </div>
                   ) : (
                     <form method="post" className="woocommerce-ResetPassword lost_reset_password" onSubmit={handleSubmit}>
                       <p>
-                        Lost your password? Please enter your username or email address. You will receive a link to create a new password via email.
+                        Lost your password? Please enter your email address. You will receive an OTP code to reset it.
                       </p>
                       <p className="woocommerce-form-row woocommerce-form-row--first form-row form-row-first">
                         <label htmlFor="user_login">Username or email</label>
