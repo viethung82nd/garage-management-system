@@ -51,7 +51,7 @@ export function KapaNavbar({
   const isContactActive = activeSection === 'contact'
   const accountRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? accountHref : accountHref
   const logoRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? logoHref : logoHref
-  const ctaLabel = isAuthenticated ? 'Account' : 'Get Free Quote'
+  const ctaLabel = isAuthenticated ? 'Account' : 'Login'
 
   const [categories, setCategories] = useState<ServiceCategoryLite[]>([])
 
@@ -146,7 +146,7 @@ export function KapaNavbar({
                     </div>
                   ) : null}
                   <div className="option-item">
-                    <Link to={isAuthenticated ? accountRoute : contactHref} className="default-btn">
+                    <Link to={isAuthenticated ? accountRoute : accountHref} className="default-btn">
                       {ctaLabel}
                     </Link>
                   </div>
@@ -167,7 +167,7 @@ export function KapaNavbar({
                 </div>
               ) : null}
               <div className="option-item">
-                <Link to={isAuthenticated ? accountRoute : contactHref} className="default-btn">
+                <Link to={isAuthenticated ? accountRoute : accountHref} className="default-btn">
                   {ctaLabel}
                 </Link>
               </div>

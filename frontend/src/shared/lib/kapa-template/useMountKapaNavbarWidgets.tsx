@@ -28,12 +28,12 @@ function renderAccountCta(
     node.appendChild(logoutBtn)
   }
 
-  const contactHref = '/contact-us'
-  const accountRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? contactHref : contactHref
+  const loginHref = '/my-account'
+  const accountRoute = isAuthenticated && user ? getPostLoginPath(user.role) ?? loginHref : loginHref
   const link = document.createElement('a')
-  link.setAttribute('href', isAuthenticated ? accountRoute : contactHref)
+  link.setAttribute('href', isAuthenticated ? accountRoute : loginHref)
   link.className = 'default-btn'
-  link.textContent = isAuthenticated ? 'Account' : 'Get Free Quote'
+  link.textContent = isAuthenticated ? 'Account' : 'Login'
   node.appendChild(link)
 }
 
