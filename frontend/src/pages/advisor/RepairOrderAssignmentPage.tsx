@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { createWorkshopRepairOrder, fetchWorkshopServices, fetchWorkshopTechnicians, updateWorkshopRepairOrder, type ApiService, type ApiTechnician } from '../../shared/api/workshop'
 import { Icon } from '../../shared/ui/base'
 import {
   CustomerVehiclePanel,
@@ -10,48 +11,62 @@ import {
 } from '../../widgets/repair-order-assignment'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
-const initialTasks: ServiceTask[] = [
-  {
-    estimate: '45 phút',
-    id: 'engine-diagnostic',
-    name: 'Chẩn đoán động cơ bằng máy chuyên dụng',
-    parts: 'Không yêu cầu',
-    selected: true,
-  },
-  {
-    estimate: '60 phút',
-    id: 'brake-system',
-    name: 'Kiểm tra phanh, đĩa phanh và dầu phanh',
-    parts: 'Dầu phanh DOT 4, vệ sinh cụm phanh',
-    selected: true,
-  },
-  {
-    estimate: '30 phút',
-    id: 'oil-filter',
-    name: 'Thay dầu động cơ và lọc dầu',
-    parts: 'Mobil 1 ESP X3 0W-40, lọc OEM',
+function mapServiceTask(service: ApiService): ServiceTask {
+  return {
+    estimate: `${service.estimatedDuration || 45} phút`,
+    id: service._id || service.id || crypto.randomUUID(),
+    name: service.name || 'Dịch vụ chưa đặt tên',
+    parts: service.category || 'Theo cấu hình dịch vụ',
     selected: false,
-  },
-  {
-    estimate: '40 phút',
-    id: 'wheel-balance',
-    name: 'Cân bằng động và kiểm tra lốp',
-    parts: 'Chì cân bằng, van lốp',
-    selected: false,
-  },
-]
+  }
+}
 
-const technicians: Technician[] = [
-  { activeOrders: 1, id: 'tech-minh', name: 'Nguyễn Minh', skill: 'Chẩn đoán động cơ, xe Đức', status: 'available' },
-  { activeOrders: 2, id: 'tech-huy', name: 'Trần Quang Huy', skill: 'Phanh, gầm, hệ thống treo', status: 'busy' },
-  { activeOrders: 0, id: 'tech-lan', name: 'Lê Lan Chi', skill: 'Bảo dưỡng nhanh, điện thân xe', status: 'available' },
-  { activeOrders: 0, id: 'tech-phuc', name: 'Phạm Gia Phúc', skill: 'Hộp số tự động', status: 'offline' },
-]
+function mapTechnician(technician: ApiTechnician): Technician {
+  return {
+    activeOrders: technician.activeOrders || 0,
+    id: technician._id || technician.id || crypto.randomUUID(),
+    name: technician.fullName || technician.email || 'Kỹ thuật viên',
+    skill: technician.skill || 'Chưa cập nhật kỹ năng',
+    status: technician.status === 'busy' ? 'busy' : technician.status === 'off' || technician.status === 'offline' ? 'offline' : 'available',
+  }
+}
 
 export function RepairOrderAssignmentPage() {
-  const [tasks, setTasks] = useState(initialTasks)
-  const [selectedTechnicianId, setSelectedTechnicianId] = useState('tech-minh')
+  const [tasks, setTasks] = useState<ServiceTask[]>([])
+  const [technicians, setTechnicians] = useState<Technician[]>([])
+  const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
   const [saved, setSaved] = useState(false)
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
+
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadAssignmentData() {
+      setApiMessage(undefined)
+      try {
+        const [services, technicianList] = await Promise.all([fetchWorkshopServices(), fetchWorkshopTechnicians()])
+        if (cancelled) return
+
+        const serviceTasks = services.map(mapServiceTask)
+        const nextTechnicians = technicianList.map(mapTechnician)
+        setTasks(serviceTasks)
+        setTechnicians(nextTechnicians)
+        setSelectedTechnicianId(nextTechnicians[0]?.id || '')
+      } catch (err) {
+        if (!cancelled) {
+          setApiMessage(err instanceof Error ? err.message : 'Không tải được dịch vụ/kỹ thuật viên từ API')
+        }
+      }
+    }
+
+    void loadAssignmentData()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const selectedTasks = useMemo(() => tasks.filter((task) => task.selected), [tasks])
   const selectedTechnician = technicians.find((tech) => tech.id === selectedTechnicianId)
@@ -66,13 +81,26 @@ export function RepairOrderAssignmentPage() {
     setSelectedTechnicianId(id)
   }
 
-  function createRepairOrder() {
-    setSaved(true)
+  async function createRepairOrder() {
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      const created = await createWorkshopRepairOrder({ services: selectedTasks.map((task) => ({ serviceId: task.id, quantity: 1 })), technicianId: selectedTechnicianId })
+      const id = created._id || created.id
+      if (id && selectedTechnicianId) await updateWorkshopRepairOrder(id, { technicianId: selectedTechnicianId, status: 'pending' })
+      setSaved(true)
+      setApiMessage('Đã tạo lệnh sửa chữa và gửi phân công qua API.')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không tạo được lệnh sửa chữa')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
-    <ServiceAdvisorShell active="work-orders" title="Tạo lệnh sửa chữa & phân công">
+    <ServiceAdvisorShell active="work-orders" title="Táº¡o lá»‡nh sá»­a chá»¯a & phÃ¢n cÃ´ng">
       <div className="space-y-7">
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
         <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
           <div className="absolute right-8 top-8 hidden text-[#ba0013]/10 lg:block">
             <Icon className="h-32 w-32" name="clipboard" />
@@ -80,21 +108,22 @@ export function RepairOrderAssignmentPage() {
           <div className="relative z-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
             <div>
               <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Create Repair Order</p>
-              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Tạo lệnh sửa chữa từ hồ sơ tiếp nhận</h2>
+              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Táº¡o lá»‡nh sá»­a chá»¯a tá»« há»“ sÆ¡ tiáº¿p nháº­n</h2>
               <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
-                Service Advisor chọn hạng mục dịch vụ, kiểm tra thời lượng dự kiến và phân công kỹ thuật viên phù hợp trước khi chuyển lệnh vào xưởng.
+                Service Advisor chá»n háº¡ng má»¥c dá»‹ch vá»¥, kiá»ƒm tra thá»i lÆ°á»£ng dá»± kiáº¿n vÃ  phÃ¢n cÃ´ng ká»¹ thuáº­t viÃªn phÃ¹ há»£p trÆ°á»›c khi chuyá»ƒn lá»‡nh vÃ o xÆ°á»Ÿng.
               </p>
             </div>
             <div className="border border-[#efeded] bg-[#fbf9f8] p-5">
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#6a6767]">Trạng thái</p>
-              <p className="mt-2 text-2xl font-black text-[#ba0013]">{saved ? 'Đã tạo lệnh' : 'Đang soạn'}</p>
-              <p className="mt-1 text-sm font-semibold text-[#6a6767]">Nguồn: Booking #BK-0882</p>
+              <p className="font-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#6a6767]">Tráº¡ng thÃ¡i</p>
+              <p className="mt-2 text-2xl font-black text-[#ba0013]">{saved ? 'ÄÃ£ táº¡o lá»‡nh' : 'Äang soáº¡n'}</p>
+              <p className="mt-1 text-sm font-semibold text-[#6a6767]">Nguá»“n: Booking #BK-0882</p>
             </div>
           </div>
         </section>
 
         <div className="grid items-start gap-7 xl:grid-cols-[minmax(0,1fr)_380px]">
           <div className="space-y-7">
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
             <CustomerVehiclePanel />
 
             <div className="grid gap-7 lg:grid-cols-2">
@@ -108,18 +137,19 @@ export function RepairOrderAssignmentPage() {
 
             <section className="flex flex-col gap-4 border border-[#efeded] bg-white p-6 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <p className="text-lg font-black text-[#171717]">Sẵn sàng chuyển lệnh cho xưởng</p>
+                <p className="text-lg font-black text-[#171717]">Sáºµn sÃ ng chuyá»ƒn lá»‡nh cho xÆ°á»Ÿng</p>
                 <p className="mt-1 text-sm font-semibold text-[#6a6767]">
-                  {selectedTasks.length} hạng mục được chọn, phân công cho {selectedTechnician?.name}.
+                  {selectedTasks.length} háº¡ng má»¥c Ä‘Æ°á»£c chá»n, phÃ¢n cÃ´ng cho {selectedTechnician?.name || 'chưa chọn KTV'}.
                 </p>
               </div>
               <button
                 className="inline-flex min-h-12 items-center justify-center gap-3 bg-[#ba0013] px-6 text-sm font-black uppercase text-white transition hover:bg-[#94000f]"
+                disabled={saving || !selectedTasks.length || !selectedTechnicianId}
                 onClick={createRepairOrder}
                 type="button"
               >
                 <Icon name="check" />
-                Tạo lệnh & phân công
+                {saving ? 'Đang tạo...' : 'Tạo lệnh & phân công'}
               </button>
             </section>
           </div>

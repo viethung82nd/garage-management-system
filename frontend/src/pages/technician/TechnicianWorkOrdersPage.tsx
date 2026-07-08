@@ -1,5 +1,6 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
 import { useAuth } from '../../shared/auth'
+import { fetchWorkshopRepairOrders, orderId, personName, updateWorkshopRepairProgress, unwrapArray, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
 import { TechnicianShell } from '../../widgets/technician-shell'
 import { Icon, type IconName } from '../../shared/ui/base'
 
@@ -19,61 +20,6 @@ type WorkOrder = {
   status: WorkOrderStatus
   vehicle: string
 }
-
-const initialOrders: WorkOrder[] = [
-  {
-    bay: 'Cầu nâng 01',
-    customer: 'Alex Nguyễn',
-    duration: 90,
-    id: 'RO-2026-0882',
-    note: 'Khách báo rung vô lăng khi phanh tốc độ cao. Cần chụp ảnh má phanh trước khi tháo.',
-    plate: '51K-882.88',
-    priority: 'high',
-    service: 'Kiểm tra phanh & rung vô lăng',
-    start: '09:00',
-    status: 'in-progress',
-    vehicle: 'BMW M4 Competition',
-  },
-  {
-    bay: 'Cầu nâng 01',
-    customer: 'Sarah Trần',
-    duration: 75,
-    id: 'RO-2026-0885',
-    note: 'Đã có phụ tùng trong kho. Kiểm tra lại tình trạng đĩa phanh trước khi xác nhận thay.',
-    plate: '30F-686.01',
-    priority: 'medium',
-    service: 'Phục hồi hệ thống phanh',
-    start: '10:45',
-    status: 'assigned',
-    vehicle: 'Audi RS6 Avant',
-  },
-  {
-    bay: 'Khu nhanh',
-    customer: 'David Lê',
-    duration: 45,
-    id: 'RO-2026-0889',
-    note: 'Khách chờ tại lounge, ưu tiên hoàn thành trong ngày.',
-    plate: '29A-404.95',
-    priority: 'medium',
-    service: 'Thay dầu & lọc dầu',
-    start: '13:30',
-    status: 'assigned',
-    vehicle: 'Toyota GR Supra',
-  },
-  {
-    bay: 'Cầu nâng 02',
-    customer: 'Phạm Hoàng',
-    duration: 60,
-    id: 'RO-2026-0891',
-    note: 'Kiểm tra tiếng kêu gầm bên phải khi qua gờ giảm tốc.',
-    plate: '51H-888.20',
-    priority: 'low',
-    service: 'Chẩn đoán tiếng kêu gầm',
-    start: '15:00',
-    status: 'assigned',
-    vehicle: 'VinFast Lux A2.0',
-  },
-]
 
 const timeBlocks = ['08:00', '09:00', '10:45', '13:30', '15:00', '16:30']
 
@@ -107,6 +53,40 @@ function priorityLabel(priority: Priority) {
     low: 'Thường',
     medium: 'Nên làm',
   }[priority]
+}
+
+function mapOrderStatus(status?: string): WorkOrderStatus {
+  if (status === 'completed') return 'completed'
+  if (status === 'inProgress' || status === 'in-progress') return 'in-progress'
+  if (status === 'paused' || status === 'cancelled') return 'paused'
+  return 'assigned'
+}
+
+function mapRepairOrder(order: ApiRepairOrder, index: number): WorkOrder {
+  const vehicle = order.vehicleId || order.vehicle
+  const services = order.services || []
+  const firstService = services[0]
+  const serviceName = typeof firstService?.serviceId === 'object' ? firstService.serviceId.name : firstService?.name
+
+  return {
+    bay: `Cầu nâng ${String((index % 4) + 1).padStart(2, '0')}`,
+    customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Khách hàng'),
+    duration: services.reduce((sum, item) => sum + ((typeof item.serviceId === 'object' ? item.serviceId.estimatedDuration : 0) || 45) * (item.quantity || 1), 0) || 45,
+    id: orderId(order),
+    note: order.stepNotes?.at(-1)?.content || 'Chưa có ghi chú kỹ thuật.',
+    plate: vehiclePlate(vehicle),
+    priority: index === 0 ? 'high' : 'medium',
+    service: serviceName || 'Lệnh sửa chữa',
+    start: order.startedAt ? new Date(order.startedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : timeBlocks[index % timeBlocks.length],
+    status: mapOrderStatus(order.status),
+    vehicle: vehicleName(vehicle),
+  }
+}
+
+function mapUiStatus(status: WorkOrderStatus) {
+  if (status === 'in-progress') return 'inProgress'
+  if (status === 'completed') return 'completed'
+  return 'pending'
 }
 
 function SummaryCard({ icon, label, value }: { icon: IconName; label: string; value: string }) {
@@ -212,21 +192,66 @@ function Timeline({ orders }: { orders: WorkOrder[] }) {
 export function TechnicianWorkOrdersPage() {
   const { user } = useAuth()
   const technicianName = user?.fullName || user?.email || 'Kỹ thuật viên'
-  const [orders, setOrders] = useState(initialOrders)
-  const [selectedOrderId, setSelectedOrderId] = useState(initialOrders[0].id)
+  const [orders, setOrders] = useState<WorkOrder[]>([])
+  const [selectedOrderId, setSelectedOrderId] = useState('')
+  const [apiOrders, setApiOrders] = useState<ApiRepairOrder[]>([])
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
 
-  const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? orders[0]
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadOrders() {
+      setApiMessage(undefined)
+      try {
+        const query = user?._id || user?.id ? `?technicianId=${user._id || user.id}` : ''
+        const response = await fetchWorkshopRepairOrders(query)
+        const liveOrders = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
+        const mappedOrders = liveOrders.map(mapRepairOrder)
+        if (!cancelled) {
+          setApiOrders(liveOrders)
+          setOrders(mappedOrders)
+          setSelectedOrderId((current) => current || mappedOrders[0]?.id || '')
+        }
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được lệnh được giao từ API')
+      }
+    }
+
+    void loadOrders()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?._id, user?.id])
+  const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? orders[0] ?? { bay: '', customer: '', duration: 0, id: 'Chưa chọn lệnh', note: '', plate: '', priority: 'low' as Priority, service: '', start: '--:--', status: 'assigned' as WorkOrderStatus, vehicle: '' }
   const totalMinutes = orders.reduce((sum, order) => sum + order.duration, 0)
   const completedCount = orders.filter((order) => order.status === 'completed').length
   const inProgressCount = orders.filter((order) => order.status === 'in-progress').length
 
-  function updateSelectedStatus(status: WorkOrderStatus) {
-    setOrders((current) => current.map((order) => (order.id === selectedOrder.id ? { ...order, status } : order)))
+  async function updateSelectedStatus(status: WorkOrderStatus) {
+    if (!orders.length) return
+
+    setSaving(true)
+    setApiMessage(undefined)
+
+    try {
+      const apiOrder = apiOrders.find((order) => orderId(order) === selectedOrder.id)
+      const requestId = apiOrder?._id || apiOrder?.id || selectedOrder.id
+      await updateWorkshopRepairProgress(requestId, { status: mapUiStatus(status) })
+      setOrders((current) => current.map((order) => (order.id === selectedOrder.id ? { ...order, status } : order)))
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được trạng thái lệnh')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
     <TechnicianShell active="work-orders" eyebrow="Technician Workspace" notificationCount={4} title="Lịch cá nhân & lệnh được phân công">
       <div className="space-y-7">
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
         <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
           <div className="grid gap-6 xl:grid-cols-[1fr_320px] xl:items-center">
             <div>
@@ -253,6 +278,7 @@ export function TechnicianWorkOrdersPage() {
 
         <div className="grid items-start gap-7 xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="space-y-7">
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
             <Timeline orders={orders} />
 
             <section className="space-y-4">
@@ -260,9 +286,9 @@ export function TechnicianWorkOrdersPage() {
                 <h3 className="text-xl font-black text-[#171717]">Danh sách lệnh được phân công</h3>
                 <p className="mt-1 text-sm font-semibold text-[#6a6767]">Chọn một lệnh để xem chi tiết và cập nhật trạng thái.</p>
               </div>
-              {orders.map((order) => (
+              {orders.length ? orders.map((order) => (
                 <WorkOrderCard active={order.id === selectedOrder.id} key={order.id} onSelect={() => setSelectedOrderId(order.id)} order={order} />
-              ))}
+              )) : <div className="border border-[#efeded] bg-white p-6 text-sm font-bold text-[#6a6767]">Chưa có lệnh được giao từ API.</div>}
             </section>
           </div>
 
@@ -287,14 +313,14 @@ export function TechnicianWorkOrdersPage() {
             <section className="border border-[#efeded] bg-white p-6">
               <h3 className="text-lg font-black text-[#171717]">Cập nhật trạng thái</h3>
               <div className="mt-4 space-y-3">
-                <button className="flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#94000f]" onClick={() => updateSelectedStatus('in-progress')} type="button">
+                <button className="flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#94000f]" disabled={saving} onClick={() => updateSelectedStatus('in-progress')} type="button">
                   <Icon name="bolt" />
                   Bắt đầu / tiếp tục
                 </button>
-                <button className="flex min-h-12 w-full items-center justify-center gap-3 border border-[#d8d5d5] px-5 text-sm font-black uppercase text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" onClick={() => updateSelectedStatus('paused')} type="button">
+                <button className="flex min-h-12 w-full items-center justify-center gap-3 border border-[#d8d5d5] px-5 text-sm font-black uppercase text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" disabled={saving} onClick={() => updateSelectedStatus('paused')} type="button">
                   Tạm dừng
                 </button>
-                <button className="flex min-h-12 w-full items-center justify-center gap-3 border border-green-600 px-5 text-sm font-black uppercase text-green-700 transition hover:bg-green-50" onClick={() => updateSelectedStatus('completed')} type="button">
+                <button className="flex min-h-12 w-full items-center justify-center gap-3 border border-green-600 px-5 text-sm font-black uppercase text-green-700 transition hover:bg-green-50" disabled={saving} onClick={() => updateSelectedStatus('completed')} type="button">
                   <Icon name="check" />
                   Đánh dấu hoàn thành
                 </button>
@@ -311,7 +337,3 @@ export function TechnicianWorkOrdersPage() {
     </TechnicianShell>
   )
 }
-
-
-
-

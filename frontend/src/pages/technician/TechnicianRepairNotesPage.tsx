@@ -1,6 +1,7 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getUserInitials, useAuth } from '../../shared/auth'
+import { addWorkshopStepNote, fetchWorkshopRepairOrders, orderId, unwrapArray, updateWorkshopRepairProgress, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
 import { TechnicianShell } from '../../widgets/technician-shell'
 import { Icon, type IconName } from '../../shared/ui/base'
 
@@ -29,97 +30,47 @@ type RepairStep = {
   title: string
 }
 
-const initialSteps: RepairStep[] = [
-  {
-    checklist: ['Đối chiếu biển số và số RO', 'Chụp ảnh tổng thể trước sửa chữa', 'Khóa vô lăng và kiểm tra odo'],
-    completedAt: '09:10',
-    estimate: '10 phút',
-    evidences: [
-      { label: 'Ảnh tổng thể', note: 'Đã chụp 4 góc thân xe trước khi nâng.' },
-      { label: 'ODO', note: '42.180 km, không có đèn cảnh báo mới.' },
-    ],
-    id: 'receive-car',
-    materials: [],
-    metrics: [
-      { label: 'ODO', unit: 'km', value: '42.180' },
-      { label: 'Nhiên liệu', unit: '%', value: '58' },
-    ],
-    order: 1,
-    owner: 'Kỹ thuật viên',
-    startedAt: '09:00',
-    status: 'completed',
-    summary: 'Xe đã được đưa vào cầu nâng 01, tình trạng ngoại thất khớp phiếu kiểm tra ban đầu.',
-    title: 'Tiếp nhận xe tại cầu nâng',
-  },
-  {
-    checklist: ['Tháo bánh trước bên trái', 'Đo độ dày má phanh', 'Kiểm tra bề mặt đĩa phanh', 'Ghi nhận rung khi quay bánh'],
-    estimate: '35 phút',
-    evidences: [
-      { label: 'Má phanh trước trái', note: 'Cần chụp cận cảnh sau khi tháo bánh.' },
-      { label: 'Đĩa phanh', note: 'Ghi lại vết xước nếu vượt ngưỡng.' },
-    ],
-    id: 'front-brake-check',
-    materials: [
-      { name: 'Dung dịch vệ sinh phanh', qty: '1 chai' },
-      { name: 'Găng tay kỹ thuật', qty: '1 bộ' },
-    ],
-    metrics: [
-      { label: 'Má phanh trái', status: 'warning', unit: 'mm', value: '2.8' },
-      { label: 'Má phanh phải', status: 'warning', unit: 'mm', value: '3.1' },
-      { label: 'Đĩa phanh', unit: 'mm', value: '30.2' },
-    ],
-    order: 2,
-    owner: 'Kỹ thuật viên',
-    startedAt: '09:12',
-    status: 'active',
-    summary: 'Đang kiểm tra hệ thống phanh trước do khách báo rung vô lăng khi phanh ở tốc độ cao.',
-    title: 'Kiểm tra phanh trước',
-  },
-  {
-    checklist: ['Tháo cụm má phanh', 'Đo độ đảo đĩa phanh', 'Vệ sinh cùm phanh', 'Báo cố vấn nếu cần thay thêm đĩa'],
-    estimate: '45 phút',
-    evidences: [
-      { label: 'Cùm phanh', note: 'Chưa thực hiện.' },
-      { label: 'Phiếu đo', note: 'Chờ nhập chỉ số độ đảo.' },
-    ],
-    id: 'remove-pad-measure',
-    materials: [
-      { name: 'Má phanh trước BMW M4', qty: '1 bộ' },
-      { name: 'Keo chống ồn má phanh', qty: '1 tuýp' },
-    ],
-    metrics: [
-      { label: 'Độ đảo đĩa', unit: 'mm', value: 'Chờ đo' },
-      { label: 'Torque bánh', unit: 'Nm', value: '140' },
-    ],
-    order: 3,
-    owner: 'Kỹ thuật viên',
-    status: 'waiting',
-    summary: 'Bước tiếp theo sau khi cố vấn xác nhận thay má phanh trước.',
-    title: 'Tháo má phanh và đo độ mòn',
-  },
-  {
-    checklist: ['Lắp má phanh mới', 'Siết lực đúng tiêu chuẩn', 'Xóa bụi phanh', 'Chạy thử và kiểm tra tiếng ồn'],
-    estimate: '50 phút',
-    evidences: [
-      { label: 'Ảnh sau lắp', note: 'Chưa thực hiện.' },
-      { label: 'Biên bản chạy thử', note: 'Chưa thực hiện.' },
-    ],
-    id: 'install-test-drive',
-    materials: [
-      { name: 'Má phanh trước BMW M4', qty: '1 bộ' },
-      { name: 'Khăn lau kỹ thuật', qty: '2 cái' },
-    ],
-    metrics: [
-      { label: 'Quãng đường chạy thử', unit: 'km', value: 'Chờ chạy' },
-      { label: 'Rung vô lăng', unit: '', value: 'Chờ xác nhận' },
-    ],
-    order: 4,
-    owner: 'Kỹ thuật viên',
-    status: 'waiting',
-    summary: 'Hoàn thiện sửa chữa và ghi nhận kết quả chạy thử trước khi bàn giao lại cho SA.',
-    title: 'Lắp má phanh mới và chạy thử',
-  },
-]
+const emptyStep: RepairStep = {
+  checklist: [],
+  estimate: '0 phút',
+  evidences: [],
+  id: '',
+  materials: [],
+  metrics: [],
+  order: 0,
+  owner: 'Kỹ thuật viên',
+  status: 'waiting',
+  summary: 'Chưa có bước sửa chữa từ API.',
+  title: 'Chưa có dữ liệu',
+}
+
+function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
+  const services = order.services?.length ? order.services : [{ name: 'Kiểm tra và sửa chữa', quantity: 1 }]
+  const notes = order.stepNotes || []
+
+  return services.map((service, index) => {
+    const apiService = typeof service.serviceId === 'object' ? service.serviceId : undefined
+    const note = notes[index]
+    const completed = order.status === 'completed'
+    const active = !completed && (order.status === 'inProgress' || order.status === 'in-progress') && index === 0
+
+    return {
+      checklist: ['Xác nhận đúng hạng mục', 'Thực hiện theo quy trình kỹ thuật', 'Ghi nhận kết quả và bằng chứng'],
+      completedAt: completed ? order.completedAt ? new Date(order.completedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Đã xong' : undefined,
+      estimate: String(apiService?.estimatedDuration || 45) + ' phút',
+      evidences: [{ label: 'Ảnh kỹ thuật', note: 'Tải ảnh từ phiếu kiểm tra của lệnh sửa chữa.' }],
+      id: (typeof service.serviceId === 'string' ? service.serviceId : apiService?._id || apiService?.id) || 'service-' + index,
+      materials: [],
+      metrics: [],
+      order: index + 1,
+      owner: 'Kỹ thuật viên',
+      startedAt: active && order.startedAt ? new Date(order.startedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : undefined,
+      status: completed ? 'completed' : active ? 'active' : 'waiting',
+      summary: note?.content || 'Chưa có ghi chú cho hạng mục này.',
+      title: apiService?.name || service.name || 'Hạng mục sửa chữa',
+    }
+  })
+}
 
 const statusLabels: Record<RepairStepStatus, string> = {
   active: 'Đang thực hiện',
@@ -186,18 +137,22 @@ function StepButton({ active, onSelect, ownerName, step }: { active: boolean; on
 
 function StepDetail({
   checkedItems,
+  disabled,
   note,
   onComplete,
   onNoteChange,
+  onSave,
   onStart,
   onToggleChecklist,
   step,
   technicianInitials,
 }: {
   checkedItems: string[]
+  disabled: boolean
   note: string
   onComplete: () => void
   onNoteChange: (value: string) => void
+  onSave: () => void
   onStart: () => void
   onToggleChecklist: (item: string) => void
   step: RepairStep
@@ -256,7 +211,7 @@ function StepDetail({
             <Icon name="bolt" />
             Bắt đầu
           </button>
-          <button className="flex min-h-12 items-center justify-center gap-3 bg-[#ba0013] px-4 text-sm font-black uppercase text-white transition hover:bg-[#94000f]" type="button">
+          <button className="flex min-h-12 items-center justify-center gap-3 bg-[#ba0013] px-4 text-sm font-black uppercase text-white transition hover:bg-[#94000f] disabled:opacity-60" disabled={disabled} onClick={onSave} type="button">
             <Icon name="clipboard" />
             Lưu ghi chú
           </button>
@@ -274,23 +229,51 @@ export function TechnicianRepairNotesPage() {
   const { user } = useAuth()
   const technicianInitials = getUserInitials(user)
   const technicianName = user?.fullName || user?.email || 'Kỹ thuật viên'
-  const [steps, setSteps] = useState(initialSteps)
-  const [selectedStepId, setSelectedStepId] = useState(initialSteps[1].id)
-  const [notes, setNotes] = useState<Record<string, string>>({
-    'front-brake-check': 'Má phanh trước mòn không đều, bên trái thấp hơn bên phải. Cần báo SA đề xuất thay má phanh trước và kiểm tra độ đảo đĩa phanh trước khi lắp mới.',
-    'receive-car': 'Xe vào cầu nâng đúng lịch, ngoại thất khớp ảnh nhận xe. Không phát sinh cảnh báo trên tablo.',
-  })
-  const [checkedByStep, setCheckedByStep] = useState<Record<string, string[]>>({
-    'front-brake-check': ['Tháo bánh trước bên trái', 'Đo độ dày má phanh'],
-    'receive-car': initialSteps[0].checklist,
-  })
+  const [repairOrder, setRepairOrder] = useState<ApiRepairOrder>()
+  const [steps, setSteps] = useState<RepairStep[]>([])
+  const [selectedStepId, setSelectedStepId] = useState('')
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [checkedByStep, setCheckedByStep] = useState<Record<string, string[]>>({})
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
 
-  const selectedStep = steps.find((step) => step.id === selectedStepId) ?? steps[0]
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadRepairOrder() {
+      setApiMessage(undefined)
+      try {
+        const userId = user?._id || user?.id
+        const response = await fetchWorkshopRepairOrders(userId ? '?technicianId=' + encodeURIComponent(userId) : '')
+        const order = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])[0]
+        if (!cancelled && order) {
+          const nextSteps = mapRepairSteps(order)
+          setRepairOrder(order)
+          setSteps(nextSteps)
+          setSelectedStepId(nextSteps.find((step) => step.status === 'active')?.id || nextSteps[0]?.id || '')
+          setNotes(Object.fromEntries(nextSteps.map((step) => [step.id, step.summary === 'Chưa có ghi chú cho hạng mục này.' ? '' : step.summary])))
+        }
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được ghi chú sửa chữa từ API')
+      }
+    }
+
+    void loadRepairOrder()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?._id, user?.id])
+
+  const selectedStep = steps.find((step) => step.id === selectedStepId) ?? steps[0] ?? emptyStep
   const completedCount = steps.filter((step) => step.status === 'completed').length
   const activeCount = steps.filter((step) => step.status === 'active').length
   const checkedItems = checkedByStep[selectedStep.id] ?? []
   const note = notes[selectedStep.id] ?? ''
-  const progress = Math.round((completedCount / steps.length) * 100)
+  const progress = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
+  const currentVehicle = repairOrder?.vehicleId || repairOrder?.vehicle
+  const repairOrderLabel = repairOrder ? orderId(repairOrder) : 'Chưa có lệnh'
+  const repairVehicleLabel = repairOrder ? vehicleName(currentVehicle) + ' - ' + vehiclePlate(currentVehicle) : 'Chưa có xe được giao'
 
   const totalEvidence = useMemo(() => steps.reduce((sum, step) => sum + step.evidences.length, 0), [steps])
 
@@ -313,14 +296,46 @@ export function TechnicianRepairNotesPage() {
     )
   }
 
-  function completeSelectedStep() {
-    updateStepStatus('completed')
+  async function persistStepStatus(status: RepairStepStatus) {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !selectedStep.id) return
+
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      await updateWorkshopRepairProgress(repairOrderId, { status: status === 'active' ? 'inProgress' : status === 'completed' ? 'completed' : 'pending', stepId: selectedStep.id })
+      updateStepStatus(status)
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được tiến độ bước sửa chữa')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function completeSelectedStep() {
+    await persistStepStatus('completed')
     setSteps((current) =>
       current.map((step) => {
         const nextWaiting = step.order === selectedStep.order + 1 && step.status === 'waiting'
         return nextWaiting ? { ...step, startedAt: nowTime(), status: 'active' } : step
       }),
     )
+  }
+
+  async function saveSelectedNote() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !selectedStep.id) return
+
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      await addWorkshopStepNote(repairOrderId, { checklist: checkedItems, content: note, stepId: selectedStep.id })
+      setApiMessage('Đã lưu ghi chú bước sửa chữa qua API.')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không lưu được ghi chú sửa chữa')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function toggleChecklist(item: string) {
@@ -335,11 +350,12 @@ export function TechnicianRepairNotesPage() {
   return (
     <TechnicianShell active="repair-notes" eyebrow="Technician Repair Notes" notificationCount={2} title="Ghi chú sửa chữa từng bước">
       <div className="space-y-7">
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
         <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
           <div className="grid gap-6 xl:grid-cols-[1fr_340px] xl:items-center">
             <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">RO-2026-0882 - 51K-882.88</p>
-              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Ghi chú sửa chữa BMW M4 Competition</h2>
+              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">{repairOrderLabel}</p>
+              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Ghi chú sửa chữa {repairVehicleLabel}</h2>
               <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
                 Kỹ thuật viên cập nhật từng bước thực hiện, chỉ số đo, vật tư đã dùng và bằng chứng trước khi cố vấn dịch vụ gửi kết quả cho khách hàng.
               </p>
@@ -433,10 +449,12 @@ export function TechnicianRepairNotesPage() {
 
           <StepDetail
             checkedItems={checkedItems}
+            disabled={saving}
             note={note}
-            onComplete={completeSelectedStep}
+            onComplete={() => { void completeSelectedStep() }}
             onNoteChange={(value) => setNotes((current) => ({ ...current, [selectedStep.id]: value }))}
-            onStart={() => updateStepStatus('active')}
+            onSave={() => { void saveSelectedNote() }}
+            onStart={() => { void persistStepStatus('active') }}
             onToggleChecklist={toggleChecklist}
             step={selectedStep}
             technicianInitials={technicianInitials}

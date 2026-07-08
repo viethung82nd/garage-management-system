@@ -1,4 +1,5 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal } from '../../shared/api/workshop'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -19,51 +20,6 @@ type ExtraServiceProposal = {
   technician: string
 }
 
-const initialProposals: ExtraServiceProposal[] = [
-  {
-    affectedPart: 'Cụm phanh trước',
-    customerImpact: 'Nếu tiếp tục sử dụng có thể gây rung vô lăng và tăng quãng đường phanh.',
-    estimateMinutes: 75,
-    evidenceCount: 4,
-    id: 'brake-pad-front',
-    laborCost: 650000,
-    partsCost: 2450000,
-    priority: 'high',
-    reason: 'Má phanh trước mòn không đều, đĩa phanh có rãnh sâu ở mép ngoài.',
-    serviceName: 'Thay má phanh trước & láng đĩa phanh',
-    status: 'pending',
-    technician: 'Nguyễn Minh',
-  },
-  {
-    affectedPart: 'Lọc gió động cơ',
-    customerImpact: 'Hiệu suất nạp khí giảm, xe hao nhiên liệu hơn khi chạy đô thị.',
-    estimateMinutes: 20,
-    evidenceCount: 2,
-    id: 'air-filter',
-    laborCost: 120000,
-    partsCost: 480000,
-    priority: 'medium',
-    reason: 'Lọc gió bẩn, có nhiều bụi mịn và lá khô bám ở khe lọc.',
-    serviceName: 'Thay lọc gió động cơ',
-    status: 'sent',
-    technician: 'Lê Lan Chi',
-  },
-  {
-    affectedPart: 'Gầm xe bên phải',
-    customerImpact: 'Cần kiểm tra thêm để tránh tiếng kêu khi qua gờ giảm tốc.',
-    estimateMinutes: 45,
-    evidenceCount: 3,
-    id: 'suspension-bushing',
-    laborCost: 420000,
-    partsCost: 980000,
-    priority: 'low',
-    reason: 'Cao su càng A có dấu hiệu nứt nhẹ, chưa cần thay ngay nhưng nên báo khách.',
-    serviceName: 'Kiểm tra và thay cao su càng A phải',
-    status: 'pending',
-    technician: 'Trần Quang Huy',
-  },
-]
-
 const evidenceTiles = [
   { label: 'Ảnh má phanh', tone: 'bg-[#1b1c1c]' },
   { label: 'Ảnh đĩa phanh', tone: 'bg-[#ba0013]' },
@@ -75,6 +31,24 @@ const statusLabels: Record<ProposalStatus, string> = {
   pending: 'Chờ SA xử lý',
   rejected: 'Đã từ chối',
   sent: 'Đã gửi khách',
+}
+
+
+function mapProposal(proposal: ApiAdditionalServiceProposal): ExtraServiceProposal {
+  return {
+    affectedPart: proposal.affectedPart || 'Chưa cập nhật hạng mục',
+    customerImpact: proposal.customerImpact || 'Chưa có mô tả tác động khách hàng.',
+    estimateMinutes: proposal.estimateMinutes || 0,
+    evidenceCount: proposal.evidenceCount || 0,
+    id: proposal._id || proposal.id || crypto.randomUUID(),
+    laborCost: proposal.laborCost || 0,
+    partsCost: proposal.partsCost || 0,
+    priority: proposal.priority || 'medium',
+    reason: proposal.reason || 'Chưa có lý do đề xuất.',
+    serviceName: proposal.serviceName || 'Dịch vụ phát sinh',
+    status: proposal.status || 'pending',
+    technician: personName(proposal.technician, 'Kỹ thuật viên'),
+  }
 }
 
 function formatMoney(value: number) {
@@ -180,9 +154,11 @@ function ProposalCard({
 }
 
 function ProposalDetail({
+  disabled,
   onStatusChange,
   proposal,
 }: {
+  disabled: boolean
   onStatusChange: (status: ProposalStatus) => void
   proposal: ExtraServiceProposal
 }) {
@@ -235,6 +211,7 @@ function ProposalDetail({
         <h3 className="text-lg font-black text-[#171717]">Thao tác của Service Advisor</h3>
         <div className="mt-4 space-y-3">
           <button
+            disabled={disabled}
             className="flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#94000f]"
             onClick={() => onStatusChange('sent')}
             type="button"
@@ -243,6 +220,7 @@ function ProposalDetail({
             Gửi báo giá cho khách
           </button>
           <button
+            disabled={disabled}
             className="flex min-h-12 w-full items-center justify-center gap-3 border border-[#ba0013] px-5 text-sm font-black uppercase text-[#ba0013] transition hover:bg-[#fff1f1]"
             onClick={() => onStatusChange('approved')}
             type="button"
@@ -251,6 +229,7 @@ function ProposalDetail({
             Duyệt bổ sung vào lệnh
           </button>
           <button
+            disabled={disabled}
             className="flex min-h-12 w-full items-center justify-center gap-3 border border-[#d8d5d5] px-5 text-sm font-black uppercase text-[#555151] transition hover:border-[#ba0013] hover:text-[#ba0013]"
             onClick={() => onStatusChange('rejected')}
             type="button"
@@ -264,8 +243,34 @@ function ProposalDetail({
 }
 
 export function AdditionalServiceSuggestionPage() {
-  const [proposals, setProposals] = useState(initialProposals)
-  const [selectedId, setSelectedId] = useState(initialProposals[0].id)
+  const [proposals, setProposals] = useState<ExtraServiceProposal[]>([])
+  const [selectedId, setSelectedId] = useState('')
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
+
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadProposals() {
+      setApiMessage(undefined)
+      try {
+        const response = await fetchAdditionalServiceProposals()
+        const nextProposals = unwrapArray<ApiAdditionalServiceProposal>(response, ['proposals']).map(mapProposal)
+        if (!cancelled) {
+          setProposals(nextProposals)
+          setSelectedId((current) => current || nextProposals[0]?.id || '')
+        }
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được đề xuất phát sinh từ API')
+      }
+    }
+
+    void loadProposals()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
 
   const selectedProposal = proposals.find((proposal) => proposal.id === selectedId) ?? proposals[0]
   const pendingCount = proposals.filter((proposal) => proposal.status === 'pending').length
@@ -275,8 +280,21 @@ export function AdditionalServiceSuggestionPage() {
     [proposals],
   )
 
-  function updateStatus(status: ProposalStatus) {
-    setProposals((current) => current.map((proposal) => (proposal.id === selectedProposal.id ? { ...proposal, status } : proposal)))
+  async function updateStatus(status: ProposalStatus) {
+    if (!selectedProposal) return
+
+    setSaving(true)
+    setApiMessage(undefined)
+
+    try {
+      const updated = await updateAdditionalServiceProposal(selectedProposal.id, status)
+      const mapped = mapProposal(updated)
+      setProposals((current) => current.map((proposal) => (proposal.id === selectedProposal.id ? { ...proposal, ...mapped, status } : proposal)))
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được đề xuất phát sinh')
+    } finally {
+      setSaving(false)
+    }
   }
 
   return (
@@ -292,6 +310,8 @@ export function AdditionalServiceSuggestionPage() {
             Service Advisor xem đề xuất từ kỹ thuật viên, kiểm tra ảnh bằng chứng, ước tính chi phí và quyết định gửi báo giá cho khách hoặc bổ sung vào lệnh sửa chữa.
           </p>
         </section>
+
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
 
         <section className="grid gap-4 md:grid-cols-3">
           <SummaryCard icon="alert" label="Chờ xử lý" value={`${pendingCount} đề xuất`} />
@@ -312,17 +332,17 @@ export function AdditionalServiceSuggestionPage() {
               </button>
             </div>
 
-            {proposals.map((proposal) => (
+            {proposals.length ? proposals.map((proposal) => (
               <ProposalCard
-                active={proposal.id === selectedProposal.id}
+                active={proposal.id === selectedProposal?.id}
                 key={proposal.id}
                 onSelect={() => setSelectedId(proposal.id)}
                 proposal={proposal}
               />
-            ))}
+            )) : <div className="border border-[#efeded] bg-white p-6 text-sm font-bold text-[#6a6767]">Chưa có đề xuất phát sinh từ API.</div>}
           </section>
 
-          <ProposalDetail onStatusChange={updateStatus} proposal={selectedProposal} />
+          {selectedProposal ? <ProposalDetail disabled={saving} onStatusChange={updateStatus} proposal={selectedProposal} /> : <aside className="border border-[#efeded] bg-white p-6 text-sm font-bold text-[#6a6767]">Chọn đề xuất để xử lý.</aside>}
         </div>
       </div>
     </ServiceAdvisorShell>

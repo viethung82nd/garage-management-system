@@ -1,4 +1,5 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { fetchWorkshopRepairOrders, formatApiDate, orderId, personName, unwrapArray, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -30,191 +31,6 @@ type RepairTimeline = {
   stages: TimelineStage[]
 }
 
-const timelines: RepairTimeline[] = [
-  {
-    advisor: 'Minh Anh',
-    customer: 'Alex Nguyễn',
-    id: 'RO-2026-0882',
-    plate: '51K-882.88',
-    priority: 'high',
-    progress: 62,
-    promisedAt: '16:30',
-    statusText: 'Đang sửa chữa',
-    technician: 'Nguyễn Minh',
-    vehicle: 'BMW M4 Competition',
-    stages: [
-      {
-        customerVisible: true,
-        description: 'Xe đã tiếp nhận tại quầy SA, đối chiếu biển số, tình trạng ngoại thất và yêu cầu khách hàng.',
-        evidence: 'Phiếu nhận xe, ảnh 4 góc, thông tin ODO',
-        id: 'received',
-        owner: 'Minh Anh',
-        status: 'done',
-        time: '08:35',
-        title: 'Tiếp nhận xe',
-      },
-      {
-        customerVisible: true,
-        description: 'Lệnh sửa chữa đã được tạo từ hồ sơ tiếp nhận và chuyển vào xưởng chính.',
-        evidence: 'RO-2026-0882, 2 hạng mục dịch vụ',
-        id: 'created',
-        owner: 'Minh Anh',
-        status: 'done',
-        time: '08:48',
-        title: 'Tạo lệnh sửa chữa',
-      },
-      {
-        customerVisible: false,
-        description: 'Kỹ thuật viên Nguyễn Minh nhận lệnh tại cầu nâng 01, bắt đầu kiểm tra phanh trước.',
-        evidence: 'Phân công KTV, thời gian bắt đầu 09:12',
-        id: 'assigned',
-        owner: 'Nguyễn Minh',
-        status: 'done',
-        time: '09:12',
-        title: 'Phân công KTV',
-      },
-      {
-        customerVisible: true,
-        description: 'Đã phát hiện má phanh trước mòn không đều. KTV đang đo thêm độ đảo đĩa phanh trước khi đề xuất phát sinh.',
-        evidence: '3 ảnh kỹ thuật, chỉ số má phanh 2.8 mm',
-        id: 'diagnosis',
-        owner: 'Nguyễn Minh',
-        status: 'active',
-        time: '10:05',
-        title: 'Chẩn đoán chi tiết',
-      },
-      {
-        customerVisible: true,
-        description: 'Chờ SA xác nhận báo giá phát sinh nếu cần thay đĩa phanh hoặc xử lý bề mặt đĩa.',
-        evidence: 'Báo giá dự kiến chưa gửi khách',
-        id: 'approval',
-        owner: 'Minh Anh',
-        status: 'upcoming',
-        time: '11:20',
-        title: 'Xác nhận phát sinh',
-      },
-      {
-        customerVisible: true,
-        description: 'Sau khi khách duyệt, xưởng lắp phụ tùng và chạy thử trước khi bàn giao.',
-        evidence: 'Ảnh sau sửa, biên bản chạy thử',
-        id: 'quality-check',
-        owner: 'Nguyễn Minh',
-        status: 'upcoming',
-        time: '15:30',
-        title: 'Kiểm tra chất lượng',
-      },
-    ],
-  },
-  {
-    advisor: 'Minh Anh',
-    customer: 'Sarah Trần',
-    id: 'RO-2026-0885',
-    plate: '30F-686.01',
-    priority: 'medium',
-    progress: 35,
-    promisedAt: '17:00',
-    statusText: 'Chờ phụ tùng',
-    technician: 'Trần Quang Huy',
-    vehicle: 'Audi RS6 Avant',
-    stages: [
-      {
-        customerVisible: true,
-        description: 'Xe đã tiếp nhận, khách yêu cầu kiểm tra toàn bộ hệ thống phanh.',
-        evidence: 'Phiếu tiếp nhận và ảnh ngoại thất',
-        id: 'received',
-        owner: 'Minh Anh',
-        status: 'done',
-        time: '09:15',
-        title: 'Tiếp nhận xe',
-      },
-      {
-        customerVisible: true,
-        description: 'Lệnh sửa chữa đã tạo và gán cho KTV chuyên phanh, gầm, treo.',
-        evidence: 'RO-2026-0885',
-        id: 'created',
-        owner: 'Minh Anh',
-        status: 'done',
-        time: '09:35',
-        title: 'Tạo lệnh sửa chữa',
-      },
-      {
-        customerVisible: false,
-        description: 'KTV đang chờ kho xác nhận má phanh đúng mã xe trước khi tháo cụm phanh.',
-        evidence: 'Yêu cầu phụ tùng #PR-1208',
-        id: 'parts',
-        owner: 'Kho phụ tùng',
-        status: 'blocked',
-        time: '10:20',
-        title: 'Chờ phụ tùng',
-      },
-      {
-        customerVisible: true,
-        description: 'SA sẽ cập nhật lại khách sau khi kho phản hồi thời gian có phụ tùng.',
-        evidence: 'Tin nhắn hẹn phản hồi trước 11:30',
-        id: 'customer-update',
-        owner: 'Minh Anh',
-        status: 'active',
-        time: '11:00',
-        title: 'Cập nhật khách hàng',
-      },
-    ],
-  },
-  {
-    advisor: 'Minh Anh',
-    customer: 'David Lê',
-    id: 'RO-2026-0889',
-    plate: '29A-404.95',
-    priority: 'low',
-    progress: 88,
-    promisedAt: '14:30',
-    statusText: 'Sắp bàn giao',
-    technician: 'Lê Lan Chi',
-    vehicle: 'Toyota GR Supra',
-    stages: [
-      {
-        customerVisible: true,
-        description: 'Khách chờ tại lounge, xe được đưa vào khu bảo dưỡng nhanh.',
-        evidence: 'Phiếu nhận xe nhanh',
-        id: 'received',
-        owner: 'Minh Anh',
-        status: 'done',
-        time: '13:05',
-        title: 'Tiếp nhận nhanh',
-      },
-      {
-        customerVisible: false,
-        description: 'Thay dầu động cơ, lọc dầu và kiểm tra mức dung dịch cơ bản.',
-        evidence: 'Mobil 1 ESP X3 0W-40, lọc OEM',
-        id: 'service',
-        owner: 'Lê Lan Chi',
-        status: 'done',
-        time: '13:35',
-        title: 'Bảo dưỡng nhanh',
-      },
-      {
-        customerVisible: true,
-        description: 'KTV đang kiểm tra lần cuối khoang máy, reset nhắc bảo dưỡng và chụp ảnh sau sửa.',
-        evidence: 'Checklist QC 5/6 mục',
-        id: 'qc',
-        owner: 'Lê Lan Chi',
-        status: 'active',
-        time: '14:10',
-        title: 'Kiểm tra chất lượng',
-      },
-      {
-        customerVisible: true,
-        description: 'SA chuẩn bị hóa đơn và gọi khách ra nhận xe sau khi QC hoàn tất.',
-        evidence: 'Hóa đơn nháp INV-0889',
-        id: 'handover',
-        owner: 'Minh Anh',
-        status: 'upcoming',
-        time: '14:25',
-        title: 'Chuẩn bị bàn giao',
-      },
-    ],
-  },
-]
-
 const timeMarkers = ['08:00', '09:00', '10:00', '11:00', '13:00', '14:00', '15:00', '16:00', '17:00']
 
 const statusLabels: Record<TimelineStatus, string> = {
@@ -222,6 +38,76 @@ const statusLabels: Record<TimelineStatus, string> = {
   blocked: 'Đang vướng',
   done: 'Đã xong',
   upcoming: 'Sắp tới',
+}
+
+
+function mapOrderStatusText(status?: string) {
+  if (status === 'completed') return 'Hoàn thành'
+  if (status === 'inProgress' || status === 'in-progress') return 'Đang sửa chữa'
+  if (status === 'cancelled') return 'Đã hủy'
+  return 'Chờ xử lý'
+}
+
+function mapTimelineStatus(status?: string): TimelineStatus {
+  if (status === 'completed') return 'done'
+  if (status === 'inProgress' || status === 'in-progress') return 'active'
+  if (status === 'cancelled' || status === 'blocked') return 'blocked'
+  return 'upcoming'
+}
+
+function mapRepairTimeline(order: ApiRepairOrder, index: number): RepairTimeline {
+  const vehicle = order.vehicleId || order.vehicle
+  const technician = order.technicianId || order.technician
+  const stageStatus = mapTimelineStatus(order.status)
+  const notes = order.stepNotes || []
+  const stages: TimelineStage[] = [
+    {
+      customerVisible: true,
+      description: 'Lệnh sửa chữa được đồng bộ từ hệ thống.',
+      evidence: orderId(order),
+      id: 'created',
+      owner: personName(order.advisorId || order.advisor, 'Service Advisor'),
+      status: stageStatus === 'upcoming' ? 'active' : 'done',
+      time: order.createdAt ? new Date(order.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--',
+      title: 'Tạo lệnh sửa chữa',
+    },
+    ...notes.map((note, noteIndex) => ({
+      customerVisible: true,
+      description: note.content || 'Ghi chú tiến độ từ kỹ thuật viên.',
+      evidence: 'Ghi chú kỹ thuật',
+      id: 'note-' + noteIndex,
+      owner: personName(note.technicianId, 'Kỹ thuật viên'),
+      status: noteIndex === notes.length - 1 && stageStatus === 'active' ? 'active' : 'done',
+      time: note.createdAt ? new Date(note.createdAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : '--:--',
+      title: 'Cập nhật sửa chữa',
+    } satisfies TimelineStage)),
+    {
+      customerVisible: true,
+      description: stageStatus === 'done' ? 'Lệnh đã hoàn thành, sẵn sàng bàn giao.' : 'Chờ cập nhật bước tiếp theo từ xưởng.',
+      evidence: formatApiDate(order.updatedAt),
+      id: 'handover',
+      owner: personName(technician, 'Kỹ thuật viên'),
+      status: stageStatus === 'done' ? 'done' : 'upcoming',
+      time: order.completedAt ? new Date(order.completedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : order.promisedAt || '--:--',
+      title: 'Hoàn tất và bàn giao',
+    },
+  ]
+
+  const doneCount = stages.filter((stage) => stage.status === 'done').length
+
+  return {
+    advisor: personName(order.advisorId || order.advisor, 'Service Advisor'),
+    customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Khách hàng'),
+    id: orderId(order),
+    plate: vehiclePlate(vehicle),
+    priority: index === 0 ? 'high' : 'medium',
+    progress: Math.round((doneCount / stages.length) * 100),
+    promisedAt: order.promisedAt || 'Chưa hẹn',
+    statusText: mapOrderStatusText(order.status),
+    technician: personName(technician, 'Chưa phân công'),
+    vehicle: vehicleName(vehicle),
+    stages,
+  }
 }
 
 function priorityLabel(priority: Priority) {
@@ -431,18 +317,47 @@ function StageDetail({ stage, timeline }: { stage: TimelineStage; timeline: Repa
 }
 
 export function RepairProgressTimelinePage() {
-  const [selectedTimelineId, setSelectedTimelineId] = useState(timelines[0].id)
-  const selectedTimeline = timelines.find((timeline) => timeline.id === selectedTimelineId) ?? timelines[0]
-  const [selectedStageId, setSelectedStageId] = useState(selectedTimeline.stages.find((stage) => stage.status === 'active')?.id ?? selectedTimeline.stages[0].id)
+  const [timelines, setTimelines] = useState<RepairTimeline[]>([])
+  const [selectedTimelineId, setSelectedTimelineId] = useState('')
+  const [selectedStageId, setSelectedStageId] = useState('')
+  const [apiMessage, setApiMessage] = useState<string>()
 
-  const selectedStage = selectedTimeline.stages.find((stage) => stage.id === selectedStageId) ?? selectedTimeline.stages[0]
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadTimelines() {
+      setApiMessage(undefined)
+      try {
+        const response = await fetchWorkshopRepairOrders()
+        const nextTimelines = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders']).map(mapRepairTimeline)
+        if (!cancelled) {
+          setTimelines(nextTimelines)
+          const first = nextTimelines[0]
+          setSelectedTimelineId((current) => current || first?.id || '')
+          setSelectedStageId((current) => current || first?.stages.find((stage) => stage.status === 'active')?.id || first?.stages[0]?.id || '')
+        }
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được timeline sửa chữa từ API')
+      }
+    }
+
+    void loadTimelines()
+
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const selectedTimeline = timelines.find((timeline) => timeline.id === selectedTimelineId) ?? timelines[0]
+
+  const selectedStage = selectedTimeline?.stages.find((stage) => stage.id === selectedStageId) ?? selectedTimeline?.stages[0]
   const activeOrders = timelines.filter((timeline) => timeline.stages.some((stage) => stage.status === 'active')).length
   const blockedOrders = timelines.filter((timeline) => timeline.stages.some((stage) => stage.status === 'blocked')).length
-  const customerVisibleStages = selectedTimeline.stages.filter((stage) => stage.customerVisible).length
+  const customerVisibleStages = selectedTimeline?.stages.filter((stage) => stage.customerVisible).length ?? 0
 
   const nextCustomerUpdate = useMemo(() => {
-    const active = selectedTimeline.stages.find((stage) => stage.status === 'active')
-    const blocked = selectedTimeline.stages.find((stage) => stage.status === 'blocked')
+    const active = selectedTimeline?.stages.find((stage) => stage.status === 'active')
+    const blocked = selectedTimeline?.stages.find((stage) => stage.status === 'blocked')
     return blocked?.title ?? active?.title ?? 'Không có cập nhật mới'
   }, [selectedTimeline])
 
@@ -453,7 +368,18 @@ export function RepairProgressTimelinePage() {
     }
 
     setSelectedTimelineId(id)
-    setSelectedStageId(timeline.stages.find((stage) => stage.status === 'active')?.id ?? timeline.stages[0].id)
+    setSelectedStageId(timeline.stages.find((stage) => stage.status === 'active')?.id ?? timeline.stages[0]?.id ?? '')
+  }
+
+  if (!selectedTimeline || !selectedStage) {
+    return (
+      <ServiceAdvisorShell active="repair-timeline" title="Timeline tiến độ sửa chữa">
+        <div className="space-y-7">
+          {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
+          <section className="border border-[#efeded] bg-white p-8 text-sm font-bold text-[#6a6767]">Chưa có lệnh sửa chữa từ API để hiển thị timeline.</section>
+        </div>
+      </ServiceAdvisorShell>
+    )
   }
 
   return (
@@ -481,6 +407,8 @@ export function RepairProgressTimelinePage() {
             </div>
           </div>
         </section>
+
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
 
         <section className="grid gap-4 md:grid-cols-4">
           <SummaryCard icon="wrench" label="Lệnh đang sửa" value={String(activeOrders).padStart(2, '0')} />

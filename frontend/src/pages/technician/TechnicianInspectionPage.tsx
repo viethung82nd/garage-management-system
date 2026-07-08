@@ -1,4 +1,6 @@
-﻿import { useRef, useState } from 'react'
+﻿import { useEffect, useRef, useState } from 'react'
+import { useAuth } from '../../shared/auth'
+import { fetchWorkshopRepairOrders, orderId, unwrapArray, uploadInspectionPhotos, saveInspectionNote, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
 import { TechnicianShell } from '../../widgets/technician-shell'
 import { Icon, type IconName } from '../../shared/ui/base'
 
@@ -115,19 +117,46 @@ function InspectionChecklist() {
 }
 
 export function TechnicianInspectionPage() {
+  const { user } = useAuth()
   const [selectedCategoryId, setSelectedCategoryId] = useState(photoCategories[0].id)
   const [photos, setPhotos] = useState<UploadedPhoto[]>([])
-  const [note, setNote] = useState('Cản trước có vết xước nhẹ bên phải. Cần chụp thêm gầm xe sau khi nâng.')
+  const [note, setNote] = useState('')
+  const [repairOrder, setRepairOrder] = useState<ApiRepairOrder>()
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  function handleUpload(files: FileList | null) {
+  useEffect(() => {
+    let cancelled = false
+
+    async function loadAssignedOrder() {
+      setApiMessage(undefined)
+      try {
+        const userId = user?._id || user?.id
+        const response = await fetchWorkshopRepairOrders(userId ? '?technicianId=' + encodeURIComponent(userId) : '')
+        const orders = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
+        if (!cancelled) setRepairOrder(orders[0])
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được phiếu kiểm tra từ API')
+      }
+    }
+
+    void loadAssignedOrder()
+
+    return () => {
+      cancelled = true
+    }
+  }, [user?._id, user?.id])
+
+  async function handleUpload(files: FileList | null) {
     if (!files?.length) {
       return
     }
 
-    const uploadedPhotos = Array.from(files).map((file) => ({
+    const fileArray = Array.from(files)
+    const uploadedPhotos = fileArray.map((file) => ({
       categoryId: selectedCategoryId,
-      id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+      id: file.name + '-' + file.lastModified + '-' + crypto.randomUUID(),
       name: file.name,
       note: '',
       previewUrl: URL.createObjectURL(file),
@@ -138,6 +167,45 @@ export function TechnicianInspectionPage() {
 
     if (inputRef.current) {
       inputRef.current.value = ''
+    }
+
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId) {
+      setApiMessage('Chưa có lệnh sửa chữa được giao để tải ảnh.')
+      return
+    }
+
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      const formData = new FormData()
+      formData.append('categoryId', selectedCategoryId)
+      fileArray.forEach((file) => formData.append('photos', file))
+      await uploadInspectionPhotos(repairOrderId, formData)
+      setApiMessage('Đã tải ảnh kiểm tra lên lệnh sửa chữa.')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không tải được ảnh kiểm tra')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveInspection() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId) {
+      setApiMessage('Chưa có lệnh sửa chữa được giao để lưu phiếu.')
+      return
+    }
+
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      await saveInspectionNote(repairOrderId, note)
+      setApiMessage('Đã lưu ghi chú kiểm tra qua API.')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không lưu được phiếu kiểm tra')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -152,15 +220,19 @@ export function TechnicianInspectionPage() {
   const selectedCategory = photoCategories.find((category) => category.id === selectedCategoryId) ?? photoCategories[0]
   const uploadedCount = photos.length
   const requiredCount = photoCategories.reduce((sum, category) => sum + category.required, 0)
+  const repairVehicle = repairOrder?.vehicleId || repairOrder?.vehicle
+  const repairOrderLabel = repairOrder ? orderId(repairOrder) : 'Chưa có lệnh'
+  const vehicleLabel = repairOrder ? vehicleName(repairVehicle) + ' - ' + vehiclePlate(repairVehicle) : 'Chưa có xe được giao'
 
   return (
     <TechnicianShell active="tasks" eyebrow="Technician Inspection" notificationCount={1} title="Upload ảnh xe trong phiếu kiểm tra">
       <div className="space-y-7">
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
         <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
           <div className="grid gap-6 xl:grid-cols-[1fr_320px] xl:items-center">
             <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Phiếu kiểm tra RO-2026-0882</p>
-              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">BMW M4 Competition - 51K-882.88</h2>
+              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Phiếu kiểm tra {repairOrderLabel}</p>
+              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">{vehicleLabel}</h2>
               <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
                 Kỹ thuật viên chụp ảnh xe theo từng hạng mục trước khi bắt đầu sửa chữa. Ảnh dùng để minh bạch tình trạng xe với cố vấn và khách hàng.
               </p>
@@ -195,7 +267,7 @@ export function TechnicianInspectionPage() {
                   <Icon name="plus" />
                   Tải ảnh xe
                 </button>
-                <input accept="image/*" className="hidden" multiple onChange={(event) => handleUpload(event.target.files)} ref={inputRef} type="file" />
+                <input accept="image/*" className="hidden" multiple onChange={(event) => { void handleUpload(event.target.files) }} ref={inputRef} type="file" />
               </div>
 
               <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -288,7 +360,7 @@ export function TechnicianInspectionPage() {
                 onChange={(event) => setNote(event.target.value)}
                 value={note}
               />
-              <button className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#e31e24]" type="button">
+              <button className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#e31e24] disabled:opacity-60" disabled={saving} onClick={() => { void saveInspection() }} type="button">
                 <Icon name="check" />
                 Lưu phiếu kiểm tra
               </button>
