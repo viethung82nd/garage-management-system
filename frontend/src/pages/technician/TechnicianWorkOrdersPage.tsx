@@ -190,7 +190,7 @@ function Timeline({ orders }: { orders: WorkOrder[] }) {
 }
 
 export function TechnicianWorkOrdersPage() {
-  const { user } = useAuth()
+  const { token, user } = useAuth()
   const technicianName = user?.fullName || user?.email || 'Kỹ thuật viên'
   const [orders, setOrders] = useState<WorkOrder[]>([])
   const [selectedOrderId, setSelectedOrderId] = useState('')
@@ -200,13 +200,16 @@ export function TechnicianWorkOrdersPage() {
 
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadOrders() {
       setApiMessage(undefined)
       try {
         const query = user?._id || user?.id ? `?technicianId=${user._id || user.id}` : ''
-        const response = await fetchWorkshopRepairOrders(query)
+        const response = await fetchWorkshopRepairOrders(authToken, query)
         const liveOrders = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
         const mappedOrders = liveOrders.map(mapRepairOrder)
         if (!cancelled) {
@@ -224,14 +227,14 @@ export function TechnicianWorkOrdersPage() {
     return () => {
       cancelled = true
     }
-  }, [user?._id, user?.id])
+  }, [token, user?._id, user?.id])
   const selectedOrder = orders.find((order) => order.id === selectedOrderId) ?? orders[0] ?? { bay: '', customer: '', duration: 0, id: 'Chưa chọn lệnh', note: '', plate: '', priority: 'low' as Priority, service: '', start: '--:--', status: 'assigned' as WorkOrderStatus, vehicle: '' }
   const totalMinutes = orders.reduce((sum, order) => sum + order.duration, 0)
   const completedCount = orders.filter((order) => order.status === 'completed').length
   const inProgressCount = orders.filter((order) => order.status === 'in-progress').length
 
   async function updateSelectedStatus(status: WorkOrderStatus) {
-    if (!orders.length) return
+    if (!orders.length || !token) return
 
     setSaving(true)
     setApiMessage(undefined)
@@ -239,7 +242,7 @@ export function TechnicianWorkOrdersPage() {
     try {
       const apiOrder = apiOrders.find((order) => orderId(order) === selectedOrder.id)
       const requestId = apiOrder?._id || apiOrder?.id || selectedOrder.id
-      await updateWorkshopRepairProgress(requestId, { status: mapUiStatus(status) })
+      await updateWorkshopRepairProgress(token, requestId, { status: mapUiStatus(status) })
       setOrders((current) => current.map((order) => (order.id === selectedOrder.id ? { ...order, status } : order)))
     } catch (err) {
       setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được trạng thái lệnh')
@@ -329,7 +332,7 @@ export function TechnicianWorkOrdersPage() {
 
             <section className="border border-[#efeded] bg-white p-6">
               <h3 className="text-lg font-black text-[#171717]">Ghi chú nhanh</h3>
-              <textarea className="mt-4 min-h-32 w-full border border-[#d8d5d5] bg-[#fbf9f8] p-4 text-sm outline-none focus:border-[#ba0013] focus:ring-4 focus:ring-[#ba0013]/10" defaultValue="Cần chụp ảnh trước/sau khi hoàn thành hạng mục chính." />
+              <textarea aria-label="Ghi chú nhanh" className="mt-4 min-h-32 w-full border border-[#d8d5d5] bg-[#fbf9f8] p-4 text-sm outline-none focus:border-[#ba0013] focus:ring-4 focus:ring-[#ba0013]/10" defaultValue="Cần chụp ảnh trước/sau khi hoàn thành hạng mục chính." />
             </section>
           </aside>
         </div>

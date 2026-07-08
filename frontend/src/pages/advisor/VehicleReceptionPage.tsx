@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { createVehicleReception, fetchVehicleHistory } from '../../shared/api/workshop'
+import { useAuth } from '../../shared/auth'
 import { Icon } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 import { Field, SelectField, TextAreaField } from '../../widgets/vehicle-reception/ui/FormFields'
@@ -159,6 +160,7 @@ function HistorySuggestionPanel({
 }
 
 export function VehicleReceptionPage() {
+  const { token } = useAuth()
   const [form, setForm] = useState<ReceptionForm>(emptyForm)
   const [historySuggestions, setHistorySuggestions] = useState<HistorySuggestion[]>([])
   const [apiMessage, setApiMessage] = useState<string>()
@@ -167,12 +169,15 @@ export function VehicleReceptionPage() {
   const [appliedSuggestionId, setAppliedSuggestionId] = useState<string>()
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadHistory() {
       setApiMessage(undefined)
       try {
-        const response = await fetchVehicleHistory()
+        const response = await fetchVehicleHistory(authToken)
         const rawSuggestions = Array.isArray(response) ? response : response.suggestions || []
         if (!cancelled) setHistorySuggestions(rawSuggestions.map(mapHistorySuggestion))
       } catch (err) {
@@ -185,7 +190,7 @@ export function VehicleReceptionPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [token])
   const matchingSuggestions = useMemo(() => {
     const normalizedPlate = normalizePlate(form.plate)
     if (!normalizedPlate) {
@@ -225,11 +230,13 @@ export function VehicleReceptionPage() {
   }
 
   async function checkPlate() {
+    if (!token) return
+
     setPlateStatus('checking')
     setApiMessage(undefined)
 
     try {
-      const response = await fetchVehicleHistory(form.plate)
+      const response = await fetchVehicleHistory(token, form.plate)
       const rawSuggestions = Array.isArray(response) ? response : response.suggestions || []
       const nextSuggestions = rawSuggestions.map(mapHistorySuggestion)
       setHistorySuggestions(nextSuggestions)
@@ -252,11 +259,13 @@ export function VehicleReceptionPage() {
   }
 
   async function submitReception() {
+    if (!token) return
+
     setSaving(true)
     setApiMessage(undefined)
 
     try {
-      await createVehicleReception({ ...form, historySuggestionId: appliedSuggestionId || '' })
+      await createVehicleReception(token, { ...form, historySuggestionId: appliedSuggestionId || '' })
       setApiMessage('Đã lưu phiếu tiếp nhận qua API.')
       setForm(emptyForm)
       setAppliedSuggestionId(undefined)

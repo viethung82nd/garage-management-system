@@ -106,73 +106,73 @@ export type ApiDashboardSummary = {
 
 export type ReceptionPayload = Record<string, string>
 
-export function fetchAdvisorDashboard() {
-  return apiRequest<ApiDashboardSummary>('/api/advisor/dashboard')
+export function fetchAdvisorDashboard(token: string) {
+  return apiRequest<ApiDashboardSummary>('/api/advisor/dashboard', { token })
 }
 
-export function fetchWorkshopBookings(query = '') {
-  return apiRequest<{ bookings?: ApiBooking[] } | ApiBooking[]>(`/api/bookings${query}`)
+export function fetchWorkshopBookings(token: string, query = '') {
+  return apiRequest<{ bookings?: ApiBooking[] } | ApiBooking[]>(`/api/bookings${query}`, { token })
 }
 
-export function confirmWorkshopBooking(id: string) {
-  return apiRequest<{ booking?: ApiBooking } | ApiBooking>(`/api/bookings/${id}/confirm`, { method: 'PATCH', body: JSON.stringify({}) })
+export function confirmWorkshopBooking(token: string, id: string) {
+  return apiRequest<{ booking?: ApiBooking } | ApiBooking>(`/api/bookings/${id}/confirm`, { method: 'PATCH', token, body: JSON.stringify({}) })
 }
 
-export function rejectWorkshopBooking(id: string, reason = 'Rejected by service advisor') {
-  return apiRequest<{ booking?: ApiBooking } | ApiBooking>(`/api/bookings/${id}/cancel`, { method: 'PATCH', body: JSON.stringify({ reason }) })
+export function rejectWorkshopBooking(token: string, id: string, reason = 'Rejected by service advisor') {
+  return apiRequest<{ booking?: ApiBooking } | ApiBooking>(`/api/bookings/${id}/cancel`, { method: 'PATCH', token, body: JSON.stringify({ reason }) })
 }
 
-export function fetchVehicleHistory(plate?: string) {
+export function fetchVehicleHistory(token: string, plate?: string) {
   const query = plate ? `?plate=${encodeURIComponent(plate)}` : ''
-  return apiRequest<{ suggestions?: unknown[] } | unknown[]>(`/api/receptions/history${query}`)
+  return apiRequest<{ suggestions?: unknown[] } | unknown[]>(`/api/receptions/history${query}`, { token })
 }
 
-export function createVehicleReception(payload: ReceptionPayload) {
-  return apiRequest('/api/receptions', { method: 'POST', body: JSON.stringify(payload) })
+export function createVehicleReception(token: string, payload: ReceptionPayload) {
+  return apiRequest('/api/receptions', { method: 'POST', token, body: JSON.stringify(payload) })
 }
 
-export function fetchWorkshopRepairOrders(query = '') {
-  return apiRequest<{ repairOrders?: ApiRepairOrder[]; orders?: ApiRepairOrder[] } | ApiRepairOrder[]>(`/api/repair-orders${query}`)
+export function fetchWorkshopRepairOrders(token: string, query = '') {
+  return apiRequest<{ repairOrders?: ApiRepairOrder[]; orders?: ApiRepairOrder[] } | ApiRepairOrder[]>(`/api/repair-orders${query}`, { token })
 }
 
-export function createWorkshopRepairOrder(payload: unknown) {
-  return apiRequest<ApiRepairOrder>('/api/repair-orders', { method: 'POST', body: JSON.stringify(payload) })
+export function createWorkshopRepairOrder(token: string, payload: unknown) {
+  return apiRequest<ApiRepairOrder>('/api/repair-orders', { method: 'POST', token, body: JSON.stringify(payload) })
 }
 
-export function updateWorkshopRepairOrder(id: string, payload: unknown) {
-  return apiRequest<ApiRepairOrder>(`/api/repair-orders/${id}`, { method: 'PUT', body: JSON.stringify(payload) })
+export function updateWorkshopRepairOrder(token: string, id: string, payload: unknown) {
+  return apiRequest<ApiRepairOrder>(`/api/repair-orders/${id}`, { method: 'PUT', token, body: JSON.stringify(payload) })
 }
 
-export function updateWorkshopRepairProgress(id: string, payload: unknown) {
-  return apiRequest<{ order?: ApiRepairOrder } | ApiRepairOrder>(`/api/repair-orders/${id}/progress`, { method: 'PATCH', body: JSON.stringify(payload) })
+export function updateWorkshopRepairProgress(token: string, id: string, payload: unknown) {
+  return apiRequest<{ order?: ApiRepairOrder } | ApiRepairOrder>(`/api/repair-orders/${id}/progress`, { method: 'PATCH', token, body: JSON.stringify(payload) })
 }
 
-export function addWorkshopStepNote(id: string, payload: unknown) {
-  return apiRequest<{ stepNotes?: unknown[] }>(`/api/repair-orders/${id}/step-notes`, { method: 'POST', body: JSON.stringify(payload) })
+export function addWorkshopStepNote(token: string, id: string, payload: unknown) {
+  return apiRequest<{ stepNotes?: unknown[] }>(`/api/repair-orders/${id}/step-notes`, { method: 'POST', token, body: JSON.stringify(payload) })
 }
 
-export function fetchWorkshopServices() {
-  return apiRequest<ApiService[]>('/api/services')
+export function fetchWorkshopServices(token: string) {
+  return apiRequest<ApiService[]>('/api/services', { token })
 }
 
-export function fetchWorkshopTechnicians() {
-  return apiRequest<ApiTechnician[]>('/api/technicians')
+export function fetchWorkshopTechnicians(token: string) {
+  return apiRequest<ApiTechnician[]>('/api/technicians', { token })
 }
 
-export function fetchAdditionalServiceProposals() {
-  return apiRequest<{ proposals?: ApiAdditionalServiceProposal[] } | ApiAdditionalServiceProposal[]>('/api/additional-service-proposals')
+export function fetchAdditionalServiceProposals(token: string) {
+  return apiRequest<{ proposals?: ApiAdditionalServiceProposal[] } | ApiAdditionalServiceProposal[]>('/api/additional-service-proposals', { token })
 }
 
-export function updateAdditionalServiceProposal(id: string, status: string) {
-  return apiRequest<ApiAdditionalServiceProposal>(`/api/additional-service-proposals/${id}`, { method: 'PATCH', body: JSON.stringify({ status }) })
+export function updateAdditionalServiceProposal(token: string, id: string, status: string) {
+  return apiRequest<ApiAdditionalServiceProposal>(`/api/additional-service-proposals/${id}`, { method: 'PATCH', token, body: JSON.stringify({ status }) })
 }
 
-export function uploadInspectionPhotos(repairOrderId: string, formData: FormData) {
-  return apiRequest(`/api/repair-orders/${repairOrderId}/inspection/photos`, { method: 'POST', body: formData })
+export function uploadInspectionPhotos(token: string, repairOrderId: string, formData: FormData) {
+  return apiRequest(`/api/repair-orders/${repairOrderId}/inspection/photos`, { method: 'POST', token, body: formData })
 }
 
-export function saveInspectionNote(repairOrderId: string, content: string) {
-  return addWorkshopStepNote(repairOrderId, { content })
+export function saveInspectionNote(token: string, repairOrderId: string, content: string) {
+  return addWorkshopStepNote(token, repairOrderId, { content })
 }
 
 export function unwrapArray<T>(value: T[] | Record<string, T[] | undefined>, keys: string[]) {

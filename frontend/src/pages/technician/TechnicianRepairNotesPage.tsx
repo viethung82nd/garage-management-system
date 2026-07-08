@@ -226,7 +226,7 @@ function StepDetail({
 }
 
 export function TechnicianRepairNotesPage() {
-  const { user } = useAuth()
+  const { token, user } = useAuth()
   const technicianInitials = getUserInitials(user)
   const technicianName = user?.fullName || user?.email || 'Kỹ thuật viên'
   const [repairOrder, setRepairOrder] = useState<ApiRepairOrder>()
@@ -238,13 +238,16 @@ export function TechnicianRepairNotesPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadRepairOrder() {
       setApiMessage(undefined)
       try {
         const userId = user?._id || user?.id
-        const response = await fetchWorkshopRepairOrders(userId ? '?technicianId=' + encodeURIComponent(userId) : '')
+        const response = await fetchWorkshopRepairOrders(authToken, userId ? '?technicianId=' + encodeURIComponent(userId) : '')
         const order = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])[0]
         if (!cancelled && order) {
           const nextSteps = mapRepairSteps(order)
@@ -263,7 +266,7 @@ export function TechnicianRepairNotesPage() {
     return () => {
       cancelled = true
     }
-  }, [user?._id, user?.id])
+  }, [token, user?._id, user?.id])
 
   const selectedStep = steps.find((step) => step.id === selectedStepId) ?? steps[0] ?? emptyStep
   const completedCount = steps.filter((step) => step.status === 'completed').length
@@ -298,12 +301,12 @@ export function TechnicianRepairNotesPage() {
 
   async function persistStepStatus(status: RepairStepStatus) {
     const repairOrderId = repairOrder?._id || repairOrder?.id
-    if (!repairOrderId || !selectedStep.id) return
+    if (!repairOrderId || !selectedStep.id || !token) return
 
     setSaving(true)
     setApiMessage(undefined)
     try {
-      await updateWorkshopRepairProgress(repairOrderId, { status: status === 'active' ? 'inProgress' : status === 'completed' ? 'completed' : 'pending', stepId: selectedStep.id })
+      await updateWorkshopRepairProgress(token, repairOrderId, { status: status === 'active' ? 'inProgress' : status === 'completed' ? 'completed' : 'pending', stepId: selectedStep.id })
       updateStepStatus(status)
     } catch (err) {
       setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được tiến độ bước sửa chữa')
@@ -324,12 +327,12 @@ export function TechnicianRepairNotesPage() {
 
   async function saveSelectedNote() {
     const repairOrderId = repairOrder?._id || repairOrder?.id
-    if (!repairOrderId || !selectedStep.id) return
+    if (!repairOrderId || !selectedStep.id || !token) return
 
     setSaving(true)
     setApiMessage(undefined)
     try {
-      await addWorkshopStepNote(repairOrderId, { checklist: checkedItems, content: note, stepId: selectedStep.id })
+      await addWorkshopStepNote(token, repairOrderId, { checklist: checkedItems, content: note, stepId: selectedStep.id })
       setApiMessage('Đã lưu ghi chú bước sửa chữa qua API.')
     } catch (err) {
       setApiMessage(err instanceof Error ? err.message : 'Không lưu được ghi chú sửa chữa')

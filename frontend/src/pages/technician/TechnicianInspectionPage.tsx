@@ -117,7 +117,7 @@ function InspectionChecklist() {
 }
 
 export function TechnicianInspectionPage() {
-  const { user } = useAuth()
+  const { token, user } = useAuth()
   const [selectedCategoryId, setSelectedCategoryId] = useState(photoCategories[0].id)
   const [photos, setPhotos] = useState<UploadedPhoto[]>([])
   const [note, setNote] = useState('')
@@ -127,13 +127,16 @@ export function TechnicianInspectionPage() {
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadAssignedOrder() {
       setApiMessage(undefined)
       try {
         const userId = user?._id || user?.id
-        const response = await fetchWorkshopRepairOrders(userId ? '?technicianId=' + encodeURIComponent(userId) : '')
+        const response = await fetchWorkshopRepairOrders(authToken, userId ? '?technicianId=' + encodeURIComponent(userId) : '')
         const orders = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
         if (!cancelled) setRepairOrder(orders[0])
       } catch (err) {
@@ -146,10 +149,10 @@ export function TechnicianInspectionPage() {
     return () => {
       cancelled = true
     }
-  }, [user?._id, user?.id])
+  }, [token, user?._id, user?.id])
 
   async function handleUpload(files: FileList | null) {
-    if (!files?.length) {
+    if (!files?.length || !token) {
       return
     }
 
@@ -181,7 +184,7 @@ export function TechnicianInspectionPage() {
       const formData = new FormData()
       formData.append('categoryId', selectedCategoryId)
       fileArray.forEach((file) => formData.append('photos', file))
-      await uploadInspectionPhotos(repairOrderId, formData)
+      await uploadInspectionPhotos(token, repairOrderId, formData)
       setApiMessage('Đã tải ảnh kiểm tra lên lệnh sửa chữa.')
     } catch (err) {
       setApiMessage(err instanceof Error ? err.message : 'Không tải được ảnh kiểm tra')
@@ -191,6 +194,8 @@ export function TechnicianInspectionPage() {
   }
 
   async function saveInspection() {
+    if (!token) return
+
     const repairOrderId = repairOrder?._id || repairOrder?.id
     if (!repairOrderId) {
       setApiMessage('Chưa có lệnh sửa chữa được giao để lưu phiếu.')
@@ -200,7 +205,7 @@ export function TechnicianInspectionPage() {
     setSaving(true)
     setApiMessage(undefined)
     try {
-      await saveInspectionNote(repairOrderId, note)
+      await saveInspectionNote(token, repairOrderId, note)
       setApiMessage('Đã lưu ghi chú kiểm tra qua API.')
     } catch (err) {
       setApiMessage(err instanceof Error ? err.message : 'Không lưu được phiếu kiểm tra')

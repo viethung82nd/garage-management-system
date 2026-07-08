@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { fetchWorkshopRepairOrders, formatApiDate, orderId, personName, unwrapArray, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
+import { useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -317,18 +318,22 @@ function StageDetail({ stage, timeline }: { stage: TimelineStage; timeline: Repa
 }
 
 export function RepairProgressTimelinePage() {
+  const { token } = useAuth()
   const [timelines, setTimelines] = useState<RepairTimeline[]>([])
   const [selectedTimelineId, setSelectedTimelineId] = useState('')
   const [selectedStageId, setSelectedStageId] = useState('')
   const [apiMessage, setApiMessage] = useState<string>()
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadTimelines() {
       setApiMessage(undefined)
       try {
-        const response = await fetchWorkshopRepairOrders()
+        const response = await fetchWorkshopRepairOrders(authToken)
         const nextTimelines = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders']).map(mapRepairTimeline)
         if (!cancelled) {
           setTimelines(nextTimelines)
@@ -346,7 +351,7 @@ export function RepairProgressTimelinePage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [token])
 
   const selectedTimeline = timelines.find((timeline) => timeline.id === selectedTimelineId) ?? timelines[0]
 

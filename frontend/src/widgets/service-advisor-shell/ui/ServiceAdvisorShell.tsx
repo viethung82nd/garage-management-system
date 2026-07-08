@@ -37,7 +37,7 @@ export function ServiceAdvisorShell({
   eyebrow?: string
   title: string
 }) {
-  const { user } = useAuth()
+  const { logout, user } = useAuth()
   const displayName = user?.fullName || user?.email || 'Chưa có tên'
   const initials = getUserInitials(user)
   const roleLabel = getRoleLabel(user?.role || 'serviceAdvisor')
@@ -86,7 +86,7 @@ export function ServiceAdvisorShell({
             <Icon name="plus" />
             Tiếp nhận xe mới
           </Link>
-          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" type="button">
+          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" onClick={logout} type="button">
             <Icon name="logout" />
             Đăng xuất
           </button>

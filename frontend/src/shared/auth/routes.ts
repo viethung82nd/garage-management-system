@@ -1,0 +1,30 @@
+import type { AuthRole } from './types'
+
+const ROLE_HOME_BY_ROLE: Partial<Record<AuthRole, string>> = {
+  onlineCustomer: '/customer/profile',
+  admin: '/admin/dashboard',
+  accountant: '/accountant/invoices',
+  serviceAdvisor: '/advisor/dashboard',
+  technician: '/technician/tasks',
+}
+
+export function getPostLoginPath(role: AuthRole) {
+  return ROLE_HOME_BY_ROLE[role] ?? null
+}
+
+export function isSupportedFrontendRole(role: AuthRole) {
+  return role in ROLE_HOME_BY_ROLE
+}
+
+export function getRoleLabel(role: AuthRole) {
+  const labels: Record<AuthRole, string> = {
+    accountant: 'Kế toán',
+    admin: 'Quản trị viên',
+    onlineCustomer: 'Khách hàng online',
+    serviceAdvisor: 'Cố vấn dịch vụ',
+    technician: 'Kỹ thuật viên',
+    walkInCustomer: 'Khách vãng lai',
+  }
+
+  return labels[role]
+}

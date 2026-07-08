@@ -1,6 +1,7 @@
 ﻿import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchAdvisorDashboard, fetchWorkshopBookings, fetchWorkshopRepairOrders, personName, unwrapArray, vehicleName, vehiclePlate, type ApiBooking, type ApiRepairOrder } from '../../shared/api/workshop'
+import { useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -56,15 +57,19 @@ function StatCard({ stat }: { stat: DashboardStat }) {
 }
 
 export function ServiceAdvisorDashboardPage() {
+  const { token } = useAuth()
   const [stats, setStats] = useState<DashboardStat[]>(defaultStats)
   const [queue, setQueue] = useState<QueueItem[]>([])
   const [apiMessage, setApiMessage] = useState<string>()
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
     async function loadDashboard() {
       try {
-        const [summary, bookingResponse, repairResponse] = await Promise.allSettled([fetchAdvisorDashboard(), fetchWorkshopBookings(), fetchWorkshopRepairOrders()])
+        const [summary, bookingResponse, repairResponse] = await Promise.allSettled([fetchAdvisorDashboard(authToken), fetchWorkshopBookings(authToken), fetchWorkshopRepairOrders(authToken)])
         const bookings = bookingResponse.status === 'fulfilled' ? unwrapArray<ApiBooking>(bookingResponse.value, ['bookings']) : []
         const orders = repairResponse.status === 'fulfilled' ? unwrapArray<ApiRepairOrder>(repairResponse.value, ['repairOrders', 'orders']) : []
         if (cancelled) return
@@ -86,7 +91,7 @@ export function ServiceAdvisorDashboardPage() {
     }
     void loadDashboard()
     return () => { cancelled = true }
-  }, [])
+  }, [token])
 
   return (
     <ServiceAdvisorShell active="dashboard" title="Tá»•ng quan Service Advisor">

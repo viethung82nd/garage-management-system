@@ -1,5 +1,6 @@
 ﻿import { useEffect, useState } from 'react'
 import { fetchWorkshopRepairOrders, fetchWorkshopTechnicians, orderId, personName, unwrapArray, updateWorkshopRepairOrder, vehicleName, vehiclePlate, type ApiRepairOrder, type ApiTechnician } from '../../shared/api/workshop'
+import { useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -159,6 +160,7 @@ function TaskCard({ task }: { task: ScheduleTask }) {
 }
 
 export function TechnicianScheduleCoordinationPage() {
+  const { token } = useAuth()
   const [technicianList, setTechnicianList] = useState<Technician[]>([])
   const [tasks, setTasks] = useState<ScheduleTask[]>([])
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
@@ -168,12 +170,15 @@ export function TechnicianScheduleCoordinationPage() {
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadSchedule() {
       setApiMessage(undefined)
       try {
-        const [techResponse, orderResponse] = await Promise.all([fetchWorkshopTechnicians(), fetchWorkshopRepairOrders()])
+        const [techResponse, orderResponse] = await Promise.all([fetchWorkshopTechnicians(authToken), fetchWorkshopRepairOrders(authToken)])
         const nextTechnicians = techResponse.map(mapTechnicianFromApi)
         const nextTasks = unwrapArray<ApiRepairOrder>(orderResponse, ['repairOrders', 'orders']).map(mapScheduleTaskFromApi)
 
@@ -193,7 +198,7 @@ export function TechnicianScheduleCoordinationPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [token])
 
   const selectedTechnician = technicianList.find((technician) => technician.id === selectedTechnicianId) ?? technicianList[0]
   const waitingTasks = tasks.filter((task) => !task.technicianId)
@@ -209,7 +214,7 @@ export function TechnicianScheduleCoordinationPage() {
   const highPriorityWaiting = waitingTasks.filter((task) => task.priority === 'high').length
 
   async function assignSelectedTask() {
-    if (!selectedWaitingTask || !selectedTechnician) {
+    if (!selectedWaitingTask || !selectedTechnician || !token) {
       return
     }
 
@@ -217,7 +222,7 @@ export function TechnicianScheduleCoordinationPage() {
     setApiMessage(undefined)
 
     try {
-      await updateWorkshopRepairOrder(selectedWaitingTask.id, { scheduledStart: selectedTime, status: 'pending', technicianId: selectedTechnician.id })
+      await updateWorkshopRepairOrder(token, selectedWaitingTask.id, { scheduledStart: selectedTime, status: 'pending', technicianId: selectedTechnician.id })
       setTasks((current) =>
         current.map((task) =>
           task.id === selectedWaitingTask.id

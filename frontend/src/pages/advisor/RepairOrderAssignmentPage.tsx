@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { createWorkshopRepairOrder, fetchWorkshopServices, fetchWorkshopTechnicians, updateWorkshopRepairOrder, type ApiService, type ApiTechnician } from '../../shared/api/workshop'
+import { useAuth } from '../../shared/auth'
 import { Icon } from '../../shared/ui/base'
 import {
   CustomerVehiclePanel,
@@ -32,6 +33,7 @@ function mapTechnician(technician: ApiTechnician): Technician {
 }
 
 export function RepairOrderAssignmentPage() {
+  const { token } = useAuth()
   const [tasks, setTasks] = useState<ServiceTask[]>([])
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
@@ -41,12 +43,15 @@ export function RepairOrderAssignmentPage() {
 
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadAssignmentData() {
       setApiMessage(undefined)
       try {
-        const [services, technicianList] = await Promise.all([fetchWorkshopServices(), fetchWorkshopTechnicians()])
+        const [services, technicianList] = await Promise.all([fetchWorkshopServices(authToken), fetchWorkshopTechnicians(authToken)])
         if (cancelled) return
 
         const serviceTasks = services.map(mapServiceTask)
@@ -66,7 +71,7 @@ export function RepairOrderAssignmentPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [token])
 
   const selectedTasks = useMemo(() => tasks.filter((task) => task.selected), [tasks])
   const selectedTechnician = technicians.find((tech) => tech.id === selectedTechnicianId)
@@ -82,12 +87,14 @@ export function RepairOrderAssignmentPage() {
   }
 
   async function createRepairOrder() {
+    if (!token) return
+
     setSaving(true)
     setApiMessage(undefined)
     try {
-      const created = await createWorkshopRepairOrder({ services: selectedTasks.map((task) => ({ serviceId: task.id, quantity: 1 })), technicianId: selectedTechnicianId })
+      const created = await createWorkshopRepairOrder(token, { services: selectedTasks.map((task) => ({ serviceId: task.id, quantity: 1 })), technicianId: selectedTechnicianId })
       const id = created._id || created.id
-      if (id && selectedTechnicianId) await updateWorkshopRepairOrder(id, { technicianId: selectedTechnicianId, status: 'pending' })
+      if (id && selectedTechnicianId) await updateWorkshopRepairOrder(token, id, { technicianId: selectedTechnicianId, status: 'pending' })
       setSaved(true)
       setApiMessage('Đã tạo lệnh sửa chữa và gửi phân công qua API.')
     } catch (err) {

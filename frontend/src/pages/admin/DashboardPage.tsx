@@ -43,7 +43,7 @@ export function AdminDashboardPage() {
           <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Admin Console</p>
           <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Quản trị hệ thống garage</h2>
           <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
-            Màn hình riêng cho Admin: quản lý người dùng, phân quyền, cấu hình dịch vụ, phụ tùng và báo cáo hệ thống.
+            
           </p>
         </section>
 

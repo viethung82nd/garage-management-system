@@ -1,5 +1,6 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal } from '../../shared/api/workshop'
+import { useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -243,18 +244,22 @@ function ProposalDetail({
 }
 
 export function AdditionalServiceSuggestionPage() {
+  const { token } = useAuth()
   const [proposals, setProposals] = useState<ExtraServiceProposal[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadProposals() {
       setApiMessage(undefined)
       try {
-        const response = await fetchAdditionalServiceProposals()
+        const response = await fetchAdditionalServiceProposals(authToken)
         const nextProposals = unwrapArray<ApiAdditionalServiceProposal>(response, ['proposals']).map(mapProposal)
         if (!cancelled) {
           setProposals(nextProposals)
@@ -270,7 +275,7 @@ export function AdditionalServiceSuggestionPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [token])
 
   const selectedProposal = proposals.find((proposal) => proposal.id === selectedId) ?? proposals[0]
   const pendingCount = proposals.filter((proposal) => proposal.status === 'pending').length
@@ -281,13 +286,13 @@ export function AdditionalServiceSuggestionPage() {
   )
 
   async function updateStatus(status: ProposalStatus) {
-    if (!selectedProposal) return
+    if (!selectedProposal || !token) return
 
     setSaving(true)
     setApiMessage(undefined)
 
     try {
-      const updated = await updateAdditionalServiceProposal(selectedProposal.id, status)
+      const updated = await updateAdditionalServiceProposal(token, selectedProposal.id, status)
       const mapped = mapProposal(updated)
       setProposals((current) => current.map((proposal) => (proposal.id === selectedProposal.id ? { ...proposal, ...mapped, status } : proposal)))
     } catch (err) {

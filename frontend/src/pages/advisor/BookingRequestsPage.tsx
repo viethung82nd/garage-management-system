@@ -1,7 +1,7 @@
 ﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { confirmWorkshopBooking, fetchWorkshopBookings, personName, rejectWorkshopBooking, unwrapArray, vehicleName, vehiclePlate, type ApiBooking } from '../../shared/api/workshop'
-import { getUserInitials } from '../../shared/auth'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -123,6 +123,7 @@ function FilterBar({
       </label>
 
       <select
+        aria-label="Lọc theo dịch vụ"
         className="h-12 border border-[#d8d5d5] bg-[#fbf9f8] px-4 text-sm font-bold text-[#1b1c1c] outline-none transition focus:border-[#ba0013] focus:bg-white"
         onChange={(event) => onServiceChange(event.target.value)}
         value={service}
@@ -230,6 +231,7 @@ function BookingTable({
 }
 
 export function BookingRequestsPage() {
+  const { token } = useAuth()
   const [bookings, setBookings] = useState<BookingRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [apiMessage, setApiMessage] = useState<string>()
@@ -237,13 +239,16 @@ export function BookingRequestsPage() {
   const [service, setService] = useState('all')
 
   useEffect(() => {
+    if (!token) return
+    const authToken = token
+
     let cancelled = false
 
     async function loadBookings() {
       setLoading(true)
       setApiMessage(undefined)
       try {
-        const response = await fetchWorkshopBookings()
+        const response = await fetchWorkshopBookings(authToken)
         const nextBookings = unwrapArray<ApiBooking>(response, ['bookings']).map(mapBooking)
         if (!cancelled) setBookings(nextBookings)
       } catch (err) {
@@ -258,7 +263,7 @@ export function BookingRequestsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [token])
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
 
@@ -283,9 +288,11 @@ export function BookingRequestsPage() {
   }, [bookings, query, service])
 
   async function updateStatus(id: string, status: BookingStatus) {
+    if (!token) return
+
     setApiMessage(undefined)
     try {
-      const response = status === 'confirmed' ? await confirmWorkshopBooking(id) : await rejectWorkshopBooking(id)
+      const response = status === 'confirmed' ? await confirmWorkshopBooking(token, id) : await rejectWorkshopBooking(token, id)
       const booking = 'booking' in response && response.booking ? response.booking : response
       setBookings((current) => current.map((item) => (item.id === id ? mapBooking(booking as ApiBooking) : item)))
     } catch (err) {
