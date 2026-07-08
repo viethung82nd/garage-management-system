@@ -7,6 +7,7 @@ import {
   listBookings,
   myBookings,
   confirmBooking,
+  updateBookingStatus,
   cancelBooking,
   rescheduleBooking,
 } from "../controllers/booking.controller.js";
@@ -32,6 +33,13 @@ bookingRouter.patch(
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
   asyncHandler(confirmBooking)
+);
+// Generic status update across the lifecycle (validated transitions).
+bookingRouter.patch(
+  "/:id/status",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  asyncHandler(updateBookingStatus)
 );
 
 // Owner customer or staff: cancel / reschedule (ownership enforced in controller).
