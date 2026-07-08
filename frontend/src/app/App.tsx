@@ -36,8 +36,6 @@ export default function App() {
       <Route element={<TechnicianInspectionPage />} path="/technician/tasks" />
       <Route element={<TechnicianWorkOrdersPage />} path="/technician/work-orders" />
       <Route element={<TechnicianRepairNotesPage />} path="/technician/repair-notes" />
-      <Route element={<PlaceholderPage title="Yêu cầu phụ tùng" />} path="/technician/parts-requests" />
-
       <Route element={<PlaceholderPage title="Kế toán - Tổng quan" />} path="/accountant/dashboard" />
       <Route element={<PlaceholderPage title="Hóa đơn" />} path="/accountant/invoices" />
       <Route element={<PlaceholderPage title="Thanh toán" />} path="/accountant/payments" />

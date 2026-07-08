@@ -59,7 +59,6 @@ const roleShells = {
     items: [
       { icon: 'grid', label: 'Công việc', path: '/technician/tasks' },
       { icon: 'wrench', label: 'Lệnh được giao', path: '/technician/work-orders' },
-      { icon: 'sliders', label: 'Yêu cầu phụ tùng', path: '/technician/parts-requests' },
     ],
     title: 'Kỹ thuật viên',
   },
