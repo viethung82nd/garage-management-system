@@ -1,3 +1,4 @@
+import mongoose from "mongoose";
 import {
   BookingModel,
   PaymentModel,
@@ -8,8 +9,20 @@ import {
 } from "../models/index.js";
 import { BOOKING_STATUSES } from "../models/Booking.js";
 import { REPORT_PERIODS } from "../models/RevenueReport.js";
+import { USER_ROLES } from "../models/User.js";
 import { HttpError } from "../middleware/error.js";
 import { todayUtc } from "../utils/date.js";
+
+// Fields returned by the user-listing endpoints. Excludes passwordHash and any
+// other sensitive columns by omission.
+const USER_LIST_FIELDS = {
+  fullName: 1,
+  email: 1,
+  phone: 1,
+  role: 1,
+  isActive: 1,
+  createdAt: 1,
+};
 
 const REPORT_DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -248,4 +261,58 @@ export async function getTechnicianPerformance(req, res) {
   }
   const technicians = await technicianBreakdown(start, end);
   res.json({ startDate: start, endDate: end, technicians });
+}
+
+/**
+ * GET /api/admin/users — list users for admin account management. Optional
+ * `role` query filters to a single role (validated against USER_ROLES). Returns
+ * a lean projection without passwordHash, newest first.
+ */
+export async function listUsers(req, res) {
+  const { role } = req.query;
+
+  const filter = {};
+  if (role !== undefined) {
+    if (!USER_ROLES.includes(role)) {
+      throw new HttpError(
+        400,
+        `role must be one of: ${USER_ROLES.join(", ")}`
+      );
+    }
+    filter.role = role;
+  }
+
+  const users = await UserModel.find(filter, USER_LIST_FIELDS)
+    .sort({ createdAt: -1 })
+    .lean();
+
+  res.json({ users });
+}
+
+/**
+ * PATCH /api/admin/users/:id/deactivate — soft-disable a user account by
+ * setting isActive = false. Idempotent (deactivating an already-inactive user
+ * is fine). Admins may not deactivate their own account, to avoid locking
+ * themselves out.
+ */
+export async function deactivateUser(req, res) {
+  const { id } = req.params;
+  if (!mongoose.isValidObjectId(id)) {
+    throw new HttpError(400, "id is not a valid id");
+  }
+  if (id === req.user.sub) {
+    throw new HttpError(400, "You cannot deactivate your own account");
+  }
+
+  const user = await UserModel.findByIdAndUpdate(
+    id,
+    { isActive: false },
+    { new: true, projection: USER_LIST_FIELDS }
+  ).lean();
+
+  if (!user) {
+    throw new HttpError(404, "User not found");
+  }
+
+  res.json({ user });
 }
