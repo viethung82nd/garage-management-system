@@ -1,5 +1,6 @@
 ﻿import { Navigate, Route, Routes } from 'react-router-dom'
 import { AdminDashboardPage } from '../pages/admin/DashboardPage'
+import { ServiceCatalogPage } from '../pages/admin/ServiceCatalogPage'
 import { AdditionalServiceSuggestionPage } from '../pages/advisor/AdditionalServiceSuggestionPage'
 import { BookingRequestsPage } from '../pages/advisor/BookingRequestsPage'
 import { RepairOrderAssignmentPage } from '../pages/advisor/RepairOrderAssignmentPage'
@@ -50,7 +51,7 @@ export default function App() {
       <Route element={<AdminDashboardPage />} path="/admin/dashboard" />
       <Route element={<PlaceholderPage title="Người dùng" />} path="/admin/users" />
       <Route element={<PlaceholderPage title="Phân quyền" />} path="/admin/roles" />
-      <Route element={<PlaceholderPage title="Dịch vụ" />} path="/admin/services" />
+      <Route element={<ServiceCatalogPage />} path="/admin/services" />
       <Route element={<PlaceholderPage title="Phụ tùng" />} path="/admin/parts" />
       <Route element={<PlaceholderPage title="Báo cáo hệ thống" />} path="/admin/reports" />
 

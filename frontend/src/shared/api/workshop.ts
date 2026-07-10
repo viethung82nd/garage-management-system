@@ -183,6 +183,18 @@ export function fetchWorkshopServices(token: string) {
   return apiRequest<ApiService[]>('/api/services', { token })
 }
 
+export function createWorkshopService(token: string, payload: ApiService) {
+  return apiRequest<{ service?: ApiService } | ApiService>('/api/services', { method: 'POST', token, body: JSON.stringify(payload) })
+}
+
+export function updateWorkshopService(token: string, id: string, payload: ApiService) {
+  return apiRequest<{ service?: ApiService } | ApiService>(`/api/services/${id}`, { method: 'PUT', token, body: JSON.stringify(payload) })
+}
+
+export function deleteWorkshopService(token: string, id: string) {
+  return apiRequest<{ success?: boolean }>(`/api/services/${id}`, { method: 'DELETE', token })
+}
+
 export function fetchWorkshopTechnicians(token: string) {
   return apiRequest<ApiTechnician[]>('/api/technicians', { token })
 }
