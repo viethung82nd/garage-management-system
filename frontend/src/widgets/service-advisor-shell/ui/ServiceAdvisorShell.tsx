@@ -8,6 +8,7 @@ export type ServiceAdvisorNavKey =
   | 'bookings'
   | 'reception'
   | 'work-orders'
+  | 'quotation'
   | 'additional-services'
   | 'repair-timeline'
   | 'technician-schedule'
@@ -19,6 +20,7 @@ const navItems = [
   { key: 'bookings', icon: 'calendar', label: 'Đặt lịch', to: '/advisor/bookings' },
   { key: 'reception', icon: 'clipboard', label: 'Tiếp nhận xe', to: '/advisor/reception' },
   { key: 'work-orders', icon: 'wrench', label: 'Lệnh sửa chữa', to: '/advisor/work-orders' },
+  { key: 'quotation', icon: 'invoice', label: 'Báo giá', to: '/advisor/quotation' },
   { key: 'additional-services', icon: 'plus', label: 'Dịch vụ phát sinh', to: '/advisor/additional-services' },
   { key: 'repair-timeline', icon: 'map', label: 'Tiến độ sửa chữa', to: '/advisor/repair-timeline' },
   { key: 'technician-schedule', icon: 'team', label: 'Lịch KTV', to: '/advisor/technician-schedule' },

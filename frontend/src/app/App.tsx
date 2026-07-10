@@ -4,6 +4,7 @@ import { AdditionalServiceSuggestionPage } from '../pages/advisor/AdditionalServ
 import { BookingRequestsPage } from '../pages/advisor/BookingRequestsPage'
 import { RepairOrderAssignmentPage } from '../pages/advisor/RepairOrderAssignmentPage'
 import { RepairProgressTimelinePage } from '../pages/advisor/RepairProgressTimelinePage'
+import { QuotationPage } from '../pages/advisor/QuotationPage'
 import { ServiceAdvisorDashboardPage } from '../pages/advisor/ServiceAdvisorDashboardPage'
 import { TechnicianScheduleCoordinationPage } from '../pages/advisor/TechnicianScheduleCoordinationPage'
 import { VehicleReceptionPage } from '../pages/advisor/VehicleReceptionPage'
@@ -21,6 +22,7 @@ export default function App() {
       <Route element={<BookingRequestsPage />} path="/advisor/bookings" />
       <Route element={<VehicleReceptionPage />} path="/advisor/reception" />
       <Route element={<RepairOrderAssignmentPage />} path="/advisor/work-orders" />
+      <Route element={<QuotationPage />} path="/advisor/quotation" />
       <Route element={<AdditionalServiceSuggestionPage />} path="/advisor/additional-services" />
       <Route element={<RepairProgressTimelinePage />} path="/advisor/repair-timeline" />
       <Route element={<TechnicianScheduleCoordinationPage />} path="/advisor/technician-schedule" />

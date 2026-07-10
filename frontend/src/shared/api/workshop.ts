@@ -91,6 +91,34 @@ export type ApiAdditionalServiceProposal = {
   technician?: AuthUser | string
 }
 
+export type QuotationLineKind = 'service' | 'part' | 'labor'
+
+export type ApiQuotationLine = {
+  id?: string
+  description?: string
+  kind?: QuotationLineKind
+  quantity?: number
+  unitPrice?: number
+}
+
+export type ApiQuotation = {
+  _id?: string
+  id?: string
+  code?: string
+  repairOrderId?: string
+  customerName?: string
+  customerPhone?: string
+  vehiclePlate?: string
+  vehicleName?: string
+  lines?: ApiQuotationLine[]
+  discountPercent?: number
+  taxPercent?: number
+  note?: string
+  validUntil?: string
+  status?: 'draft' | 'sent' | 'approved' | 'rejected'
+  createdAt?: string
+}
+
 export type ApiDashboardSummary = {
   pendingBookings?: number
   todayReceptions?: number
@@ -173,6 +201,22 @@ export function uploadInspectionPhotos(token: string, repairOrderId: string, for
 
 export function saveInspectionNote(token: string, repairOrderId: string, content: string) {
   return addWorkshopStepNote(token, repairOrderId, { content })
+}
+
+export function createQuotation(token: string, payload: ApiQuotation) {
+  return apiRequest<{ quotation?: ApiQuotation } | ApiQuotation>('/api/quotations', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload),
+  })
+}
+
+export function sendQuotation(token: string, id: string) {
+  return apiRequest<{ quotation?: ApiQuotation } | ApiQuotation>(`/api/quotations/${id}/send`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({}),
+  })
 }
 
 export function unwrapArray<T>(value: T[] | Record<string, T[] | undefined>, keys: string[]) {
