@@ -203,6 +203,33 @@ export function saveInspectionNote(token: string, repairOrderId: string, content
   return addWorkshopStepNote(token, repairOrderId, { content })
 }
 
+export type InspectionItemStatus = 'ok' | 'monitor' | 'repair'
+
+export type ApiInspectionItem = {
+  category?: string
+  label?: string
+  status?: InspectionItemStatus
+  note?: string
+  laborCost?: number
+  partsCost?: number
+}
+
+export type ApiInspectionResult = {
+  odometer?: number
+  fuelLevel?: string
+  overallNote?: string
+  items?: ApiInspectionItem[]
+  estimatedCost?: number
+}
+
+export function submitInspectionResult(token: string, repairOrderId: string, payload: ApiInspectionResult) {
+  return apiRequest<{ inspection?: ApiInspectionResult } | ApiInspectionResult>(`/api/repair-orders/${repairOrderId}/inspection`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload),
+  })
+}
+
 export function createQuotation(token: string, payload: ApiQuotation) {
   return apiRequest<{ quotation?: ApiQuotation } | ApiQuotation>('/api/quotations', {
     method: 'POST',

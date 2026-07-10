@@ -10,6 +10,7 @@ import { TechnicianScheduleCoordinationPage } from '../pages/advisor/TechnicianS
 import { VehicleReceptionPage } from '../pages/advisor/VehicleReceptionPage'
 import { PlaceholderPage } from '../pages/PlaceholderPage'
 import { TechnicianInspectionPage } from '../pages/technician/TechnicianInspectionPage'
+import { VehicleInspectionFormPage } from '../pages/technician/VehicleInspectionFormPage'
 import { TechnicianRepairNotesPage } from '../pages/technician/TechnicianRepairNotesPage'
 import { TechnicianWorkOrdersPage } from '../pages/technician/TechnicianWorkOrdersPage'
 
@@ -36,6 +37,7 @@ export default function App() {
       <Route element={<PlaceholderPage title="Hóa đơn của tôi" />} path="/customer/invoices" />
 
       <Route element={<TechnicianInspectionPage />} path="/technician/tasks" />
+      <Route element={<VehicleInspectionFormPage />} path="/technician/inspection" />
       <Route element={<TechnicianWorkOrdersPage />} path="/technician/work-orders" />
       <Route element={<TechnicianRepairNotesPage />} path="/technician/repair-notes" />
       <Route element={<PlaceholderPage title="Kế toán - Tổng quan" />} path="/accountant/dashboard" />

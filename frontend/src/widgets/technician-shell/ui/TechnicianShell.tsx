@@ -3,10 +3,11 @@ import { Link } from 'react-router-dom'
 import { getRoleLabel, getUserInitials, useAuth } from '../../../shared/auth'
 import { Icon, type IconName } from '../../../shared/ui/base'
 
-export type TechnicianNavKey = 'tasks' | 'work-orders' | 'repair-notes'
+export type TechnicianNavKey = 'tasks' | 'inspection-form' | 'work-orders' | 'repair-notes'
 
 const navItems = [
-  { key: 'tasks', icon: 'clipboard', label: 'Phiếu kiểm tra', to: '/technician/tasks' },
+  { key: 'tasks', icon: 'car', label: 'Ảnh kiểm tra', to: '/technician/tasks' },
+  { key: 'inspection-form', icon: 'clipboard', label: 'Phiếu kiểm tra', to: '/technician/inspection' },
   { key: 'work-orders', icon: 'wrench', label: 'Lệnh được giao', to: '/technician/work-orders' },
   { key: 'repair-notes', icon: 'invoice', label: 'Ghi chú sửa chữa', to: '/technician/repair-notes' },
 ] satisfies Array<{ key: TechnicianNavKey; icon: IconName; label: string; to: string }>

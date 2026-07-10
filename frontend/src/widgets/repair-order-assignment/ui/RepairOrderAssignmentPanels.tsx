@@ -17,6 +17,17 @@ export type Technician = {
   status: 'available' | 'busy' | 'offline'
 }
 
+export type RepairOrderHeader = {
+  customerName: string
+  customerPhone: string
+  vehicleName: string
+  plate: string
+  vin: string
+  odometer: string
+  promisedAt: string
+  priority: string
+}
+
 export function SectionCard({
   accent,
   children,
@@ -43,11 +54,13 @@ export function SectionCard({
 
 export function Field({
   label,
+  onChange,
   placeholder,
   type = 'text',
   value,
 }: {
   label: string
+  onChange?: (value: string) => void
   placeholder?: string
   type?: string
   value?: string
@@ -57,26 +70,33 @@ export function Field({
       <span className="block font-mono text-[11px] font-black uppercase tracking-[0.14em] text-[#6a6767]">{label}</span>
       <input
         className="h-12 w-full border border-[#d8d5d5] bg-[#fbf9f8] px-4 text-sm font-bold text-[#1b1c1c] outline-none transition placeholder:text-[#9b9696] focus:border-[#ba0013] focus:bg-white focus:ring-4 focus:ring-[#ba0013]/10"
-        defaultValue={value}
+        onChange={onChange ? (event) => onChange(event.target.value) : undefined}
         placeholder={placeholder}
         type={type}
+        value={value ?? ''}
       />
     </label>
   )
 }
 
-export function CustomerVehiclePanel() {
+export function CustomerVehiclePanel({
+  onChange,
+  value,
+}: {
+  onChange: (field: keyof RepairOrderHeader, value: string) => void
+  value: RepairOrderHeader
+}) {
   return (
     <SectionCard accent icon="car" title="Thông tin khách hàng & xe">
       <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="Khách hàng" value="Alex Nguyễn" />
-        <Field label="Số điện thoại" value="090 123 4567" />
-        <Field label="Xe" value="BMW M4 Competition" />
-        <Field label="Biển số" value="51K-882.88" />
-        <Field label="VIN" value="WBS33AZ08PCM44882" />
-        <Field label="Số km" value="18,240 km" />
-        <Field label="Ngày hẹn trả" type="date" />
-        <Field label="Ưu tiên" value="Cao" />
+        <Field label="Khách hàng" onChange={(next) => onChange('customerName', next)} placeholder="Nguyễn Văn A" value={value.customerName} />
+        <Field label="Số điện thoại" onChange={(next) => onChange('customerPhone', next)} placeholder="090 123 4567" value={value.customerPhone} />
+        <Field label="Xe" onChange={(next) => onChange('vehicleName', next)} placeholder="BMW M4 Competition" value={value.vehicleName} />
+        <Field label="Biển số" onChange={(next) => onChange('plate', next)} placeholder="51K-882.88" value={value.plate} />
+        <Field label="VIN" onChange={(next) => onChange('vin', next)} placeholder="WBS33AZ08PCM44882" value={value.vin} />
+        <Field label="Số km" onChange={(next) => onChange('odometer', next)} placeholder="18240" value={value.odometer} />
+        <Field label="Ngày hẹn trả" onChange={(next) => onChange('promisedAt', next)} type="date" value={value.promisedAt} />
+        <Field label="Ưu tiên" onChange={(next) => onChange('priority', next)} placeholder="Cao / Bình thường" value={value.priority} />
       </div>
     </SectionCard>
   )
@@ -190,9 +210,15 @@ function StatusPill({ status }: { status: Technician['status'] }) {
 }
 
 export function WorkOrderSummary({
+  code,
+  note,
+  onNoteChange,
   selectedTasks,
   selectedTechnician,
 }: {
+  code: string
+  note: string
+  onNoteChange: (value: string) => void
   selectedTasks: ServiceTask[]
   selectedTechnician?: Technician
 }) {
@@ -202,7 +228,7 @@ export function WorkOrderSummary({
     <aside className="sticky top-28 space-y-6">
       <section className="bg-[#1b1c1c] p-6 text-white shadow-[0_18px_45px_rgba(15,14,14,0.18)]">
         <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ffb4ab]">Lệnh sửa chữa mới</p>
-        <h2 className="mt-3 text-3xl font-black">RO-2026-0882</h2>
+        <h2 className="mt-3 text-3xl font-black">{code}</h2>
         <div className="mt-6 grid grid-cols-2 gap-3">
           <SummaryMetric label="Hạng mục" value={String(selectedTasks.length).padStart(2, '0')} />
           <SummaryMetric label="Dự kiến" value={`${totalMinutes || 0} phút`} />
@@ -218,7 +244,9 @@ export function WorkOrderSummary({
         <h3 className="text-lg font-black text-[#171717]">Ghi chú cố vấn</h3>
         <textarea
           className="mt-4 min-h-32 w-full border border-[#d8d5d5] bg-[#fbf9f8] p-4 text-sm text-[#1b1c1c] outline-none focus:border-[#ba0013] focus:ring-4 focus:ring-[#ba0013]/10"
-          defaultValue="Khách báo xe rung nhẹ khi phanh ở tốc độ cao. Ưu tiên kiểm tra phanh, cân bằng bánh và chạy thử trước khi bàn giao."
+          onChange={(event) => onNoteChange(event.target.value)}
+          placeholder="Ghi chú tình trạng khách báo, ưu tiên kiểm tra..."
+          value={note}
         />
       </section>
     </aside>
