@@ -4,6 +4,7 @@ import { AdditionalServiceSuggestionPage } from '../pages/advisor/AdditionalServ
 import { BookingRequestsPage } from '../pages/advisor/BookingRequestsPage'
 import { RepairOrderAssignmentPage } from '../pages/advisor/RepairOrderAssignmentPage'
 import { RepairProgressTimelinePage } from '../pages/advisor/RepairProgressTimelinePage'
+import { QualityVerificationPage } from '../pages/advisor/QualityVerificationPage'
 import { QuotationPage } from '../pages/advisor/QuotationPage'
 import { ServiceAdvisorDashboardPage } from '../pages/advisor/ServiceAdvisorDashboardPage'
 import { TechnicianScheduleCoordinationPage } from '../pages/advisor/TechnicianScheduleCoordinationPage'
@@ -25,6 +26,7 @@ export default function App() {
       <Route element={<RepairOrderAssignmentPage />} path="/advisor/work-orders" />
       <Route element={<QuotationPage />} path="/advisor/quotation" />
       <Route element={<AdditionalServiceSuggestionPage />} path="/advisor/additional-services" />
+      <Route element={<QualityVerificationPage />} path="/advisor/quality-check" />
       <Route element={<RepairProgressTimelinePage />} path="/advisor/repair-timeline" />
       <Route element={<TechnicianScheduleCoordinationPage />} path="/advisor/technician-schedule" />
       <Route element={<PlaceholderPage title="Khách hàng" />} path="/advisor/customers" />

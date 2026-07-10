@@ -203,6 +203,29 @@ export function saveInspectionNote(token: string, repairOrderId: string, content
   return addWorkshopStepNote(token, repairOrderId, { content })
 }
 
+export type QualityCheckResult = 'pass' | 'fail' | 'na'
+
+export type ApiQualityCheckItem = {
+  label?: string
+  result?: QualityCheckResult
+  note?: string
+}
+
+export type ApiQualityCheck = {
+  passed?: boolean
+  items?: ApiQualityCheckItem[]
+  note?: string
+  reworkReason?: string
+}
+
+export function submitQualityCheck(token: string, repairOrderId: string, payload: ApiQualityCheck) {
+  return apiRequest<{ order?: ApiRepairOrder } | ApiRepairOrder>(`/api/repair-orders/${repairOrderId}/quality-check`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload),
+  })
+}
+
 export type InspectionItemStatus = 'ok' | 'monitor' | 'repair'
 
 export type ApiInspectionItem = {

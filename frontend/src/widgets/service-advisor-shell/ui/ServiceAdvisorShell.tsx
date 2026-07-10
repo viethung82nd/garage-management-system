@@ -10,6 +10,7 @@ export type ServiceAdvisorNavKey =
   | 'work-orders'
   | 'quotation'
   | 'additional-services'
+  | 'quality-check'
   | 'repair-timeline'
   | 'technician-schedule'
   | 'customers'
@@ -22,6 +23,7 @@ const navItems = [
   { key: 'work-orders', icon: 'wrench', label: 'Lệnh sửa chữa', to: '/advisor/work-orders' },
   { key: 'quotation', icon: 'invoice', label: 'Báo giá', to: '/advisor/quotation' },
   { key: 'additional-services', icon: 'plus', label: 'Dịch vụ phát sinh', to: '/advisor/additional-services' },
+  { key: 'quality-check', icon: 'check', label: 'Nghiệm thu', to: '/advisor/quality-check' },
   { key: 'repair-timeline', icon: 'map', label: 'Tiến độ sửa chữa', to: '/advisor/repair-timeline' },
   { key: 'technician-schedule', icon: 'team', label: 'Lịch KTV', to: '/advisor/technician-schedule' },
   { key: 'customers', icon: 'users', label: 'Khách hàng', to: '/advisor/customers' },
