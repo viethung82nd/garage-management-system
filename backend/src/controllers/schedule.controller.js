@@ -41,7 +41,8 @@ async function getOrCreateSchedule(technicianId, date) {
 }
 
 export async function getTechnicianSchedule(req, res) {
-  const { technicianId, date } = req.query ?? {};
+  const technicianId = req.params?.technicianId ?? req.query?.technicianId;
+  const { date } = req.query ?? {};
 
   if (!technicianId) {
     throw new HttpError(400, "technicianId is required");
@@ -56,18 +57,24 @@ export async function getTechnicianSchedule(req, res) {
     throw new HttpError(404, "Technician not found");
   }
 
-  if (req.user?.role === "technician" && String(req.user.sub) !== String(technicianId)) {
+  if (
+    req.user?.role === "technician" &&
+    String(req.user.sub) !== String(technicianId)
+  ) {
     throw new HttpError(403, "You can only view your own schedule");
   }
 
-  const normalizedDate = normalizeScheduleDate(date ?? new Date().toISOString().slice(0, 10));
+  const normalizedDate = normalizeScheduleDate(
+    date ?? new Date().toISOString().slice(0, 10),
+  );
   const schedule = await getOrCreateSchedule(technicianId, normalizedDate);
 
   res.json(schedule);
 }
 
 export async function updateTechnicianSchedule(req, res) {
-  const { technicianId, date } = req.query ?? {};
+  const technicianId = req.params?.technicianId ?? req.query?.technicianId;
+  const { date } = req.query ?? {};
   const { isAvailable, activeOrderIds } = req.body ?? {};
 
   if (!technicianId) {
@@ -83,12 +90,18 @@ export async function updateTechnicianSchedule(req, res) {
     throw new HttpError(404, "Technician not found");
   }
 
-  if (req.user?.role === "technician" && String(req.user.sub) !== String(technicianId)) {
+  if (
+    req.user?.role === "technician" &&
+    String(req.user.sub) !== String(technicianId)
+  ) {
     throw new HttpError(403, "You can only update your own schedule");
   }
 
   if (typeof isAvailable !== "boolean" && activeOrderIds === undefined) {
-    throw new HttpError(400, "At least one of isAvailable or activeOrderIds is required");
+    throw new HttpError(
+      400,
+      "At least one of isAvailable or activeOrderIds is required",
+    );
   }
 
   if (activeOrderIds !== undefined && !Array.isArray(activeOrderIds)) {
@@ -96,13 +109,17 @@ export async function updateTechnicianSchedule(req, res) {
   }
 
   if (Array.isArray(activeOrderIds)) {
-    const invalidIds = activeOrderIds.filter((id) => !String(id).match(/^[0-9a-fA-F]{24}$/));
+    const invalidIds = activeOrderIds.filter(
+      (id) => !String(id).match(/^[0-9a-fA-F]{24}$/),
+    );
     if (invalidIds.length > 0) {
       throw new HttpError(400, "activeOrderIds contains an invalid ObjectId");
     }
   }
 
-  const normalizedDate = normalizeScheduleDate(date ?? new Date().toISOString().slice(0, 10));
+  const normalizedDate = normalizeScheduleDate(
+    date ?? new Date().toISOString().slice(0, 10),
+  );
   const existingSchedule = await ScheduleModel.findOne({
     technicianId,
     date: {
@@ -111,13 +128,15 @@ export async function updateTechnicianSchedule(req, res) {
     },
   });
 
-  const schedule = existingSchedule ?? (await ScheduleModel.create({
-    technicianId,
-    date: normalizedDate,
-    isAvailable: true,
-    activeOrderIds: [],
-    activeOrderCount: 0,
-  }));
+  const schedule =
+    existingSchedule ??
+    (await ScheduleModel.create({
+      technicianId,
+      date: normalizedDate,
+      isAvailable: true,
+      activeOrderIds: [],
+      activeOrderCount: 0,
+    }));
 
   if (typeof isAvailable === "boolean") {
     schedule.isAvailable = isAvailable;

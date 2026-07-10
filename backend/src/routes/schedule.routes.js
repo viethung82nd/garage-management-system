@@ -15,8 +15,22 @@ scheduleRouter.get(
   asyncHandler(getTechnicianSchedule),
 );
 
+scheduleRouter.get(
+  "/technician/:technicianId",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(getTechnicianSchedule),
+);
+
 scheduleRouter.patch(
   "/",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(updateTechnicianSchedule),
+);
+
+scheduleRouter.patch(
+  "/technician/:technicianId",
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
   asyncHandler(updateTechnicianSchedule),
