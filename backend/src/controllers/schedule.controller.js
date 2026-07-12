@@ -2,6 +2,10 @@ import { ScheduleModel } from "../models/Schedule.js";
 import { UserModel } from "../models/User.js";
 import { HttpError } from "../middleware/error.js";
 
+function isValidObjectId(value) {
+  return String(value).match(/^[0-9a-fA-F]{24}$/);
+}
+
 function normalizeScheduleDate(dateParam) {
   if (!dateParam) {
     throw new HttpError(400, "date is required");
@@ -147,6 +151,40 @@ export async function updateTechnicianSchedule(req, res) {
     schedule.activeOrderCount = activeOrderIds.length;
   }
 
+  await schedule.save();
+
+  res.json(schedule);
+}
+
+export async function updateScheduleAvailability(req, res) {
+  const { scheduleId } = req.params ?? {};
+  const { isAvailable } = req.body ?? {};
+
+  if (!scheduleId) {
+    throw new HttpError(400, "scheduleId is required");
+  }
+
+  if (!isValidObjectId(scheduleId)) {
+    throw new HttpError(400, "Invalid scheduleId format");
+  }
+
+  if (typeof isAvailable !== "boolean") {
+    throw new HttpError(400, "isAvailable must be a boolean");
+  }
+
+  const schedule = await ScheduleModel.findById(scheduleId);
+  if (!schedule) {
+    throw new HttpError(404, "Schedule not found");
+  }
+
+  if (
+    req.user?.role === "technician" &&
+    String(req.user.sub) !== String(schedule.technicianId)
+  ) {
+    throw new HttpError(403, "You can only update your own schedule");
+  }
+
+  schedule.isAvailable = isAvailable;
   await schedule.save();
 
   res.json(schedule);

@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/error.js";
 import {
   getTechnicianSchedule,
+  updateScheduleAvailability,
   updateTechnicianSchedule,
 } from "../controllers/schedule.controller.js";
 
@@ -34,4 +35,11 @@ scheduleRouter.patch(
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
   asyncHandler(updateTechnicianSchedule),
+);
+
+scheduleRouter.put(
+  "/:scheduleId/availability",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(updateScheduleAvailability),
 );
