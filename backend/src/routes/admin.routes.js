@@ -11,11 +11,12 @@ import {
 
 export const adminRouter = Router();
 
-// User account management: admins only.
+// User account management: admins manage accounts; service advisors also read
+// the list to staff repair orders (e.g. assigning a technician).
 adminRouter.get(
   "/users",
   requireAuth,
-  requireRole("admin"),
+  requireRole("admin", "serviceAdvisor"),
   asyncHandler(listUsers)
 );
 adminRouter.patch(

@@ -195,8 +195,9 @@ export function deleteWorkshopService(token: string, id: string) {
   return apiRequest<{ success?: boolean }>(`/api/services/${id}`, { method: 'DELETE', token })
 }
 
-export function fetchWorkshopTechnicians(token: string) {
-  return apiRequest<ApiTechnician[]>('/api/technicians', { token })
+export async function fetchWorkshopTechnicians(token: string) {
+  const response = await apiRequest<{ users?: ApiTechnician[] } | ApiTechnician[]>('/api/admin/users?role=technician', { token })
+  return unwrapArray(response, ['users'])
 }
 
 export function fetchAdditionalServiceProposals(token: string) {
