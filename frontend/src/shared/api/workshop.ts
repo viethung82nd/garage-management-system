@@ -209,7 +209,8 @@ export function updateAdditionalServiceProposal(token: string, id: string, statu
 }
 
 export function uploadInspectionPhotos(token: string, repairOrderId: string, formData: FormData) {
-  return apiRequest(`/api/repair-orders/${repairOrderId}/inspection/photos`, { method: 'POST', token, body: formData })
+  formData.append('repairOrderId', repairOrderId)
+  return apiRequest('/api/inspection-reports', { method: 'POST', token, body: formData })
 }
 
 export function saveInspectionNote(token: string, repairOrderId: string, content: string) {
@@ -259,10 +260,17 @@ export type ApiInspectionResult = {
 }
 
 export function submitInspectionResult(token: string, repairOrderId: string, payload: ApiInspectionResult) {
-  return apiRequest<{ inspection?: ApiInspectionResult } | ApiInspectionResult>(`/api/repair-orders/${repairOrderId}/inspection`, {
+  return apiRequest('/api/inspection-reports', {
     method: 'POST',
     token,
-    body: JSON.stringify(payload),
+    body: JSON.stringify({
+      repairOrderId,
+      odometer: payload.odometer,
+      fuelLevel: payload.fuelLevel,
+      findings: payload.overallNote,
+      items: payload.items,
+      estimatedCost: payload.estimatedCost,
+    }),
   })
 }
 
