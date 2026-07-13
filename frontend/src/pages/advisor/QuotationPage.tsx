@@ -40,7 +40,7 @@ const kindOptions: Array<{ label: string; value: QuotationLineKind }> = [
 ]
 
 function formatMoney(value: number) {
-  return new Intl.NumberFormat('vi-VN').format(Math.round(value)) + 'đ'
+  return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))} ₫`
 }
 
 function newQuotationCode() {
