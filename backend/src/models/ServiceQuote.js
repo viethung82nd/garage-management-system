@@ -1,10 +1,10 @@
 import mongoose, { Schema } from "mongoose";
 
 // Matches the states the frontend's quotation editor actually uses (draft
-// while being edited, sent once handed to the customer). "accepted"/
-// "rejected" are kept for the customer-response step this doesn't have UI
-// for yet.
-export const QUOTE_STATUSES = ["draft", "sent", "accepted", "rejected"];
+// while being edited, sent once handed to the customer) plus the FE's
+// ApiQuotation.status contract ("approved"/"rejected") for the
+// customer-response step this doesn't have UI for yet.
+export const QUOTE_STATUSES = ["draft", "sent", "approved", "rejected"];
 export const QUOTE_LINE_KINDS = ["service", "part", "labor"];
 
 const quoteLineSchema = new Schema(
