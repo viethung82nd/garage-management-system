@@ -1,6 +1,5 @@
 import express from "express";
 import cors from "cors";
-import path from "path";
 import { env } from "./config/env.js";
 import { dbStatus } from "./db/connect.js";
 import { errorHandler, notFound } from "./middleware/error.js";
@@ -56,8 +55,6 @@ export function createApp() {
   app.use("/api/receptions", receptionRouter);
   app.use("/api/quotations", quotationRouter);
   app.use("/api/additional-service-proposals", additionalServiceRouter);
-
-  app.use("/uploads", express.static(path.resolve("uploads")));
 
   app.use(notFound);
   app.use(errorHandler);

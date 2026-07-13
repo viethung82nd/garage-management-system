@@ -1,5 +1,3 @@
-import fs from "fs";
-import path from "path";
 import { Router } from "express";
 import multer from "multer";
 import { requireAuth, requireRole } from "../middleware/auth.js";
@@ -20,19 +18,10 @@ import {
 
 export const serviceRouter = Router();
 
-const categoryPhotosDir = path.resolve("uploads", "category-photos");
-fs.mkdirSync(categoryPhotosDir, { recursive: true });
-
+// Buffers in memory — the controller uploads straight to Cloudinary, so this
+// doesn't depend on a persistent local filesystem.
 const categoryPhotoUpload = multer({
-  storage: multer.diskStorage({
-    destination(_req, _file, cb) {
-      cb(null, categoryPhotosDir);
-    },
-    filename(_req, file, cb) {
-      const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
-      cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}-${safeName}`);
-    },
-  }),
+  storage: multer.memoryStorage(),
   fileFilter(_req, file, cb) {
     if (!file.mimetype.startsWith("image/")) {
       cb(new Error("Only image files are allowed for category photos"), false);

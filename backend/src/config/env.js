@@ -29,4 +29,12 @@ export const env = {
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean),
+  // Optional (not required()) so the server still boots for anyone who
+  // hasn't set up Cloudinary yet — only the upload endpoints need this, not
+  // the whole app. They fail with a clear error instead if it's missing.
+  cloudinary: {
+    cloudName: optional("CLOUDINARY_CLOUD_NAME", ""),
+    apiKey: optional("CLOUDINARY_API_KEY", ""),
+    apiSecret: optional("CLOUDINARY_API_SECRET", ""),
+  },
 };

@@ -1,10 +1,11 @@
 import { ServiceModel, ServiceCategoryModel } from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
+import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
 
 /**
  * POST /api/services/categories/:id/photo
- * Uploads a category image (multer disk storage, see the route file) and
- * stores the resulting /uploads path on the category.
+ * Uploads a category image to Cloudinary (see routes/service.routes.js for
+ * the multer memory-storage setup) and stores the resulting HTTPS URL.
  */
 export async function uploadServiceCategoryPhoto(req, res) {
   const { id } = req.params;
@@ -21,7 +22,8 @@ export async function uploadServiceCategoryPhoto(req, res) {
     throw new HttpError(404, "Service category not found");
   }
 
-  category.imageUrl = "/uploads/category-photos/" + req.file.filename;
+  const uploaded = await uploadBufferToCloudinary(req.file.buffer, "category-photos");
+  category.imageUrl = uploaded.secure_url;
   await category.save();
 
   res.json(category);

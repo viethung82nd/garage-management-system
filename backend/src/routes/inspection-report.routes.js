@@ -1,23 +1,8 @@
-import fs from "fs";
-import path from "path";
 import { Router } from "express";
 import multer from "multer";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/error.js";
 import { createInspectionReport } from "../controllers/inspection-report.controller.js";
-
-const inspectionPhotosDir = path.resolve("uploads", "inspection-photos");
-fs.mkdirSync(inspectionPhotosDir, { recursive: true });
-
-const storage = multer.diskStorage({
-  destination(_req, _file, cb) {
-    cb(null, inspectionPhotosDir);
-  },
-  filename(_req, file, cb) {
-    const safeName = file.originalname.replace(/[^a-zA-Z0-9.-]/g, "_");
-    cb(null, `${Date.now()}-${Math.round(Math.random() * 1e9)}-${safeName}`);
-  },
-});
 
 function fileFilter(_req, file, cb) {
   if (!file.mimetype.startsWith("image/")) {
@@ -27,8 +12,12 @@ function fileFilter(_req, file, cb) {
   cb(null, true);
 }
 
+// Buffers files in memory instead of writing to local disk — the controller
+// uploads each buffer straight to Cloudinary, so nothing here depends on a
+// persistent filesystem (most hosts, including Render's free tier, wipe
+// local disk on every redeploy).
 const upload = multer({
-  storage,
+  storage: multer.memoryStorage(),
   fileFilter,
   limits: { fileSize: 5 * 1024 * 1024 },
 });

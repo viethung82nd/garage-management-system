@@ -5,6 +5,7 @@ import {
   VehicleModel,
 } from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
+import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
 
 /** Accepts an array, a JSON-string-encoded array, or nothing (multipart form
  *  fields arrive as strings; JSON requests send real arrays). */
@@ -136,9 +137,12 @@ export async function createInspectionReport(req, res) {
     };
   });
 
-  const photos = (req.files ?? []).map(
-    (file) => "/uploads/inspection-photos/" + file.filename,
+  const uploadedPhotos = await Promise.all(
+    (req.files ?? []).map((file) =>
+      uploadBufferToCloudinary(file.buffer, "inspection-photos"),
+    ),
   );
+  const photos = uploadedPhotos.map((result) => result.secure_url);
 
   const inspectionReport = new InspectionReportModel({
     bookingId: bookingId || undefined,
