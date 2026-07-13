@@ -1,7 +1,9 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { CheckOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Tag } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
 import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
-import { Icon, type IconName } from '../../shared/ui/base'
+import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 type ProposalStatus = 'pending' | 'sent' | 'approved' | 'rejected'
@@ -21,225 +23,147 @@ type ExtraServiceProposal = {
   technician: string
 }
 
-const evidenceTiles = [
-  { label: 'Ảnh má phanh', tone: 'bg-[#1b1c1c]' },
-  { label: 'Ảnh đĩa phanh', tone: 'bg-[#ba0013]' },
-  { label: 'Ảnh lọc gió', tone: 'bg-[#5f5e5e]' },
-]
-
 const statusLabels: Record<ProposalStatus, string> = {
-  approved: 'Đã duyệt',
-  pending: 'Chờ SA xử lý',
-  rejected: 'Đã từ chối',
-  sent: 'Đã gửi khách',
+  approved: 'Approved',
+  pending: 'Awaiting SA review',
+  rejected: 'Rejected',
+  sent: 'Sent to customer',
 }
 
+const statusColors: Record<ProposalStatus, string> = {
+  approved: 'green',
+  pending: 'red',
+  rejected: 'default',
+  sent: 'gold',
+}
+
+const priorityLabels: Record<ExtraServiceProposal['priority'], string> = {
+  high: 'High priority',
+  low: 'Monitor',
+  medium: 'Recommended',
+}
+
+const priorityColors: Record<ExtraServiceProposal['priority'], string> = {
+  high: 'red',
+  low: 'default',
+  medium: 'gold',
+}
 
 function mapProposal(proposal: ApiAdditionalServiceProposal): ExtraServiceProposal {
   return {
-    affectedPart: proposal.affectedPart || 'Chưa cập nhật hạng mục',
-    customerImpact: proposal.customerImpact || 'Chưa có mô tả tác động khách hàng.',
+    affectedPart: proposal.affectedPart || 'Not updated',
+    customerImpact: proposal.customerImpact || 'No customer-impact notes yet.',
     estimateMinutes: proposal.estimateMinutes || 0,
     evidenceCount: proposal.evidenceCount || 0,
     id: proposal._id || proposal.id || crypto.randomUUID(),
     laborCost: proposal.laborCost || 0,
     partsCost: proposal.partsCost || 0,
     priority: proposal.priority || 'medium',
-    reason: proposal.reason || 'Chưa có lý do đề xuất.',
-    serviceName: proposal.serviceName || 'Dịch vụ phát sinh',
+    reason: proposal.reason || 'No reason provided.',
+    serviceName: proposal.serviceName || 'Additional service',
     status: proposal.status || 'pending',
-    technician: personName(proposal.technician, 'Kỹ thuật viên'),
+    technician: personName(proposal.technician, 'Technician'),
   }
 }
 
 function formatMoney(value: number) {
-  return new Intl.NumberFormat('vi-VN').format(value) + 'đ'
+  return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
 }
 
-function statusClasses(status: ProposalStatus) {
-  return {
-    approved: 'border-green-200 bg-green-50 text-green-700',
-    pending: 'border-[#ba0013] bg-[#fff1f1] text-[#ba0013]',
-    rejected: 'border-[#d8d5d5] bg-[#fbf9f8] text-[#6a6767]',
-    sent: 'border-amber-200 bg-amber-50 text-amber-700',
-  }[status]
-}
-
-function priorityLabel(priority: ExtraServiceProposal['priority']) {
-  return {
-    high: 'Ưu tiên cao',
-    low: 'Theo dõi',
-    medium: 'Nên làm',
-  }[priority]
-}
-
-function priorityClasses(priority: ExtraServiceProposal['priority']) {
-  return {
-    high: 'bg-[#ba0013] text-white',
-    low: 'bg-[#e4e2e2] text-[#1b1c1c]',
-    medium: 'bg-amber-100 text-amber-800',
-  }[priority]
-}
-
-function SummaryCard({ icon, label, value }: { icon: IconName; label: string; value: string }) {
-  return (
-    <section className="border border-[#efeded] bg-white p-6 shadow-[0_18px_40px_rgba(27,28,28,0.04)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-xs font-black uppercase tracking-[0.14em] text-[#6a6767]">{label}</p>
-          <p className="mt-3 text-3xl font-black text-[#171717]">{value}</p>
-        </div>
-        <span className="flex h-12 w-12 items-center justify-center bg-[#fff1f1] text-[#ba0013]">
-          <Icon name={icon} />
-        </span>
-      </div>
-    </section>
-  )
-}
-
-function ProposalCard({
-  active,
-  onSelect,
-  proposal,
-}: {
-  active: boolean
-  onSelect: () => void
-  proposal: ExtraServiceProposal
-}) {
+function ProposalCard({ active, onSelect, proposal }: { active: boolean; onSelect: () => void; proposal: ExtraServiceProposal }) {
   const total = proposal.laborCost + proposal.partsCost
 
   return (
     <button
-      className={
-        active
-          ? 'w-full border-l-4 border-[#ba0013] bg-[#fffafa] p-5 text-left shadow-[0_10px_30px_rgba(27,28,28,0.05)]'
-          : 'w-full border border-[#efeded] bg-white p-5 text-left transition hover:border-[#ba0013] hover:bg-[#fffafa]'
-      }
+      className="w-full rounded-[24px] p-5 text-left transition"
       onClick={onSelect}
+      style={{
+        background: active ? advisorPalette.panelAlt : advisorPalette.panel,
+        border: active ? `2px solid ${advisorPalette.red}` : `1px solid ${advisorPalette.border}`,
+        boxShadow: advisorPalette.shadow,
+      }}
       type="button"
     >
       <div className="flex items-start justify-between gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <span className={`px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${priorityClasses(proposal.priority)}`}>
-              {priorityLabel(proposal.priority)}
-            </span>
-            <span className={`border px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${statusClasses(proposal.status)}`}>
-              {statusLabels[proposal.status]}
-            </span>
+            <Tag color={priorityColors[proposal.priority]}>{priorityLabels[proposal.priority]}</Tag>
+            <Tag color={statusColors[proposal.status]}>{statusLabels[proposal.status]}</Tag>
           </div>
-          <h3 className="mt-3 text-lg font-black text-[#171717]">{proposal.serviceName}</h3>
-          <p className="mt-2 text-sm font-semibold leading-6 text-[#6a6767]">{proposal.reason}</p>
+          <h3 style={{ color: advisorPalette.ink, fontSize: 18, fontWeight: 700, marginTop: 12 }}>{proposal.serviceName}</h3>
+          <p style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 600, marginTop: 6 }}>{proposal.reason}</p>
         </div>
         <div className="text-right">
-          <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#6a6767]">Tạm tính</p>
-          <p className="mt-2 text-xl font-black text-[#ba0013]">{formatMoney(total)}</p>
+          <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Estimate</p>
+          <p style={{ color: advisorPalette.red, fontSize: 18, fontWeight: 700, marginTop: 6 }}>{formatMoney(total)}</p>
         </div>
       </div>
       <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div className="bg-[#fbf9f8] p-3">
-          <p className="font-mono text-[10px] font-black uppercase text-[#6a6767]">KTV đề xuất</p>
-          <p className="mt-1 text-sm font-black text-[#171717]">{proposal.technician}</p>
+        <div style={{ background: advisorPalette.panelAlt, borderRadius: 14, padding: 12 }}>
+          <p style={{ color: advisorPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Suggested by</p>
+          <p style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700, marginTop: 4 }}>{proposal.technician}</p>
         </div>
-        <div className="bg-[#fbf9f8] p-3">
-          <p className="font-mono text-[10px] font-black uppercase text-[#6a6767]">Thời gian</p>
-          <p className="mt-1 text-sm font-black text-[#171717]">+{proposal.estimateMinutes} phút</p>
+        <div style={{ background: advisorPalette.panelAlt, borderRadius: 14, padding: 12 }}>
+          <p style={{ color: advisorPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Extra time</p>
+          <p style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700, marginTop: 4 }}>+{proposal.estimateMinutes} min</p>
         </div>
-        <div className="bg-[#fbf9f8] p-3">
-          <p className="font-mono text-[10px] font-black uppercase text-[#6a6767]">Ảnh bằng chứng</p>
-          <p className="mt-1 text-sm font-black text-[#171717]">{proposal.evidenceCount} ảnh</p>
+        <div style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 14, display: 'flex', gap: 6, padding: 12 }}>
+          <PictureOutlined style={{ color: advisorPalette.textMuted }} />
+          <p style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>{proposal.evidenceCount} photo(s)</p>
         </div>
       </div>
     </button>
   )
 }
 
-function ProposalDetail({
-  disabled,
-  onStatusChange,
-  proposal,
-}: {
-  disabled: boolean
-  onStatusChange: (status: ProposalStatus) => void
-  proposal: ExtraServiceProposal
-}) {
+function ProposalDetail({ disabled, onStatusChange, proposal }: { disabled: boolean; onStatusChange: (status: ProposalStatus) => void; proposal: ExtraServiceProposal }) {
   const total = proposal.laborCost + proposal.partsCost
 
   return (
-    <aside className="sticky top-28 space-y-6">
-      <section className="bg-[#1b1c1c] p-6 text-white shadow-[0_18px_45px_rgba(15,14,14,0.18)]">
-        <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ffb4ab]">Chi tiết đề xuất</p>
-        <h2 className="mt-3 text-2xl font-black">{proposal.serviceName}</h2>
-        <p className="mt-3 text-sm leading-6 text-white/65">{proposal.customerImpact}</p>
+    <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
+      <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
+        <p style={{ color: '#ffb4ab', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Proposal detail</p>
+        <h2 style={{ color: 'white', fontSize: 22, fontWeight: 700, marginTop: 10 }}>{proposal.serviceName}</h2>
+        <p style={{ color: 'rgba(255,255,255,0.65)', fontSize: 13, marginTop: 10 }}>{proposal.customerImpact}</p>
 
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <div className="bg-white/10 p-4">
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-white/55">Phụ tùng</p>
-            <p className="mt-2 text-xl font-black">{formatMoney(proposal.partsCost)}</p>
+        <div className="mt-5 grid grid-cols-2 gap-3">
+          <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14 }}>
+            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Parts</p>
+            <p style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 6 }}>{formatMoney(proposal.partsCost)}</p>
           </div>
-          <div className="bg-white/10 p-4">
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-white/55">Công</p>
-            <p className="mt-2 text-xl font-black">{formatMoney(proposal.laborCost)}</p>
+          <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14 }}>
+            <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Labor</p>
+            <p style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 6 }}>{formatMoney(proposal.laborCost)}</p>
           </div>
         </div>
 
-        <div className="mt-5 border-t border-white/10 pt-5">
-          <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-white/55">Tổng gửi khách</p>
-          <p className="mt-2 text-3xl font-black text-[#ffb4ab]">{formatMoney(total)}</p>
+        <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 16, paddingTop: 16 }}>
+          <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Total to customer</p>
+          <p style={{ color: '#ffb4ab', fontSize: 28, fontWeight: 700, marginTop: 8 }}>{formatMoney(total)}</p>
         </div>
-      </section>
+      </Card>
 
-      <section className="border border-[#efeded] bg-white p-6">
-        <h3 className="text-lg font-black text-[#171717]">Ảnh & bằng chứng từ KTV</h3>
-        <div className="mt-4 grid grid-cols-3 gap-3">
-          {evidenceTiles.map((tile, index) => (
-            <div className={`aspect-square ${tile.tone} p-3 text-white`} key={tile.label}>
-              <div className="flex h-full flex-col justify-between">
-                <Icon name="car" />
-                <span className="text-xs font-black">{tile.label}</span>
-                <span className="font-mono text-[10px]">#{index + 1}</span>
-              </div>
-            </div>
-          ))}
+      <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Evidence from the technician">
+        <div className="flex items-center gap-2" style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 600 }}>
+          <PictureOutlined />
+          {proposal.evidenceCount} photo(s) attached
         </div>
-        <textarea
-          className="mt-4 min-h-28 w-full border border-[#d8d5d5] bg-[#fbf9f8] p-4 text-sm text-[#1b1c1c] outline-none focus:border-[#ba0013] focus:ring-4 focus:ring-[#ba0013]/10"
-          defaultValue={`KTV ${proposal.technician} đề xuất do: ${proposal.reason}`}
-        />
-      </section>
+      </Card>
 
-      <section className="border border-[#efeded] bg-white p-6">
-        <h3 className="text-lg font-black text-[#171717]">Thao tác của Service Advisor</h3>
-        <div className="mt-4 space-y-3">
-          <button
-            disabled={disabled}
-            className="flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#94000f]"
-            onClick={() => onStatusChange('sent')}
-            type="button"
-          >
-            <Icon name="invoice" />
-            Gửi báo giá cho khách
-          </button>
-          <button
-            disabled={disabled}
-            className="flex min-h-12 w-full items-center justify-center gap-3 border border-[#ba0013] px-5 text-sm font-black uppercase text-[#ba0013] transition hover:bg-[#fff1f1]"
-            onClick={() => onStatusChange('approved')}
-            type="button"
-          >
-            <Icon name="check" />
-            Duyệt bổ sung vào lệnh
-          </button>
-          <button
-            disabled={disabled}
-            className="flex min-h-12 w-full items-center justify-center gap-3 border border-[#d8d5d5] px-5 text-sm font-black uppercase text-[#555151] transition hover:border-[#ba0013] hover:text-[#ba0013]"
-            onClick={() => onStatusChange('rejected')}
-            type="button"
-          >
-            Từ chối đề xuất
-          </button>
+      <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Service advisor actions">
+        <div className="flex flex-col gap-3">
+          <Button block disabled={disabled} icon={<FileTextOutlined />} onClick={() => onStatusChange('sent')} type="primary">
+            Send quote to customer
+          </Button>
+          <Button block disabled={disabled} icon={<CheckOutlined />} onClick={() => onStatusChange('approved')}>
+            Approve into work order
+          </Button>
+          <Button block disabled={disabled} onClick={() => onStatusChange('rejected')}>
+            Reject proposal
+          </Button>
         </div>
-      </section>
-    </aside>
+      </Card>
+    </div>
   )
 }
 
@@ -266,7 +190,7 @@ export function AdditionalServiceSuggestionPage() {
           setSelectedId((current) => current || nextProposals[0]?.id || '')
         }
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được đề xuất phát sinh từ API')
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load additional service proposals from the API')
       }
     }
 
@@ -296,59 +220,48 @@ export function AdditionalServiceSuggestionPage() {
       const mapped = mapProposal(updated)
       setProposals((current) => current.map((proposal) => (proposal.id === selectedProposal.id ? { ...proposal, ...mapped, status } : proposal)))
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được đề xuất phát sinh')
+      setApiMessage(err instanceof Error ? err.message : 'Unable to update the proposal')
     } finally {
       setSaving(false)
     }
   }
 
   return (
-    <ServiceAdvisorShell active="additional-services" title="Đề xuất dịch vụ phát sinh">
-      <div className="space-y-7">
-        <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
-          <div className="absolute right-8 top-8 hidden text-[#ba0013]/10 lg:block">
-            <Icon className="h-32 w-32" name="plus" />
-          </div>
-          <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Additional Service Flow</p>
-          <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Xử lý dịch vụ phát sinh trong lúc sửa</h2>
-          <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
-            Service Advisor xem đề xuất từ kỹ thuật viên, kiểm tra ảnh bằng chứng, ước tính chi phí và quyết định gửi báo giá cho khách hoặc bổ sung vào lệnh sửa chữa.
-          </p>
-        </section>
-
-        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
-
-        <section className="grid gap-4 md:grid-cols-3">
-          <SummaryCard icon="alert" label="Chờ xử lý" value={`${pendingCount} đề xuất`} />
-          <SummaryCard icon="invoice" label="Đã gửi khách" value={`${sentCount} báo giá`} />
-          <SummaryCard icon="cash" label="Giá trị chờ duyệt" value={formatMoney(totalPendingValue)} />
-        </section>
-
-        <div className="grid items-start gap-7 xl:grid-cols-[minmax(0,1fr)_390px]">
-          <section className="space-y-4">
-            <div className="flex flex-col gap-3 border border-[#efeded] bg-white p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="text-xl font-black text-[#171717]">Danh sách đề xuất từ kỹ thuật viên</h3>
-                <p className="mt-1 text-sm font-semibold text-[#6a6767]">RO-2026-0882 - BMW M4 Competition - 51K-882.88</p>
-              </div>
-              <button className="inline-flex min-h-11 items-center justify-center gap-2 border border-[#d8d5d5] px-4 text-sm font-black text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
-                <Icon name="download" />
-                Xuất báo giá
-              </button>
-            </div>
-
-            {proposals.length ? proposals.map((proposal) => (
-              <ProposalCard
-                active={proposal.id === selectedProposal?.id}
-                key={proposal.id}
-                onSelect={() => setSelectedId(proposal.id)}
-                proposal={proposal}
-              />
-            )) : <div className="border border-[#efeded] bg-white p-6 text-sm font-bold text-[#6a6767]">Chưa có đề xuất phát sinh từ API.</div>}
-          </section>
-
-          {selectedProposal ? <ProposalDetail disabled={saving} onStatusChange={updateStatus} proposal={selectedProposal} /> : <aside className="border border-[#efeded] bg-white p-6 text-sm font-bold text-[#6a6767]">Chọn đề xuất để xử lý.</aside>}
+    <ServiceAdvisorShell title="Additional service proposals">
+      {apiMessage ? (
+        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
+          {apiMessage}
         </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-4">
+        <StatCard label="Pending review" palette={advisorPalette} value={pendingCount} />
+        <StatCard label="Sent to customer" palette={advisorPalette} value={sentCount} />
+        <StatCard label="Pending value" palette={advisorPalette} value={formatMoney(totalPendingValue)} />
+      </div>
+
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="flex flex-col gap-4">
+          <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Proposals from technicians">
+            <div className="flex flex-col gap-4">
+              {proposals.length ? (
+                proposals.map((proposal) => (
+                  <ProposalCard active={proposal.id === selectedProposal?.id} key={proposal.id} onSelect={() => setSelectedId(proposal.id)} proposal={proposal} />
+                ))
+              ) : (
+                <Empty description="No additional service proposals from the API yet." />
+              )}
+            </div>
+          </Card>
+        </div>
+
+        {selectedProposal ? (
+          <ProposalDetail disabled={saving} onStatusChange={updateStatus} proposal={selectedProposal} />
+        ) : (
+          <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
+            Select a proposal to review it.
+          </Card>
+        )}
       </div>
     </ServiceAdvisorShell>
   )
