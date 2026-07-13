@@ -1,1 +1,1 @@
-export { ServiceAdvisorShell, type ServiceAdvisorNavKey } from './ui/ServiceAdvisorShell'
+export { ServiceAdvisorShell } from './ui/ServiceAdvisorShell'
