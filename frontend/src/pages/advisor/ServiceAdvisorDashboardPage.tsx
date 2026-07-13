@@ -6,10 +6,10 @@ import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 const defaultStats = [
-  { icon: 'calendar', label: 'Booking chá» duyá»‡t', note: '+4 yÃªu cáº§u má»›i', value: '00' },
-  { icon: 'clipboard', label: 'Xe cáº§n tiáº¿p nháº­n', note: 'Trong hÃ´m nay', value: '00' },
-  { icon: 'wrench', label: 'Lá»‡nh Ä‘ang má»Ÿ', note: 'ÄÃ£ phÃ¢n cÃ´ng KTV', value: '00' },
-  { icon: 'users', label: 'KhÃ¡ch Ä‘ang chá»', note: 'Táº¡i quáº§y dá»‹ch vá»¥', value: '00' },
+  { icon: 'calendar', label: 'Booking chờ duyệt', note: '+4 yêu cầu mới', value: '00' },
+  { icon: 'clipboard', label: 'Xe cần tiếp nhận', note: 'Trong hôm nay', value: '00' },
+  { icon: 'wrench', label: 'Lệnh đang mở', note: 'Đã phân công KTV', value: '00' },
+  { icon: 'users', label: 'Khách đang chờ', note: 'Tại quầy dịch vụ', value: '00' },
 ] satisfies Array<{ icon: IconName; label: string; note: string; value: string }>
 
 type QueueItem = { customer: string; meta: string; status: string; to: string }
@@ -94,16 +94,16 @@ export function ServiceAdvisorDashboardPage() {
   }, [token])
 
   return (
-    <ServiceAdvisorShell active="dashboard" title="Tá»•ng quan Service Advisor">
+    <ServiceAdvisorShell active="dashboard" title="Tổng quan Service Advisor">
       <div className="space-y-7">
         <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
           <div className="absolute right-8 top-8 hidden text-[#ba0013]/10 lg:block">
             <Icon className="h-32 w-32" name="clipboard" />
           </div>
           <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Service Desk</p>
-          <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Quáº£n lÃ½ Ä‘áº·t lá»‹ch, tiáº¿p nháº­n vÃ  phÃ¢n cÃ´ng</h2>
+          <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Quản lý đặt lịch, tiếp nhận và phân công</h2>
           <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
-            ÄÃ¢y lÃ  mÃ n hÃ¬nh riÃªng cho Service Advisor, khÃ´ng trá»™n cÃ¡c chá»©c nÄƒng quáº£n trá»‹ há»‡ thá»‘ng cá»§a Admin.
+            Đây là màn hình riêng cho Service Advisor, không trộn các chức năng quản trị hệ thống của Admin.
           </p>
         </section>
 
@@ -118,7 +118,7 @@ export function ServiceAdvisorDashboardPage() {
         <div className="grid gap-7 xl:grid-cols-[minmax(0,1fr)_360px]">
           <section className="border border-[#efeded] bg-white">
             <div className="flex items-center justify-between border-b border-[#efeded] px-6 py-5">
-              <h3 className="text-lg font-black text-[#171717]">HÃ ng Ä‘á»£i cáº§n xá»­ lÃ½</h3>
+              <h3 className="text-lg font-black text-[#171717]">Hàng đợi cần xử lý</h3>
               <Link className="text-sm font-black text-[#ba0013] hover:underline" to="/advisor/bookings">
                 Xem booking
               </Link>
@@ -137,16 +137,16 @@ export function ServiceAdvisorDashboardPage() {
           </section>
 
           <section className="bg-[#1b1c1c] p-6 text-white">
-            <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ffb4ab]">Thao tÃ¡c nhanh</p>
+            <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ffb4ab]">Thao tác nhanh</p>
             <div className="mt-5 space-y-3">
               <Link className="flex min-h-12 items-center justify-between bg-white px-4 text-sm font-black text-[#1b1c1c]" to="/advisor/reception">
                 Tiáº¿p nháº­n xe <Icon name="chevron-right" />
               </Link>
               <Link className="flex min-h-12 items-center justify-between bg-white/10 px-4 text-sm font-black text-white" to="/advisor/work-orders">
-                Táº¡o lá»‡nh sá»­a chá»¯a <Icon name="chevron-right" />
+                Tạo lệnh sửa chữa <Icon name="chevron-right" />
               </Link>
               <Link className="flex min-h-12 items-center justify-between bg-white/10 px-4 text-sm font-black text-white" to="/advisor/bookings">
-                Duyá»‡t lá»‹ch Ä‘áº·t <Icon name="chevron-right" />
+                Duyệt lịch đặt <Icon name="chevron-right" />
               </Link>
             </div>
           </section>

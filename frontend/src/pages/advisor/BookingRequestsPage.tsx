@@ -51,9 +51,9 @@ function mapBooking(booking: ApiBooking): BookingRequest {
 }
 
 const statusLabels: Record<BookingStatus, string> = {
-  confirmed: 'ÄÃ£ xÃ¡c nháº­n',
-  pending: 'Chá» duyá»‡t',
-  rejected: 'ÄÃ£ tá»« chá»‘i',
+  confirmed: 'Đã xác nhận',
+  pending: 'Chờ duyệt',
+  rejected: 'Đã từ chối',
 }
 
 function StatCard({
@@ -116,7 +116,7 @@ function FilterBar({
         <input
           className="h-12 w-full border border-[#d8d5d5] bg-[#fbf9f8] pl-12 pr-4 text-sm font-semibold text-[#1b1c1c] outline-none transition placeholder:text-[#8a8686] focus:border-[#ba0013] focus:bg-white"
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="TÃ¬m khÃ¡ch hÃ ng, biá»ƒn sá»‘ hoáº·c VIN..."
+          placeholder="Tìm khách hàng, biển số hoặc VIN..."
           type="search"
           value={query}
         />
@@ -128,20 +128,20 @@ function FilterBar({
         onChange={(event) => onServiceChange(event.target.value)}
         value={service}
       >
-        <option value="all">Táº¥t cáº£ dá»‹ch vá»¥</option>
-        <option value="diagnostic">Cháº©n Ä‘oÃ¡n Ä‘á»™ng cÆ¡</option>
-        <option value="brake">Dá»‹ch vá»¥ phanh</option>
-        <option value="maintenance">Báº£o dÆ°á»¡ng tá»•ng quÃ¡t</option>
+        <option value="all">Tất cả dịch vụ</option>
+        <option value="diagnostic">Chẩn đoán động cơ</option>
+        <option value="brake">Dịch vụ phanh</option>
+        <option value="maintenance">Bảo dưỡng tổng quát</option>
       </select>
 
       <button className="flex h-12 items-center justify-center gap-2 border border-[#d8d5d5] px-5 text-sm font-black text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
         <Icon name="sliders" />
-        Bá»™ lá»c nÃ¢ng cao
+        Bộ lọc nâng cao
       </button>
 
       <button className="flex h-12 items-center justify-center gap-2 bg-[#ba0013] px-5 text-sm font-black text-white transition hover:bg-[#94000f]" type="button">
         <Icon name="download" />
-        Xuáº¥t danh sÃ¡ch
+        Xuất danh sách
       </button>
     </section>
   )
@@ -160,12 +160,12 @@ function BookingTable({
         <table className="w-full min-w-[1080px] border-collapse text-left">
           <thead>
             <tr className="border-b border-[#efeded] bg-[#fbf9f8] text-xs font-black uppercase tracking-[0.14em] text-[#6a6767]">
-              <th className="px-6 py-4">ThÃ´ng tin khÃ¡ch hÃ ng</th>
-              <th className="px-6 py-4">Xe & biá»ƒn sá»‘</th>
-              <th className="px-6 py-4">Dá»‹ch vá»¥ yÃªu cáº§u</th>
-              <th className="px-6 py-4">Khung giá»</th>
-              <th className="px-6 py-4">Tráº¡ng thÃ¡i</th>
-              <th className="px-6 py-4 text-right">Thao tÃ¡c</th>
+              <th className="px-6 py-4">Thông tin khách hàng</th>
+              <th className="px-6 py-4">Xe & biển số</th>
+              <th className="px-6 py-4">Dịch vụ yêu cầu</th>
+              <th className="px-6 py-4">Khung giờ</th>
+              <th className="px-6 py-4">Trạng thái</th>
+              <th className="px-6 py-4 text-right">Thao tác</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#efeded]">
@@ -189,7 +189,7 @@ function BookingTable({
                 </td>
                 <td className="px-6 py-5">
                   <p className="max-w-[260px] text-sm font-bold leading-6 text-[#1b1c1c]">{booking.service}</p>
-                  <p className="mt-1 text-xs font-semibold text-[#8a8686]">Cá»‘ váº¥n: {booking.advisor}</p>
+                  <p className="mt-1 text-xs font-semibold text-[#8a8686]">Cố vấn: {booking.advisor}</p>
                 </td>
                 <td className="px-6 py-5">
                   <p className="text-lg font-black text-[#171717]">{booking.time}</p>
@@ -201,23 +201,23 @@ function BookingTable({
                 <td className="px-6 py-5">
                   <div className="flex justify-end gap-2">
                     <button
-                      aria-label={`XÃ¡c nháº­n lá»‹ch cá»§a ${booking.customer}`}
+                      aria-label={`Xác nhận lịch của ${booking.customer}`}
                       className="flex h-10 w-10 items-center justify-center bg-[#ba0013] text-white transition hover:bg-[#94000f] disabled:cursor-not-allowed disabled:bg-[#d8d5d5]"
                       disabled={booking.status !== 'pending'}
                       onClick={() => onStatusChange(booking.id, 'confirmed')}
-                      title="XÃ¡c nháº­n"
+                      title="Xác nhận"
                       type="button"
                     >
                       <Icon name="check" />
                     </button>
                     <button
-                      aria-label={`Tá»« chá»‘i lá»‹ch cá»§a ${booking.customer}`}
+                      aria-label={`Từ chối lịch của ${booking.customer}`}
                       className="flex h-10 min-w-24 items-center justify-center border border-[#d8d5d5] px-4 text-sm font-black text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013] disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={booking.status !== 'pending'}
                       onClick={() => onStatusChange(booking.id, 'rejected')}
                       type="button"
                     >
-                      Tá»« chá»‘i
+                      Từ chối
                     </button>
                   </div>
                 </td>
@@ -277,8 +277,8 @@ export function BookingRequestsPage() {
       const serviceMap: Record<string, string[]> = {
         all: [],
         brake: ['phanh'],
-        diagnostic: ['cháº©n Ä‘oÃ¡n', 'Ä‘á»™ng cÆ¡'],
-        maintenance: ['báº£o dÆ°á»¡ng', 'thay dáº§u'],
+        diagnostic: ['chẩn đoán', 'động cơ'],
+        maintenance: ['bảo dưỡng', 'thay dầu'],
       }
       const serviceTerms = serviceMap[service] ?? []
       const matchesService = serviceTerms.length === 0 || serviceTerms.some((term) => booking.service.toLowerCase().includes(term))
@@ -303,12 +303,12 @@ export function BookingRequestsPage() {
   const pendingCount = bookings.filter((booking) => booking.status === 'pending').length
 
   return (
-    <ServiceAdvisorShell active="bookings" title="Danh sÃ¡ch Ä‘áº·t lá»‹ch">
+    <ServiceAdvisorShell active="bookings" title="Danh sách đặt lịch">
       <div className="space-y-7">
         <section className="grid gap-4 md:grid-cols-3">
-          <StatCard icon="calendar" label="Äáº·t lá»‹ch chá» duyá»‡t" note="+4 yÃªu cáº§u má»›i hÃ´m nay" value={String(pendingCount).padStart(2, '0')} />
-          <StatCard icon="clipboard" label="Lá»‹ch háº¹n hÃ´m nay" note="6 xe chÆ°a tiáº¿p nháº­n" value="28" />
-          <StatCard icon="users" label="KhÃ¡ch hÃ ng má»›i" note="Trong 7 ngÃ y gáº§n nháº¥t" value="05" />
+          <StatCard icon="calendar" label="Đặt lịch chờ duyệt" note="+4 yêu cầu mới hôm nay" value={String(pendingCount).padStart(2, '0')} />
+          <StatCard icon="clipboard" label="Lịch hẹn hôm nay" note="6 xe chưa tiếp nhận" value="28" />
+          <StatCard icon="users" label="Khách hàng mới" note="Trong 7 ngày gần nhất" value="05" />
         </section>
 
         {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
@@ -319,15 +319,15 @@ export function BookingRequestsPage() {
           <div>
             <p className="text-lg font-black">Kapa Service Desk</p>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">
-              Theo dÃµi lá»‹ch Ä‘áº·t, phÃ¢n bá»• cá»‘ váº¥n vÃ  chuyá»ƒn nhanh sang quy trÃ¬nh tiáº¿p nháº­n xe.
+              Theo dõi lịch đặt, phân bổ cố vấn và chuyển nhanh sang quy trình tiếp nhận xe.
             </p>
           </div>
           <div className="text-sm text-white/65">
-            <p className="font-black text-white">Ca trá»±c hiá»‡n táº¡i</p>
+            <p className="font-black text-white">Ca trực hiện tại</p>
             <p>08:00 - 17:30</p>
           </div>
           <Link className="inline-flex h-12 items-center justify-center bg-white px-5 text-sm font-black text-[#1b1c1c]" to="/advisor/reception">
-            Má»Ÿ biá»ƒu máº«u nháº­n xe
+            Mở biểu mẫu nhận xe
           </Link>
         </footer>
       </div>
