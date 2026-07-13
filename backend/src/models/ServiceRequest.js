@@ -1,7 +1,15 @@
 import mongoose, { Schema } from "mongoose";
 
+// "pending/sent/approved/rejected" is the vocabulary the frontend's SA review
+// screen actually uses today (send quote to customer / approve directly into
+// the order / reject). approvedBySA/rejectedBySA/approvedByCustomer/
+// rejectedByCustomer are kept available for a future two-stage
+// (SA-then-customer) approval flow that has no UI yet.
 export const SERVICE_REQUEST_STATUSES = [
   "pending",
+  "sent",
+  "approved",
+  "rejected",
   "approvedBySA",
   "rejectedBySA",
   "approvedByCustomer",
@@ -23,7 +31,40 @@ const serviceRequestSchema = new Schema(
     serviceId: {
       type: Schema.Types.ObjectId,
       ref: "Service",
-      required: true,
+    },
+    serviceName: {
+      type: String,
+      trim: true,
+    },
+    affectedPart: {
+      type: String,
+      trim: true,
+    },
+    customerImpact: {
+      type: String,
+      trim: true,
+    },
+    laborCost: {
+      type: Number,
+      min: 0,
+    },
+    partsCost: {
+      type: Number,
+      min: 0,
+    },
+    estimateMinutes: {
+      type: Number,
+      min: 0,
+    },
+    evidenceCount: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+    priority: {
+      type: String,
+      enum: ["high", "medium", "low"],
+      default: "medium",
     },
     reason: {
       type: String,
