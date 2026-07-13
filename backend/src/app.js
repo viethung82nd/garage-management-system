@@ -21,6 +21,7 @@ import { scheduleRouter } from "./routes/schedule.routes.js";
 import { vehicleRouter } from "./routes/vehicle.routes.js";
 import { advisorRouter } from "./routes/advisor.routes.js";
 import { receptionRouter } from "./routes/reception.routes.js";
+import { quotationRouter } from "./routes/quotation.routes.js";
 
 /** Builds the Express application (no listening — see server.js). */
 export function createApp() {
@@ -52,6 +53,7 @@ export function createApp() {
   app.use("/api/vehicles", vehicleRouter);
   app.use("/api/advisor", advisorRouter);
   app.use("/api/receptions", receptionRouter);
+  app.use("/api/quotations", quotationRouter);
 
   app.use("/uploads", express.static(path.resolve("uploads")));
 

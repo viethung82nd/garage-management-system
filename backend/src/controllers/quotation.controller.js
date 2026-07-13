@@ -1,0 +1,115 @@
+import { RepairOrderModel, ServiceQuoteModel } from "../models/index.js";
+import { HttpError } from "../middleware/error.js";
+import { createNotification } from "../utils/notify.js";
+
+const OID_RE = /^[0-9a-fA-F]{24}$/;
+
+function calculateTotal({ lines, discountPercent, taxPercent }) {
+  const subtotal = (lines || []).reduce(
+    (sum, line) => sum + (Number(line.unitPrice) || 0) * (Number(line.quantity) || 0),
+    0,
+  );
+  const afterDiscount = subtotal * (1 - (Number(discountPercent) || 0) / 100);
+  return Math.round(afterDiscount * (1 + (Number(taxPercent) || 0) / 100));
+}
+
+/** POST /api/quotations — create (or save as draft) a quotation. */
+export async function createQuotation(req, res) {
+  const {
+    code,
+    repairOrderId,
+    customerName,
+    customerPhone,
+    vehicleName,
+    vehiclePlate,
+    lines,
+    discountPercent,
+    taxPercent,
+    note,
+    validUntil,
+    status,
+  } = req.body ?? {};
+
+  if (!Array.isArray(lines) || lines.length === 0) {
+    throw new HttpError(400, "At least one line item is required");
+  }
+  if (repairOrderId && !OID_RE.test(repairOrderId)) {
+    throw new HttpError(400, "Invalid repairOrderId format");
+  }
+
+  let customerId;
+  if (repairOrderId) {
+    const repairOrder = await RepairOrderModel.findById(repairOrderId).populate(
+      "vehicleId",
+      "customerId",
+    );
+    if (!repairOrder) {
+      throw new HttpError(404, "Repair order not found");
+    }
+    customerId = repairOrder.vehicleId?.customerId;
+  }
+
+  const quote = await ServiceQuoteModel.create({
+    code: code?.trim() || `QT-${Date.now()}`,
+    repairOrderId: repairOrderId || undefined,
+    customerId,
+    advisorId: req.user.sub,
+    customerName,
+    customerPhone,
+    vehicleName,
+    vehiclePlate,
+    lines,
+    discountPercent,
+    taxPercent,
+    totalEstimate: calculateTotal({ lines, discountPercent, taxPercent }),
+    note,
+    validUntil: validUntil ? new Date(validUntil) : undefined,
+    status: status === "sent" ? "sent" : "draft",
+  });
+
+  res.status(201).json(quote);
+}
+
+/** PATCH /api/quotations/:id/send — mark a quotation sent, notify the customer. */
+export async function sendQuotation(req, res) {
+  const { id } = req.params;
+  if (!OID_RE.test(id)) {
+    throw new HttpError(400, "Invalid quotation ID format");
+  }
+
+  const quote = await ServiceQuoteModel.findById(id);
+  if (!quote) {
+    throw new HttpError(404, "Quotation not found");
+  }
+
+  quote.status = "sent";
+  await quote.save();
+
+  if (quote.customerId) {
+    await createNotification({
+      userId: quote.customerId,
+      type: "quotationSent",
+      title: "Báo giá sửa chữa mới",
+      message: `${quote.vehicleName || "Xe của bạn"} có báo giá mới, vui lòng xem chi tiết.`,
+      refId: quote.repairOrderId,
+      refModel: quote.repairOrderId ? "RepairOrder" : undefined,
+    });
+  }
+
+  res.json(quote);
+}
+
+/** GET /api/quotations?repairOrderId= — list quotations, optionally scoped. */
+export async function listQuotations(req, res) {
+  const { repairOrderId } = req.query;
+  const filter = {};
+  if (repairOrderId) {
+    if (!OID_RE.test(repairOrderId)) {
+      throw new HttpError(400, "Invalid repairOrderId format");
+    }
+    filter.repairOrderId = repairOrderId;
+  }
+
+  const quotes = await ServiceQuoteModel.find(filter).sort({ createdAt: -1 });
+  res.json({ quotations: quotes });
+}

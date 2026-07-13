@@ -1,52 +1,64 @@
 import mongoose, { Schema } from "mongoose";
 
-export const QUOTE_STATUSES = ["pending", "accepted", "rejected"];
-export const QUOTE_NOTIFY_METHODS = ["email", "sms", "phone", "inApp"];
+// Matches the states the frontend's quotation editor actually uses (draft
+// while being edited, sent once handed to the customer). "accepted"/
+// "rejected" are kept for the customer-response step this doesn't have UI
+// for yet.
+export const QUOTE_STATUSES = ["draft", "sent", "accepted", "rejected"];
+export const QUOTE_LINE_KINDS = ["service", "part", "labor"];
 
-const quoteItemSchema = new Schema(
+const quoteLineSchema = new Schema(
   {
-    serviceId: {
-      type: Schema.Types.ObjectId,
-      ref: "Service",
-      required: true,
-    },
-    name: {
-      type: String,
-      required: true,
-    },
-    price: {
-      type: Number,
-      required: true,
-      min: 0,
-    },
-    isRequired: {
-      type: Boolean,
-      default: false,
-    },
+    description: { type: String, trim: true },
+    kind: { type: String, enum: QUOTE_LINE_KINDS, default: "service" },
+    quantity: { type: Number, default: 1, min: 0 },
+    unitPrice: { type: Number, default: 0, min: 0 },
   },
   { _id: false }
 );
 
 const serviceQuoteSchema = new Schema(
   {
-    inspectionId: {
+    code: {
+      type: String,
+      trim: true,
+    },
+    repairOrderId: {
       type: Schema.Types.ObjectId,
-      ref: "InspectionReport",
-      required: true,
+      ref: "RepairOrder",
     },
     customerId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     advisorId: {
       type: Schema.Types.ObjectId,
       ref: "User",
       required: true,
     },
-    items: {
-      type: [quoteItemSchema],
+    // Denormalized snapshot of who/what this quote is for at the time it was
+    // written — same pattern RepairOrder.services uses for name/priceAtTime,
+    // so the quote still reads correctly even if the customer/vehicle record
+    // changes later.
+    customerName: { type: String, trim: true },
+    customerPhone: { type: String, trim: true },
+    vehicleName: { type: String, trim: true },
+    vehiclePlate: { type: String, trim: true },
+    lines: {
+      type: [quoteLineSchema],
       default: [],
+    },
+    discountPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
+    },
+    taxPercent: {
+      type: Number,
+      default: 0,
+      min: 0,
+      max: 100,
     },
     totalEstimate: {
       type: Number,
@@ -55,21 +67,17 @@ const serviceQuoteSchema = new Schema(
     status: {
       type: String,
       enum: QUOTE_STATUSES,
-      default: "pending",
+      default: "draft",
     },
-    customerNote: {
+    note: {
       type: String,
       trim: true,
     },
-    notifyMethod: {
-      type: String,
-      enum: QUOTE_NOTIFY_METHODS,
-    },
-    expiredAt: {
+    validUntil: {
       type: Date,
     },
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  { timestamps: { createdAt: true, updatedAt: true } }
 );
 
 export const ServiceQuoteModel = mongoose.model(
