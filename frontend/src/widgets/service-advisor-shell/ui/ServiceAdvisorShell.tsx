@@ -13,8 +13,6 @@ export type ServiceAdvisorNavKey =
   | 'quality-check'
   | 'repair-timeline'
   | 'technician-schedule'
-  | 'customers'
-  | 'vehicles'
 
 const navItems = [
   { key: 'dashboard', icon: 'grid', label: 'Tổng quan SA', to: '/advisor/dashboard' },
@@ -26,8 +24,6 @@ const navItems = [
   { key: 'quality-check', icon: 'check', label: 'Nghiệm thu', to: '/advisor/quality-check' },
   { key: 'repair-timeline', icon: 'map', label: 'Tiến độ sửa chữa', to: '/advisor/repair-timeline' },
   { key: 'technician-schedule', icon: 'team', label: 'Lịch KTV', to: '/advisor/technician-schedule' },
-  { key: 'customers', icon: 'users', label: 'Khách hàng', to: '/advisor/customers' },
-  { key: 'vehicles', icon: 'car', label: 'Phương tiện', to: '/advisor/vehicles' },
 ] satisfies Array<{ key: ServiceAdvisorNavKey; icon: IconName; label: string; to: string }>
 
 export function ServiceAdvisorShell({
