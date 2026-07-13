@@ -4,6 +4,7 @@ export const REPAIR_ORDER_STATUSES = [
   "pending",
   "inProgress",
   "completed",
+  "reworkRequired",
   "cancelled",
 ];
 

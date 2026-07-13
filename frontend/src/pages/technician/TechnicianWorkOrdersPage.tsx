@@ -57,7 +57,7 @@ function priorityLabel(priority: Priority) {
 
 function mapOrderStatus(status?: string): WorkOrderStatus {
   if (status === 'completed') return 'completed'
-  if (status === 'inProgress' || status === 'in-progress') return 'in-progress'
+  if (status === 'inProgress' || status === 'in-progress' || status === 'reworkRequired') return 'in-progress'
   if (status === 'paused' || status === 'cancelled') return 'paused'
   return 'assigned'
 }

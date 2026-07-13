@@ -4,6 +4,7 @@ import {
   UserModel,
   VehicleModel,
 } from "../models/index.js";
+import { REPAIR_ORDER_STATUSES } from "../models/RepairOrder.js";
 import { HttpError } from "../middleware/error.js";
 
 // ============= REPAIR ORDER CONTROLLERS =============
@@ -186,7 +187,7 @@ export async function updateRepairOrder(req, res) {
 
   // Validate status if provided
   if (status) {
-    const validStatuses = ["pending", "inProgress", "completed", "cancelled"];
+    const validStatuses = REPAIR_ORDER_STATUSES;
     if (!validStatuses.includes(status)) {
       throw new HttpError(
         400,
@@ -299,7 +300,7 @@ export async function updateRepairProgress(req, res) {
     throw new HttpError(400, "Status is required");
   }
 
-  const validStatuses = ["pending", "inProgress", "completed", "cancelled"];
+  const validStatuses = REPAIR_ORDER_STATUSES;
   if (!validStatuses.includes(status)) {
     throw new HttpError(
       400,
@@ -587,5 +588,64 @@ export async function getRepairOrderSummary(req, res) {
     services: order.services,
     totalCost: order.totalCost,
     completedAt: order.completedAt,
+  });
+}
+
+/**
+ * POST /api/repair-orders/:id/quality-check
+ * Service Advisor reviews a technician-completed order. Pass leaves it
+ * "completed" (ready to forward to accounting); fail sends it back to the
+ * technician as "reworkRequired". Only orders already marked "completed" by
+ * a technician can be reviewed — matches the frontend's own
+ * ?status=completed query for the review queue.
+ */
+export async function submitQualityCheck(req, res) {
+  const { id } = req.params;
+  const { passed, items, note, reworkReason } = req.body ?? {};
+
+  if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+    throw new HttpError(400, "Invalid repair order ID format");
+  }
+  if (typeof passed !== "boolean") {
+    throw new HttpError(400, "passed (boolean) is required");
+  }
+
+  const order = await RepairOrderModel.findById(id);
+  if (!order) {
+    throw new HttpError(404, "Repair order not found");
+  }
+  if (order.status !== "completed") {
+    throw new HttpError(
+      400,
+      "Only a repair order marked completed by the technician can be quality-checked",
+    );
+  }
+
+  const reviewerId = req.user.sub;
+  const failedItems = Array.isArray(items)
+    ? items.filter((item) => item?.result === "fail")
+    : [];
+
+  let summary;
+  if (passed) {
+    order.completedAt = order.completedAt || new Date();
+    summary = note?.trim() ? `[QC pass] ${note.trim()}` : "[QC pass] Nghiệm thu đạt.";
+  } else {
+    order.status = "reworkRequired";
+    const reason = reworkReason?.trim() || failedItems.map((item) => item.label).filter(Boolean).join(", ") || "Chưa đạt nghiệm thu";
+    summary = `[QC fail] ${reason}`;
+  }
+
+  order.stepNotes.push({
+    content: summary,
+    technicianId: reviewerId,
+    createdAt: new Date(),
+  });
+
+  await order.save();
+
+  res.json({
+    message: passed ? "Repair order passed quality check" : "Repair order sent back for rework",
+    order,
   });
 }

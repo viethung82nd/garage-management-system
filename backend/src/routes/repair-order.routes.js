@@ -14,6 +14,7 @@ import {
   deleteStepNote,
   getRepairOrderStatus,
   getRepairOrderSummary,
+  submitQualityCheck,
 } from "../controllers/repair-order.controller.js";
 
 export const repairOrderRouter = Router();
@@ -114,4 +115,12 @@ repairOrderRouter.get(
   requireAuth,
   requireRole("admin", "accountant", "serviceAdvisor", "technician"),
   asyncHandler(getRepairOrderSummary),
+);
+
+// Quality check: service advisor reviews a technician-completed order.
+repairOrderRouter.post(
+  "/:id/quality-check",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  asyncHandler(submitQualityCheck),
 );
