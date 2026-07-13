@@ -1,2 +1,3 @@
 export { BackOfficeShell } from './ui/BackOfficeShell'
-export { accountantPalette, adminPalette, type BackOfficePalette } from './model/palettes'
+export { StatCard } from './ui/StatCard'
+export { accountantPalette, adminPalette, advisorPalette, type BackOfficePalette } from './model/palettes'
