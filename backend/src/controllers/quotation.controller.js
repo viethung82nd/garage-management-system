@@ -33,25 +33,25 @@ export async function createQuotation(req, res) {
   if (!Array.isArray(lines) || lines.length === 0) {
     throw new HttpError(400, "At least one line item is required");
   }
-  if (repairOrderId && !OID_RE.test(repairOrderId)) {
-    throw new HttpError(400, "Invalid repairOrderId format");
-  }
+
+  // repairOrderId is a free-text field in the SA's quotation form (its own
+  // placeholder shows a human-readable example like "RO-2026-0882"), not a
+  // picker bound to a real order — treat anything that isn't a real ObjectId
+  // as "no repair order linked" instead of rejecting the whole quotation.
+  const validRepairOrderId = repairOrderId && OID_RE.test(repairOrderId) ? repairOrderId : undefined;
 
   let customerId;
-  if (repairOrderId) {
-    const repairOrder = await RepairOrderModel.findById(repairOrderId).populate(
+  if (validRepairOrderId) {
+    const repairOrder = await RepairOrderModel.findById(validRepairOrderId).populate(
       "vehicleId",
       "customerId",
     );
-    if (!repairOrder) {
-      throw new HttpError(404, "Repair order not found");
-    }
-    customerId = repairOrder.vehicleId?.customerId;
+    customerId = repairOrder?.vehicleId?.customerId;
   }
 
   const quote = await ServiceQuoteModel.create({
     code: code?.trim() || `QT-${Date.now()}`,
-    repairOrderId: repairOrderId || undefined,
+    repairOrderId: validRepairOrderId,
     customerId,
     advisorId: req.user.sub,
     customerName,
