@@ -20,6 +20,7 @@ import { transferRequestRouter } from "./routes/transfer-request.routes.js";
 import { scheduleRouter } from "./routes/schedule.routes.js";
 import { vehicleRouter } from "./routes/vehicle.routes.js";
 import { advisorRouter } from "./routes/advisor.routes.js";
+import { receptionRouter } from "./routes/reception.routes.js";
 
 /** Builds the Express application (no listening — see server.js). */
 export function createApp() {
@@ -50,6 +51,7 @@ export function createApp() {
   app.use("/api/notifications", notificationRouter);
   app.use("/api/vehicles", vehicleRouter);
   app.use("/api/advisor", advisorRouter);
+  app.use("/api/receptions", receptionRouter);
 
   app.use("/uploads", express.static(path.resolve("uploads")));
 

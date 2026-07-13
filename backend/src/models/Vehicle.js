@@ -37,8 +37,15 @@ const vehicleSchema = new Schema(
       type: String,
       trim: true,
     },
+    // Odometer reading captured at the most recent reception/inspection —
+    // there's no other place in the schema tracking this, and it's core data
+    // for maintenance-interval and warranty decisions.
+    lastKnownMileage: {
+      type: Number,
+      min: 0,
+    },
   },
-  { timestamps: { createdAt: true, updatedAt: false } }
+  { timestamps: { createdAt: true, updatedAt: true } }
 );
 
 export const VehicleModel = mongoose.model("Vehicle", vehicleSchema);

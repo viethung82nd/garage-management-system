@@ -115,7 +115,7 @@ export async function getSlots(req, res) {
 }
 
 /** Finds a user by phone, or creates a walk-in customer record for them. */
-async function resolveCustomer({ fullName, phone, email }) {
+export async function resolveCustomer({ fullName, phone, email }) {
   const existing = await UserModel.findOne({
     phone,
     role: { $in: ["onlineCustomer", "walkInCustomer"] },
@@ -145,7 +145,7 @@ async function resolveCustomer({ fullName, phone, email }) {
 }
 
 /** Finds a vehicle by licence plate, or registers a new one for the customer. */
-async function resolveVehicle({ licensePlate, brand, model }, customerId) {
+export async function resolveVehicle({ licensePlate, brand, model }, customerId) {
   const plate = licensePlate.toUpperCase().trim();
   const existing = await VehicleModel.findOne({ licensePlate: plate });
   if (existing) {
