@@ -1,8 +1,10 @@
-﻿import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { CheckOutlined, SearchOutlined } from '@ant-design/icons'
+import { Avatar, Button, Card, Input, Select, Table, Tag } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import { useEffect, useMemo, useState } from 'react'
 import { confirmWorkshopBooking, fetchWorkshopBookings, personName, rejectWorkshopBooking, unwrapArray, vehicleName, vehiclePlate, type ApiBooking } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
-import { Icon, type IconName } from '../../shared/ui/base'
+import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected'
@@ -35,199 +37,45 @@ function mapBooking(booking: ApiBooking): BookingRequest {
   const advisor = booking.advisorId || booking.advisor
 
   return {
-    advisor: personName(advisor, 'Chưa phân công'),
-    customer: personName(customer, 'Khách hàng'),
-    date: booking.bookingDate || booking.date || 'Chưa cập nhật',
+    advisor: personName(advisor, 'Unassigned'),
+    customer: personName(customer, 'Customer'),
+    date: booking.bookingDate || booking.date || 'Not updated',
     id: booking._id || booking.id || crypto.randomUUID(),
     initials: getUserInitials(customer),
-    phone: customer?.phone || 'Chưa có SĐT',
+    phone: customer?.phone || 'No phone on file',
     plate: vehiclePlate(vehicle),
-    service: service?.name || 'Chưa chọn dịch vụ',
+    service: service?.name || 'No service selected',
     status: normalizeBookingStatus(booking.status),
     time: booking.timeSlot || booking.time || '--:--',
     vehicle: vehicleName(vehicle),
-    vin: vehicle?.vin || vehicle?.chassisNumber || 'Chưa cập nhật',
+    vin: vehicle?.vin || vehicle?.chassisNumber || 'Not updated',
   }
 }
 
 const statusLabels: Record<BookingStatus, string> = {
-  confirmed: 'Đã xác nhận',
-  pending: 'Chờ duyệt',
-  rejected: 'Đã từ chối',
+  confirmed: 'Confirmed',
+  pending: 'Pending',
+  rejected: 'Rejected',
 }
 
-function StatCard({
-  icon,
-  label,
-  note,
-  value,
-}: {
-  icon: IconName
-  label: string
-  note: string
-  value: string
-}) {
-  return (
-    <section className="border border-[#efeded] bg-white p-6 shadow-[0_18px_40px_rgba(27,28,28,0.04)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.16em] text-[#8a8686]">{label}</p>
-          <p className="mt-3 text-4xl font-black text-[#171717]">{value}</p>
-          <p className="mt-2 text-sm font-semibold text-[#ba0013]">{note}</p>
-        </div>
-        <span className="flex h-12 w-12 items-center justify-center bg-[#fff1f1] text-[#ba0013]">
-          <Icon name={icon} />
-        </span>
-      </div>
-    </section>
-  )
+const statusColors: Record<BookingStatus, string> = {
+  confirmed: 'green',
+  pending: 'default',
+  rejected: 'red',
 }
 
-function StatusBadge({ status }: { status: BookingStatus }) {
-  const classes =
-    status === 'confirmed'
-      ? 'border-[#0f8a50] bg-[#ecfff4] text-[#0f6f43]'
-      : status === 'rejected'
-        ? 'border-[#ba0013] bg-[#fff1f1] text-[#ba0013]'
-        : 'border-[#d8d5d5] bg-[#fbf9f8] text-[#5f5e5e]'
+const serviceFilterOptions = [
+  { label: 'All services', value: 'all' },
+  { label: 'Engine diagnostics', value: 'diagnostic' },
+  { label: 'Brake service', value: 'brake' },
+  { label: 'General maintenance', value: 'maintenance' },
+]
 
-  return (
-    <span className={`inline-flex border px-3 py-1 text-xs font-black uppercase tracking-[0.12em] ${classes}`}>
-      {statusLabels[status]}
-    </span>
-  )
-}
-
-function FilterBar({
-  onQueryChange,
-  onServiceChange,
-  query,
-  service,
-}: {
-  onQueryChange: (value: string) => void
-  onServiceChange: (value: string) => void
-  query: string
-  service: string
-}) {
-  return (
-    <section className="grid gap-3 border border-[#efeded] bg-white p-4 lg:grid-cols-[1fr_240px_auto_auto]">
-      <label className="relative">
-        <Icon className="absolute left-4 top-1/2 -translate-y-1/2 text-[#8a8686]" name="search" />
-        <input
-          className="h-12 w-full border border-[#d8d5d5] bg-[#fbf9f8] pl-12 pr-4 text-sm font-semibold text-[#1b1c1c] outline-none transition placeholder:text-[#8a8686] focus:border-[#ba0013] focus:bg-white"
-          onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Tìm khách hàng, biển số hoặc VIN..."
-          type="search"
-          value={query}
-        />
-      </label>
-
-      <select
-        aria-label="Lọc theo dịch vụ"
-        className="h-12 border border-[#d8d5d5] bg-[#fbf9f8] px-4 text-sm font-bold text-[#1b1c1c] outline-none transition focus:border-[#ba0013] focus:bg-white"
-        onChange={(event) => onServiceChange(event.target.value)}
-        value={service}
-      >
-        <option value="all">Tất cả dịch vụ</option>
-        <option value="diagnostic">Chẩn đoán động cơ</option>
-        <option value="brake">Dịch vụ phanh</option>
-        <option value="maintenance">Bảo dưỡng tổng quát</option>
-      </select>
-
-      <button className="flex h-12 items-center justify-center gap-2 border border-[#d8d5d5] px-5 text-sm font-black text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
-        <Icon name="sliders" />
-        Bộ lọc nâng cao
-      </button>
-
-      <button className="flex h-12 items-center justify-center gap-2 bg-[#ba0013] px-5 text-sm font-black text-white transition hover:bg-[#94000f]" type="button">
-        <Icon name="download" />
-        Xuất danh sách
-      </button>
-    </section>
-  )
-}
-
-function BookingTable({
-  bookings,
-  onStatusChange,
-}: {
-  bookings: BookingRequest[]
-  onStatusChange: (id: string, status: BookingStatus) => void
-}) {
-  return (
-    <section className="overflow-hidden border border-[#efeded] bg-white">
-      <div className="overflow-x-auto">
-        <table className="w-full min-w-[1080px] border-collapse text-left">
-          <thead>
-            <tr className="border-b border-[#efeded] bg-[#fbf9f8] text-xs font-black uppercase tracking-[0.14em] text-[#6a6767]">
-              <th className="px-6 py-4">Thông tin khách hàng</th>
-              <th className="px-6 py-4">Xe & biển số</th>
-              <th className="px-6 py-4">Dịch vụ yêu cầu</th>
-              <th className="px-6 py-4">Khung giờ</th>
-              <th className="px-6 py-4">Trạng thái</th>
-              <th className="px-6 py-4 text-right">Thao tác</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-[#efeded]">
-            {bookings.map((booking) => (
-              <tr className="align-middle transition hover:bg-[#fffafa]" key={booking.id}>
-                <td className="px-6 py-5">
-                  <div className="flex items-center gap-4">
-                    <span className="flex h-12 w-12 items-center justify-center bg-[#1b1c1c] text-sm font-black text-white">
-                      {booking.initials}
-                    </span>
-                    <span>
-                      <span className="block text-base font-black text-[#171717]">{booking.customer}</span>
-                      <span className="text-sm font-semibold text-[#6a6767]">{booking.phone}</span>
-                    </span>
-                  </div>
-                </td>
-                <td className="px-6 py-5">
-                  <p className="font-black text-[#171717]">{booking.vehicle}</p>
-                  <p className="mt-1 font-mono text-sm font-bold text-[#ba0013]">{booking.plate}</p>
-                  <p className="mt-1 font-mono text-xs text-[#8a8686]">{booking.vin}</p>
-                </td>
-                <td className="px-6 py-5">
-                  <p className="max-w-[260px] text-sm font-bold leading-6 text-[#1b1c1c]">{booking.service}</p>
-                  <p className="mt-1 text-xs font-semibold text-[#8a8686]">Cố vấn: {booking.advisor}</p>
-                </td>
-                <td className="px-6 py-5">
-                  <p className="text-lg font-black text-[#171717]">{booking.time}</p>
-                  <p className="text-sm font-semibold text-[#6a6767]">{booking.date}</p>
-                </td>
-                <td className="px-6 py-5">
-                  <StatusBadge status={booking.status} />
-                </td>
-                <td className="px-6 py-5">
-                  <div className="flex justify-end gap-2">
-                    <button
-                      aria-label={`Xác nhận lịch của ${booking.customer}`}
-                      className="flex h-10 w-10 items-center justify-center bg-[#ba0013] text-white transition hover:bg-[#94000f] disabled:cursor-not-allowed disabled:bg-[#d8d5d5]"
-                      disabled={booking.status !== 'pending'}
-                      onClick={() => onStatusChange(booking.id, 'confirmed')}
-                      title="Xác nhận"
-                      type="button"
-                    >
-                      <Icon name="check" />
-                    </button>
-                    <button
-                      aria-label={`Từ chối lịch của ${booking.customer}`}
-                      className="flex h-10 min-w-24 items-center justify-center border border-[#d8d5d5] px-4 text-sm font-black text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013] disabled:cursor-not-allowed disabled:opacity-40"
-                      disabled={booking.status !== 'pending'}
-                      onClick={() => onStatusChange(booking.id, 'rejected')}
-                      type="button"
-                    >
-                      Từ chối
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </section>
-  )
+const serviceMatchTerms: Record<string, string[]> = {
+  all: [],
+  brake: ['brake'],
+  diagnostic: ['diagnostic', 'engine'],
+  maintenance: ['maintenance', 'oil'],
 }
 
 export function BookingRequestsPage() {
@@ -252,7 +100,7 @@ export function BookingRequestsPage() {
         const nextBookings = unwrapArray<ApiBooking>(response, ['bookings']).map(mapBooking)
         if (!cancelled) setBookings(nextBookings)
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được danh sách booking từ API')
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load bookings from the API')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -264,6 +112,7 @@ export function BookingRequestsPage() {
       cancelled = true
     }
   }, [token])
+
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
 
@@ -274,13 +123,7 @@ export function BookingRequestsPage() {
           .toLowerCase()
           .includes(normalizedQuery)
 
-      const serviceMap: Record<string, string[]> = {
-        all: [],
-        brake: ['phanh'],
-        diagnostic: ['chẩn đoán', 'động cơ'],
-        maintenance: ['bảo dưỡng', 'thay dầu'],
-      }
-      const serviceTerms = serviceMap[service] ?? []
+      const serviceTerms = serviceMatchTerms[service] ?? []
       const matchesService = serviceTerms.length === 0 || serviceTerms.some((term) => booking.service.toLowerCase().includes(term))
 
       return matchesQuery && matchesService
@@ -296,41 +139,108 @@ export function BookingRequestsPage() {
       const booking = 'booking' in response && response.booking ? response.booking : response
       setBookings((current) => current.map((item) => (item.id === id ? mapBooking(booking as ApiBooking) : item)))
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được trạng thái booking')
+      setApiMessage(err instanceof Error ? err.message : 'Unable to update the booking status')
     }
   }
 
   const pendingCount = bookings.filter((booking) => booking.status === 'pending').length
 
-  return (
-    <ServiceAdvisorShell active="bookings" title="Danh sách đặt lịch">
-      <div className="space-y-7">
-        <section className="grid gap-4 md:grid-cols-3">
-          <StatCard icon="calendar" label="Đặt lịch chờ duyệt" note="+4 yêu cầu mới hôm nay" value={String(pendingCount).padStart(2, '0')} />
-          <StatCard icon="clipboard" label="Lịch hẹn hôm nay" note="6 xe chưa tiếp nhận" value="28" />
-          <StatCard icon="users" label="Khách hàng mới" note="Trong 7 ngày gần nhất" value="05" />
-        </section>
-
-        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
-        <FilterBar onQueryChange={setQuery} onServiceChange={setService} query={query} service={service} />
-        {loading ? <div className="border border-[#efeded] bg-white p-8 text-sm font-bold text-[#6a6767]">Đang tải booking từ API...</div> : <BookingTable bookings={filteredBookings} onStatusChange={updateStatus} />}
-
-        <footer className="grid gap-6 bg-[#1b1c1c] p-8 text-white lg:grid-cols-[1fr_auto_auto] lg:items-center">
+  const columns: ColumnsType<BookingRequest> = [
+    {
+      title: 'Customer',
+      key: 'customer',
+      render: (_, booking) => (
+        <div className="flex items-center gap-3">
+          <Avatar style={{ background: advisorPalette.ink }}>{booking.initials}</Avatar>
           <div>
-            <p className="text-lg font-black">Kapa Service Desk</p>
-            <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">
-              Theo dõi lịch đặt, phân bổ cố vấn và chuyển nhanh sang quy trình tiếp nhận xe.
-            </p>
+            <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>{booking.customer}</div>
+            <div style={{ color: advisorPalette.textMuted, fontSize: 13 }}>{booking.phone}</div>
           </div>
-          <div className="text-sm text-white/65">
-            <p className="font-black text-white">Ca trực hiện tại</p>
-            <p>08:00 - 17:30</p>
-          </div>
-          <Link className="inline-flex h-12 items-center justify-center bg-white px-5 text-sm font-black text-[#1b1c1c]" to="/advisor/reception">
-            Mở biểu mẫu nhận xe
-          </Link>
-        </footer>
-      </div>
+        </div>
+      ),
+    },
+    {
+      title: 'Vehicle & plate',
+      key: 'vehicle',
+      render: (_, booking) => (
+        <div>
+          <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>{booking.vehicle}</div>
+          <div style={{ color: advisorPalette.red, fontSize: 13, fontWeight: 600 }}>{booking.plate}</div>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>{booking.vin}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Requested service',
+      key: 'service',
+      render: (_, booking) => (
+        <div>
+          <div style={{ color: advisorPalette.ink, fontWeight: 600, maxWidth: 240 }}>{booking.service}</div>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 2 }}>Advisor: {booking.advisor}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Time slot',
+      key: 'time',
+      render: (_, booking) => (
+        <div>
+          <div style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700 }}>{booking.time}</div>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 13 }}>{booking.date}</div>
+        </div>
+      ),
+    },
+    {
+      title: 'Status',
+      dataIndex: 'status',
+      key: 'status',
+      render: (status: BookingStatus) => <Tag color={statusColors[status]}>{statusLabels[status]}</Tag>,
+    },
+    {
+      title: 'Actions',
+      key: 'actions',
+      render: (_, booking) => (
+        <div className="flex justify-end gap-2">
+          <Button
+            disabled={booking.status !== 'pending'}
+            icon={<CheckOutlined />}
+            onClick={() => updateStatus(booking.id, 'confirmed')}
+            title="Confirm"
+            type="primary"
+          />
+          <Button disabled={booking.status !== 'pending'} onClick={() => updateStatus(booking.id, 'rejected')}>
+            Reject
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <ServiceAdvisorShell title="Booking requests">
+      <StatCard label="Pending bookings" note="Awaiting confirmation" palette={advisorPalette} value={String(pendingCount).padStart(2, '0')} />
+
+      {apiMessage ? (
+        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
+          {apiMessage}
+        </div>
+      ) : null}
+
+      <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
+        <div className="flex flex-wrap items-center gap-3" style={{ marginBottom: 20 }}>
+          <Input
+            allowClear
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search customer, plate, or VIN..."
+            prefix={<SearchOutlined />}
+            style={{ maxWidth: 320 }}
+            value={query}
+          />
+          <Select onChange={setService} options={serviceFilterOptions} style={{ width: 220 }} value={service} />
+        </div>
+
+        <Table columns={columns} dataSource={filteredBookings} loading={loading} pagination={false} rowKey="id" scroll={{ x: 960 }} />
+      </Card>
     </ServiceAdvisorShell>
   )
 }
