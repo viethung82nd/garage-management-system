@@ -34,10 +34,14 @@ export async function apiRequest<T>(
   } = {},
 ) {
   try {
+    const isFormData = init.body instanceof FormData
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
       headers: {
-        'Content-Type': 'application/json',
+        // Leave Content-Type unset for FormData bodies — the browser must
+        // generate it itself (multipart/form-data; boundary=...); setting it
+        // manually here silently breaks multer parsing on the backend.
+        ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
         ...(init.token ? { Authorization: `Bearer ${init.token}` } : {}),
         ...(init.headers || {}),
       },
