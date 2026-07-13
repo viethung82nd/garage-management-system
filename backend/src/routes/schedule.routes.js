@@ -1,0 +1,45 @@
+import { Router } from "express";
+import { requireAuth, requireRole } from "../middleware/auth.js";
+import { asyncHandler } from "../middleware/error.js";
+import {
+  getTechnicianSchedule,
+  updateScheduleAvailability,
+  updateTechnicianSchedule,
+} from "../controllers/schedule.controller.js";
+
+export const scheduleRouter = Router();
+
+scheduleRouter.get(
+  "/",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(getTechnicianSchedule),
+);
+
+scheduleRouter.get(
+  "/technician/:technicianId",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(getTechnicianSchedule),
+);
+
+scheduleRouter.patch(
+  "/",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(updateTechnicianSchedule),
+);
+
+scheduleRouter.patch(
+  "/technician/:technicianId",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(updateTechnicianSchedule),
+);
+
+scheduleRouter.put(
+  "/:scheduleId/availability",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(updateScheduleAvailability),
+);
