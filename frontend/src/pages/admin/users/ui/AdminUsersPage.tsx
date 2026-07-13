@@ -51,7 +51,8 @@ export default function AdminUsersPage() {
       try {
         const response = await fetchAdminUsers(token)
         if (cancelled) return
-        setUsers(response.users)
+        const staffOnly = response.users.filter((user) => user.role !== 'onlineCustomer' && user.role !== 'walkInCustomer')
+        setUsers(staffOnly)
       } catch (error) {
         if (!cancelled) {
           setRequestError(error instanceof Error ? error.message : 'Unable to load staff accounts.')

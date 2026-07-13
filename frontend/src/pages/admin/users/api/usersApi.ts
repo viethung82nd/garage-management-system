@@ -19,13 +19,8 @@ export type CreateStaffPayload = {
   role: 'serviceAdvisor' | 'technician' | 'accountant' | 'admin'
 }
 
-/**
- * There is no GET /api/admin/users on the backend yet, so the list is mocked
- * locally until that endpoint ships. Kept async so call sites don't need to
- * change when it's wired to a real request later.
- */
-export async function fetchAdminUsers(_token: string): Promise<{ users: AdminUserRecord[] }> {
-  return { users: [] }
+export function fetchAdminUsers(token: string) {
+  return apiRequest<{ users: AdminUserRecord[] }>('/api/admin/users', { token })
 }
 
 /** POST /api/auth/staff — this one already exists on the backend. */
@@ -37,7 +32,9 @@ export function createStaffAccount(token: string, payload: CreateStaffPayload) {
   })
 }
 
-/** No deactivate endpoint on the backend yet — mocked until it ships. */
-export async function deactivateUser(_token: string, _userId: string): Promise<{ message: string }> {
-  return { message: 'User deactivated (mock — backend endpoint not implemented yet)' }
+export function deactivateUser(token: string, userId: string) {
+  return apiRequest<{ user: AdminUserRecord }>(`/api/admin/users/${userId}/deactivate`, {
+    method: 'PATCH',
+    token,
+  })
 }
