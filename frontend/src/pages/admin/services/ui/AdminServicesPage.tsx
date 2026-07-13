@@ -1,9 +1,9 @@
-import { PlusOutlined } from '@ant-design/icons'
+import { CloseOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Switch, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useAuth } from '../../../../shared/auth'
-import { ApiClientError } from '../../../../shared/lib/api-client'
+import { ApiClientError, resolveApiAssetUrl } from '../../../../shared/lib/api-client'
 import {
   createService,
   createServiceCategory,
@@ -12,6 +12,7 @@ import {
   fetchServiceCategories,
   fetchServices,
   updateService,
+  uploadServiceCategoryPhoto,
   type ServiceCategoryRecord,
   type ServicePayload,
   type ServiceRecord,
@@ -84,6 +85,28 @@ export default function AdminServicesPage() {
       setCategories((current) => current.filter((item) => item._id !== category._id))
     } catch (error) {
       setRequestError(error instanceof ApiClientError ? error.message : 'Unable to remove this category.')
+    }
+  }
+
+  const photoUploadTargetId = useRef<string | null>(null)
+  const photoInputRef = useRef<HTMLInputElement | null>(null)
+
+  function openCategoryPhotoPicker(categoryId: string) {
+    photoUploadTargetId.current = categoryId
+    photoInputRef.current?.click()
+  }
+
+  async function handleCategoryPhotoSelected(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0]
+    const categoryId = photoUploadTargetId.current
+    event.target.value = ''
+    if (!token || !file || !categoryId) return
+
+    try {
+      const updated = await uploadServiceCategoryPhoto(token, categoryId, file)
+      setCategories((current) => current.map((item) => (item._id === categoryId ? updated : item)))
+    } catch (error) {
+      setRequestError(error instanceof ApiClientError ? error.message : 'Unable to upload this photo.')
     }
   }
 
@@ -207,12 +230,40 @@ export default function AdminServicesPage() {
             Add category
           </Button>
         </div>
+        <input accept="image/*" className="hidden" onChange={handleCategoryPhotoSelected} ref={photoInputRef} type="file" />
         <div className="flex flex-wrap gap-2">
           {categories.length === 0 ? <span style={{ color: adminPalette.textMuted }}>No categories yet.</span> : null}
           {categories.map((category) => (
-            <Tag key={category._id} closable onClose={() => handleDeleteCategory(category)}>
+            <span
+              className="inline-flex items-center gap-2 rounded-full border px-2 py-1 text-sm"
+              key={category._id}
+              style={{ borderColor: adminPalette.border }}
+            >
+              {category.imageUrl ? (
+                <img
+                  alt=""
+                  className="h-5 w-5 rounded-full object-cover"
+                  src={resolveApiAssetUrl(category.imageUrl)}
+                />
+              ) : null}
               {category.name}
-            </Tag>
+              <button
+                className="cursor-pointer border-0 bg-transparent p-0"
+                onClick={() => openCategoryPhotoPicker(category._id)}
+                title="Upload photo"
+                type="button"
+              >
+                <UploadOutlined style={{ color: adminPalette.textMuted }} />
+              </button>
+              <button
+                className="cursor-pointer border-0 bg-transparent p-0"
+                onClick={() => handleDeleteCategory(category)}
+                title="Remove category"
+                type="button"
+              >
+                <CloseOutlined style={{ color: adminPalette.textMuted }} />
+              </button>
+            </span>
           ))}
         </div>
       </Card>

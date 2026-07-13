@@ -1,6 +1,32 @@
 import { ServiceModel, ServiceCategoryModel } from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
 
+/**
+ * POST /api/services/categories/:id/photo
+ * Uploads a category image (multer disk storage, see the route file) and
+ * stores the resulting /uploads path on the category.
+ */
+export async function uploadServiceCategoryPhoto(req, res) {
+  const { id } = req.params;
+
+  if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+    throw new HttpError(400, "Invalid category ID format");
+  }
+  if (!req.file) {
+    throw new HttpError(400, "photo file is required");
+  }
+
+  const category = await ServiceCategoryModel.findById(id);
+  if (!category) {
+    throw new HttpError(404, "Service category not found");
+  }
+
+  category.imageUrl = "/uploads/category-photos/" + req.file.filename;
+  await category.save();
+
+  res.json(category);
+}
+
 // ============= SERVICE CATEGORY CONTROLLERS =============
 
 /**
@@ -40,7 +66,7 @@ export async function getServiceCategoryById(req, res) {
  * Create a new service category (Admin only)
  */
 export async function createServiceCategory(req, res) {
-  const { name, description, isActive } = req.body ?? {};
+  const { name, description, isActive, imageUrl } = req.body ?? {};
 
   if (!name || !name.trim()) {
     throw new HttpError(400, "Category name is required");
@@ -57,6 +83,7 @@ export async function createServiceCategory(req, res) {
     name: name.trim(),
     description: description?.trim() || "",
     isActive: isActive ?? true,
+    imageUrl: imageUrl?.trim() || undefined,
   });
 
   res.status(201).json(category);
@@ -68,7 +95,7 @@ export async function createServiceCategory(req, res) {
  */
 export async function updateServiceCategory(req, res) {
   const { id } = req.params;
-  const { name, description, isActive } = req.body ?? {};
+  const { name, description, isActive, imageUrl } = req.body ?? {};
 
   if (!id.match(/^[0-9a-fA-F]{24}$/)) {
     throw new HttpError(400, "Invalid category ID format");
@@ -96,6 +123,10 @@ export async function updateServiceCategory(req, res) {
 
   if (isActive !== undefined) {
     category.isActive = isActive;
+  }
+
+  if (imageUrl !== undefined) {
+    category.imageUrl = imageUrl?.trim() || undefined;
   }
 
   await category.save();

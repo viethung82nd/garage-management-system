@@ -5,6 +5,7 @@ export type ServiceCategoryRecord = {
   name: string
   description?: string
   isActive: boolean
+  imageUrl?: string
 }
 
 export type ServiceRecord = {
@@ -44,6 +45,16 @@ export function createServiceCategory(token: string, payload: ServiceCategoryPay
 
 export function deleteServiceCategory(token: string, id: string) {
   return apiRequest<{ message: string }>(`/api/services/categories/${id}`, { method: 'DELETE', token })
+}
+
+export function uploadServiceCategoryPhoto(token: string, id: string, file: File) {
+  const formData = new FormData()
+  formData.append('photo', file)
+  return apiRequest<ServiceCategoryRecord>(`/api/services/categories/${id}/photo`, {
+    method: 'POST',
+    token,
+    body: formData,
+  })
 }
 
 export function fetchServices(token: string) {

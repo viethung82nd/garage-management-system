@@ -8,6 +8,7 @@ import {
   CustomerPrimaryButton,
   CustomerSectionHeading,
 } from '../../../shared/ui/kapa-customer'
+import { resolveApiAssetUrl } from '../../../shared/lib/api-client'
 import { fetchPublicServiceCategories, fetchPublicServices, type PublicService, type PublicServiceCategory } from '../api/servicesApi'
 
 function formatMoney(value: number) {
@@ -99,6 +100,13 @@ export default function ServicesPage() {
                 className={activeCategory === category.name ? '' : 'customer-primary-btn--ghost'}
                 onClick={() => setSearchParams({ category: category.name })}
               >
+                {category.imageUrl ? (
+                  <img
+                    alt=""
+                    src={resolveApiAssetUrl(category.imageUrl)}
+                    style={{ borderRadius: '50%', height: 20, marginRight: 8, objectFit: 'cover', width: 20 }}
+                  />
+                ) : null}
                 {category.name}
               </CustomerPrimaryButton>
             ))}

@@ -16,6 +16,10 @@ const serviceCategorySchema = new Schema(
       type: Boolean,
       default: true,
     },
+    imageUrl: {
+      type: String,
+      trim: true,
+    },
   },
   { timestamps: { createdAt: true, updatedAt: true } },
 );

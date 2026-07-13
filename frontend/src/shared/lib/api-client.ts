@@ -1,4 +1,11 @@
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000').replace(/\/+$/, '')
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || 'http://localhost:4000').replace(/\/+$/, '')
+
+/** Resolves a backend-relative path (e.g. "/uploads/...") to a full URL. */
+export function resolveApiAssetUrl(path?: string) {
+  if (!path) return undefined
+  if (/^https?:\/\//.test(path)) return path
+  return `${API_BASE_URL}${path.startsWith('/') ? path : `/${path}`}`
+}
 
 type ApiErrorPayload = {
   error?: string
