@@ -18,6 +18,7 @@ import { notificationRouter } from "./routes/notification.routes.js";
 import { inspectionReportRouter } from "./routes/inspection-report.routes.js";
 import { transferRequestRouter } from "./routes/transfer-request.routes.js";
 import { scheduleRouter } from "./routes/schedule.routes.js";
+import { vehicleRouter } from "./routes/vehicle.routes.js";
 
 /** Builds the Express application (no listening — see server.js). */
 export function createApp() {
@@ -46,6 +47,7 @@ export function createApp() {
   app.use("/api/invoices", invoiceRouter);
   app.use("/api/reviews", reviewRouter);
   app.use("/api/notifications", notificationRouter);
+  app.use("/api/vehicles", vehicleRouter);
 
   app.use("/uploads", express.static(path.resolve("uploads")));
 

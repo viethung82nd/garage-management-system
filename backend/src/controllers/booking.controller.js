@@ -23,6 +23,43 @@ const OID_RE = /^[0-9a-fA-F]{24}$/;
 const STAFF_BOOKING_ROLES = ["serviceAdvisor", "admin"];
 
 /**
+ * Legal status transitions for the generic PATCH /:id/status endpoint. Keys are
+ * the current status, values the statuses staff may move it to. `cancelled` and
+ * `completed` are terminal. `rescheduled` is deliberately not a valid target
+ * here — moving a booking's date/slot must go through /:id/reschedule so a fresh
+ * seat is claimed.
+ */
+const STATUS_TRANSITIONS = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["completed", "cancelled"],
+  rescheduled: ["confirmed", "completed", "cancelled"],
+  cancelled: [],
+  completed: [],
+};
+
+/** Per-target-status history action + customer notification copy. */
+const STATUS_META = {
+  confirmed: {
+    action: "confirmed",
+    type: "bookingConfirmed",
+    title: "Appointment confirmed",
+    message: "Your appointment has been confirmed by our service advisor.",
+  },
+  completed: {
+    action: "completed",
+    type: "bookingCompleted",
+    title: "Appointment completed",
+    message: "Your appointment has been marked as completed.",
+  },
+  cancelled: {
+    action: "cancelled",
+    type: "bookingCancelled",
+    title: "Appointment cancelled",
+    message: "Your appointment has been cancelled.",
+  },
+};
+
+/**
  * Parses a "YYYY-MM-DD" string into a normalized UTC-midnight Date. Bookings are
  * always stored at midnight so an exact-match query is enough to group a day.
  */
@@ -443,6 +480,66 @@ export async function rescheduleBooking(req, res) {
     type: "bookingRescheduled",
     title: "Appointment rescheduled",
     message: `An appointment was moved to ${bookingDate} at ${timeSlot}.`,
+  });
+
+  res.json({ booking: await populateBooking(booking) });
+}
+
+/**
+ * PATCH /api/bookings/:id/status — staff update an appointment's status through
+ * the lifecycle (pending → confirmed → completed, or → cancelled), validated
+ * against STATUS_TRANSITIONS. Body: { status, reason? }. Saving via .save()
+ * keeps occupiesSlot in sync, so cancelling/completing frees the seat.
+ * Rescheduling (date/slot change) is not handled here — use /:id/reschedule.
+ */
+export async function updateBookingStatus(req, res) {
+  const { status, reason } = req.body ?? {};
+
+  if (!BOOKING_STATUSES.includes(status)) {
+    throw new HttpError(400, `status must be one of: ${BOOKING_STATUSES.join(", ")}`);
+  }
+  if (status === "rescheduled") {
+    throw new HttpError(
+      400,
+      "Use the reschedule endpoint to change a booking's date/slot"
+    );
+  }
+
+  const booking = await loadBooking(req.params.id);
+
+  if (booking.status === status) {
+    throw new HttpError(409, `Booking is already ${status}`);
+  }
+  const allowed = STATUS_TRANSITIONS[booking.status] ?? [];
+  if (!allowed.includes(status)) {
+    throw new HttpError(
+      409,
+      `Cannot change status from ${booking.status} to ${status}`
+    );
+  }
+
+  booking.status = status;
+  // Record who confirmed the appointment, matching the dedicated confirm route.
+  if (status === "confirmed") {
+    booking.advisorId = req.user.sub;
+  }
+  await booking.save();
+
+  const meta = STATUS_META[status];
+  await BookingHistoryModel.create({
+    bookingId: booking._id,
+    changedBy: req.user.sub,
+    action: meta.action,
+    reason: reason?.trim(),
+  });
+
+  await createNotification({
+    userId: booking.customerId,
+    type: meta.type,
+    title: meta.title,
+    message: meta.message,
+    refId: booking._id,
+    refModel: "Booking",
   });
 
   res.json({ booking: await populateBooking(booking) });
