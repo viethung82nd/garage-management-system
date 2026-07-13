@@ -21,6 +21,7 @@ const AdminUsersPage = lazy(() => import('../pages/admin/users').then((module) =
 const AdminServicesPage = lazy(() => import('../pages/admin/services').then((module) => ({ default: module.AdminServicesPage })))
 const AdminPartsPage = lazy(() => import('../pages/admin/parts').then((module) => ({ default: module.AdminPartsPage })))
 const AdminConfigPage = lazy(() => import('../pages/admin/config').then((module) => ({ default: module.AdminConfigPage })))
+const AdminReportsPage = lazy(() => import('../pages/admin/reports').then((module) => ({ default: module.AdminReportsPage })))
 const ServiceAdvisorDashboardPage = lazy(() =>
   import('../pages/advisor/ServiceAdvisorDashboardPage').then((module) => ({ default: module.ServiceAdvisorDashboardPage })),
 )
@@ -188,6 +189,18 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['admin']}>
                 <AdminPartsPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/reports"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['admin']}>
+                <AdminReportsPage />
               </RequireRole>
             </RequireAuth>
           </Suspense>
