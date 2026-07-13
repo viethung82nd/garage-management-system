@@ -235,29 +235,42 @@ export default function AdminServicesPage() {
           {categories.length === 0 ? <span style={{ color: adminPalette.textMuted }}>No categories yet.</span> : null}
           {categories.map((category) => (
             <span
-              className="inline-flex items-center gap-2 rounded-full border px-2 py-1 text-sm"
               key={category._id}
-              style={{ borderColor: adminPalette.border }}
+              style={{
+                alignItems: 'center',
+                border: `1px solid ${adminPalette.border}`,
+                borderRadius: 999,
+                display: 'inline-flex',
+                fontSize: 13,
+                gap: 8,
+                padding: '4px 10px',
+              }}
             >
               {category.imageUrl ? (
                 <img
                   alt=""
-                  className="h-5 w-5 rounded-full object-cover"
                   src={resolveApiAssetUrl(category.imageUrl)}
+                  style={{
+                    borderRadius: '50%',
+                    flexShrink: 0,
+                    height: 20,
+                    objectFit: 'cover',
+                    width: 20,
+                  }}
                 />
               ) : null}
               {category.name}
               <button
-                className="cursor-pointer border-0 bg-transparent p-0"
                 onClick={() => openCategoryPhotoPicker(category._id)}
+                style={{ background: 'transparent', border: 0, cursor: 'pointer', display: 'flex', padding: 0 }}
                 title="Upload photo"
                 type="button"
               >
                 <UploadOutlined style={{ color: adminPalette.textMuted }} />
               </button>
               <button
-                className="cursor-pointer border-0 bg-transparent p-0"
                 onClick={() => handleDeleteCategory(category)}
+                style={{ background: 'transparent', border: 0, cursor: 'pointer', display: 'flex', padding: 0 }}
                 title="Remove category"
                 type="button"
               >
