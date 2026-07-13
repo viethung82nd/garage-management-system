@@ -1,24 +1,46 @@
+import { CheckOutlined, ProfileOutlined } from '@ant-design/icons'
+import { Button, Card, Col, Input, Row, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { createWorkshopRepairOrder, fetchWorkshopServices, fetchWorkshopTechnicians, updateWorkshopRepairOrder, type ApiService, type ApiTechnician } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
-import { Icon } from '../../shared/ui/base'
-import {
-  CustomerVehiclePanel,
-  ServiceTaskBuilder,
-  TechnicianAssignmentPanel,
-  WorkOrderSummary,
-  type RepairOrderHeader,
-  type ServiceTask,
-  type Technician,
-} from '../../widgets/repair-order-assignment'
+import { advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
+
+const { TextArea } = Input
+
+type ServiceTask = {
+  id: string
+  estimate: string
+  name: string
+  parts: string
+  selected: boolean
+}
+
+type Technician = {
+  id: string
+  activeOrders: number
+  name: string
+  skill: string
+  status: 'available' | 'busy' | 'offline'
+}
+
+type RepairOrderHeader = {
+  customerName: string
+  customerPhone: string
+  vehicleName: string
+  plate: string
+  vin: string
+  odometer: string
+  promisedAt: string
+  priority: string
+}
 
 function mapServiceTask(service: ApiService): ServiceTask {
   return {
-    estimate: `${service.estimatedDuration || 45} phút`,
+    estimate: `${service.estimatedDuration || 45} min`,
     id: service._id || service.id || crypto.randomUUID(),
-    name: service.name || 'Dịch vụ chưa đặt tên',
-    parts: service.category || 'Theo cấu hình dịch vụ',
+    name: service.name || 'Unnamed service',
+    parts: service.category || 'Per service configuration',
     selected: false,
   }
 }
@@ -27,10 +49,16 @@ function mapTechnician(technician: ApiTechnician): Technician {
   return {
     activeOrders: technician.activeOrders || 0,
     id: technician._id || technician.id || crypto.randomUUID(),
-    name: technician.fullName || technician.email || 'Kỹ thuật viên',
-    skill: technician.skill || 'Chưa cập nhật kỹ năng',
+    name: technician.fullName || technician.email || 'Technician',
+    skill: technician.skill || 'Skill not recorded',
     status: technician.status === 'busy' ? 'busy' : technician.status === 'off' || technician.status === 'offline' ? 'offline' : 'available',
   }
+}
+
+const statusTag: Record<Technician['status'], { color: string; label: string }> = {
+  available: { color: 'green', label: 'Available' },
+  busy: { color: 'gold', label: 'Busy' },
+  offline: { color: 'default', label: 'Off shift' },
 }
 
 const emptyHeader: RepairOrderHeader = {
@@ -81,7 +109,7 @@ export function RepairOrderAssignmentPage() {
         setSelectedTechnicianId(nextTechnicians[0]?.id || '')
       } catch (err) {
         if (!cancelled) {
-          setApiMessage(err instanceof Error ? err.message : 'Không tải được dịch vụ/kỹ thuật viên từ API')
+          setApiMessage(err instanceof Error ? err.message : 'Unable to load services/technicians from the API')
         }
       }
     }
@@ -95,6 +123,7 @@ export function RepairOrderAssignmentPage() {
 
   const selectedTasks = useMemo(() => tasks.filter((task) => task.selected), [tasks])
   const selectedTechnician = technicians.find((tech) => tech.id === selectedTechnicianId)
+  const totalMinutes = selectedTasks.reduce((sum, task) => sum + Number.parseInt(task.estimate, 10), 0)
 
   function toggleTask(id: string) {
     setSaved(false)
@@ -131,72 +160,197 @@ export function RepairOrderAssignmentPage() {
       const id = created._id || created.id
       if (id && selectedTechnicianId) await updateWorkshopRepairOrder(token, id, { technicianId: selectedTechnicianId, status: 'pending' })
       setSaved(true)
-      setApiMessage('Đã tạo lệnh sửa chữa và gửi phân công qua API.')
+      setApiMessage('Repair order created and assigned through the API.')
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Không tạo được lệnh sửa chữa')
+      setApiMessage(err instanceof Error ? err.message : 'Unable to create the repair order')
     } finally {
       setSaving(false)
     }
   }
 
+  const headerFields: Array<{ key: keyof RepairOrderHeader; label: string; placeholder?: string; type?: string }> = [
+    { key: 'customerName', label: 'Customer', placeholder: 'John Smith' },
+    { key: 'customerPhone', label: 'Phone number', placeholder: '555-0100' },
+    { key: 'vehicleName', label: 'Vehicle', placeholder: 'Toyota Camry' },
+    { key: 'plate', label: 'License plate', placeholder: '29A-123.45' },
+    { key: 'vin', label: 'VIN', placeholder: 'WBS33AZ08PCM44882' },
+    { key: 'odometer', label: 'Mileage', placeholder: '24500' },
+    { key: 'promisedAt', label: 'Promised date', type: 'date' },
+    { key: 'priority', label: 'Priority', placeholder: 'High / Normal' },
+  ]
+
   return (
-    <ServiceAdvisorShell active="work-orders" title="Tạo lệnh sửa chữa & phân công">
-      <div className="space-y-7">
-        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
-        <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
-          <div className="absolute right-8 top-8 hidden text-[#ba0013]/10 lg:block">
-            <Icon className="h-32 w-32" name="clipboard" />
-          </div>
-          <div className="relative z-10 grid gap-6 lg:grid-cols-[1fr_auto] lg:items-center">
-            <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Create Repair Order</p>
-              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Tạo lệnh sửa chữa từ hồ sơ tiếp nhận</h2>
-              <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
-                Service Advisor chọn hạng mục dịch vụ, kiểm tra thời lượng dự kiến và phân công kỹ thuật viên phù hợp trước khi
-                chuyển lệnh vào xưởng.
-              </p>
-            </div>
-            <div className="border border-[#efeded] bg-[#fbf9f8] p-5">
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#6a6767]">Trạng thái</p>
-              <p className="mt-2 text-2xl font-black text-[#ba0013]">{saved ? 'Đã tạo lệnh' : 'Đang soạn'}</p>
-              <p className="mt-1 text-sm font-semibold text-[#6a6767]">Mã: {orderCode}</p>
-            </div>
-          </div>
-        </section>
+    <ServiceAdvisorShell title="Work orders">
+      {apiMessage ? (
+        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
+          {apiMessage}
+        </div>
+      ) : null}
 
-        <div className="grid items-start gap-7 xl:grid-cols-[minmax(0,1fr)_380px]">
-          <div className="space-y-7">
-            <CustomerVehiclePanel onChange={updateHeader} value={header} />
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+        <div className="flex flex-col gap-5">
+          <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Customer & vehicle">
+            <Row gutter={[16, 16]}>
+              {headerFields.map((field) => (
+                <Col key={field.key} span={12} xl={6}>
+                  <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6, textTransform: 'uppercase' }}>
+                    {field.label}
+                  </div>
+                  <Input
+                    onChange={(event) => updateHeader(field.key, event.target.value)}
+                    placeholder={field.placeholder}
+                    type={field.type}
+                    value={header[field.key]}
+                  />
+                </Col>
+              ))}
+            </Row>
+          </Card>
 
-            <div className="grid gap-7 lg:grid-cols-2">
-              <ServiceTaskBuilder onToggleTask={toggleTask} tasks={tasks} />
-              <TechnicianAssignmentPanel
-                onSelectTechnician={assignTechnician}
-                selectedTechnicianId={selectedTechnicianId}
-                technicians={technicians}
-              />
-            </div>
-
-            <section className="flex flex-col gap-4 border border-[#efeded] bg-white p-6 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-lg font-black text-[#171717]">Sẵn sàng chuyển lệnh cho xưởng</p>
-                <p className="mt-1 text-sm font-semibold text-[#6a6767]">
-                  {selectedTasks.length} hạng mục được chọn, phân công cho {selectedTechnician?.name || 'chưa chọn KTV'}.
-                </p>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Service tasks">
+              <div className="flex flex-col gap-3">
+                {tasks.map((task) => (
+                  <button
+                    key={task.id}
+                    onClick={() => toggleTask(task.id)}
+                    style={{
+                      background: task.selected ? '#fffafa' : advisorPalette.panelAlt,
+                      border: `1px solid ${task.selected ? advisorPalette.red : advisorPalette.border}`,
+                      borderRadius: 12,
+                      cursor: 'pointer',
+                      padding: 16,
+                      textAlign: 'left',
+                    }}
+                    type="button"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <span
+                          style={{
+                            alignItems: 'center',
+                            background: task.selected ? advisorPalette.red : 'transparent',
+                            border: task.selected ? 'none' : `1px solid ${advisorPalette.border}`,
+                            borderRadius: 6,
+                            color: 'white',
+                            display: 'flex',
+                            height: 24,
+                            justifyContent: 'center',
+                            width: 24,
+                          }}
+                        >
+                          {task.selected ? <CheckOutlined style={{ fontSize: 12 }} /> : null}
+                        </span>
+                        <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>{task.name}</span>
+                      </div>
+                      <Tag color="red">{task.estimate}</Tag>
+                    </div>
+                    <div style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 8 }}>Parts: {task.parts}</div>
+                  </button>
+                ))}
               </div>
-              <button
-                className="inline-flex min-h-12 items-center justify-center gap-3 bg-[#ba0013] px-6 text-sm font-black uppercase text-white transition hover:bg-[#94000f] disabled:opacity-60"
-                disabled={saving || !selectedTasks.length || !selectedTechnicianId}
-                onClick={createRepairOrder}
-                type="button"
-              >
-                <Icon name="check" />
-                {saving ? 'Đang tạo...' : 'Tạo lệnh & phân công'}
-              </button>
-            </section>
+            </Card>
+
+            <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Assign technician">
+              <div className="flex flex-col gap-3">
+                {technicians.map((tech) => {
+                  const selected = tech.id === selectedTechnicianId
+                  const disabled = tech.status === 'offline'
+                  return (
+                    <button
+                      disabled={disabled}
+                      key={tech.id}
+                      onClick={() => assignTechnician(tech.id)}
+                      style={{
+                        background: selected ? '#fffafa' : advisorPalette.panelAlt,
+                        border: `1px solid ${selected ? advisorPalette.red : advisorPalette.border}`,
+                        borderRadius: 12,
+                        cursor: disabled ? 'not-allowed' : 'pointer',
+                        opacity: disabled ? 0.5 : 1,
+                        padding: 16,
+                        textAlign: 'left',
+                      }}
+                      type="button"
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>{tech.name}</div>
+                          <div style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 2 }}>{tech.skill}</div>
+                        </div>
+                        <Tag color={statusTag[tech.status].color}>{statusTag[tech.status].label}</Tag>
+                      </div>
+                      <div className="flex items-center gap-2" style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 10 }}>
+                        <ProfileOutlined /> {tech.activeOrders} active orders
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </Card>
           </div>
 
-          <WorkOrderSummary code={orderCode} note={note} onNoteChange={setNote} selectedTasks={selectedTasks} selectedTechnician={selectedTechnician} />
+          <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <div style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700 }}>Ready to send to the workshop</div>
+                <div style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 4 }}>
+                  {selectedTasks.length} task(s) selected, assigned to {selectedTechnician?.name || 'no technician yet'}.
+                </div>
+              </div>
+              <Button
+                disabled={!selectedTasks.length || !selectedTechnicianId}
+                icon={<CheckOutlined />}
+                loading={saving}
+                onClick={createRepairOrder}
+                size="large"
+                type="primary"
+              >
+                {saving ? 'Creating...' : 'Create & assign work order'}
+              </Button>
+            </div>
+          </Card>
+        </div>
+
+        <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
+          <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
+            <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+              New work order
+            </div>
+            <div style={{ color: 'white', fontSize: 26, fontWeight: 700, marginTop: 8 }}>{orderCode}</div>
+            <Tag color={saved ? 'green' : 'default'} style={{ marginTop: 8 }}>
+              {saved ? 'Order created' : 'Drafting'}
+            </Tag>
+            <Row gutter={12} style={{ marginTop: 16 }}>
+              <Col span={12}>
+                <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 12 }}>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Tasks</div>
+                  <div style={{ color: 'white', fontSize: 22, fontWeight: 700, marginTop: 6 }}>{String(selectedTasks.length).padStart(2, '0')}</div>
+                </div>
+              </Col>
+              <Col span={12}>
+                <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 12 }}>
+                  <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Estimated</div>
+                  <div style={{ color: 'white', fontSize: 22, fontWeight: 700, marginTop: 6 }}>{totalMinutes || 0} min</div>
+                </div>
+              </Col>
+            </Row>
+            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 20, paddingTop: 20 }}>
+              <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Assigned technician</div>
+              <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 8 }}>{selectedTechnician?.name ?? 'Unassigned'}</div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 13, marginTop: 4 }}>
+                {selectedTechnician?.skill ?? 'Choose a technician suited to these tasks.'}
+              </div>
+            </div>
+          </Card>
+
+          <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Advisor notes">
+            <TextArea
+              onChange={(event) => setNote(event.target.value)}
+              placeholder="Note the customer's reported issue, priority checks..."
+              rows={5}
+              value={note}
+            />
+          </Card>
         </div>
       </div>
     </ServiceAdvisorShell>
