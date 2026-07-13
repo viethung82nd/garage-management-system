@@ -3,65 +3,49 @@ import { Link } from 'react-router-dom'
 import { getRoleLabel, getUserInitials, useAuth } from '../../../shared/auth'
 import { Icon, type IconName } from '../../../shared/ui/base'
 
-export type ServiceAdvisorNavKey =
-  | 'dashboard'
-  | 'bookings'
-  | 'reception'
-  | 'work-orders'
-  | 'quotation'
-  | 'additional-services'
-  | 'quality-check'
-  | 'repair-timeline'
-  | 'technician-schedule'
-  | 'customers'
-  | 'vehicles'
+export type TechnicianNavKey = 'tasks' | 'inspection-form' | 'work-orders' | 'repair-notes'
 
 const navItems = [
-  { key: 'dashboard', icon: 'grid', label: 'Tổng quan SA', to: '/advisor/dashboard' },
-  { key: 'bookings', icon: 'calendar', label: 'Đặt lịch', to: '/advisor/bookings' },
-  { key: 'reception', icon: 'clipboard', label: 'Tiếp nhận xe', to: '/advisor/reception' },
-  { key: 'work-orders', icon: 'wrench', label: 'Lệnh sửa chữa', to: '/advisor/work-orders' },
-  { key: 'quotation', icon: 'invoice', label: 'Báo giá', to: '/advisor/quotation' },
-  { key: 'additional-services', icon: 'plus', label: 'Dịch vụ phát sinh', to: '/advisor/additional-services' },
-  { key: 'quality-check', icon: 'check', label: 'Nghiệm thu', to: '/advisor/quality-check' },
-  { key: 'repair-timeline', icon: 'map', label: 'Tiến độ sửa chữa', to: '/advisor/repair-timeline' },
-  { key: 'technician-schedule', icon: 'team', label: 'Lịch KTV', to: '/advisor/technician-schedule' },
-  { key: 'customers', icon: 'users', label: 'Khách hàng', to: '/advisor/customers' },
-  { key: 'vehicles', icon: 'car', label: 'Phương tiện', to: '/advisor/vehicles' },
-] satisfies Array<{ key: ServiceAdvisorNavKey; icon: IconName; label: string; to: string }>
+  { key: 'tasks', icon: 'car', label: 'Ảnh kiểm tra', to: '/technician/tasks' },
+  { key: 'inspection-form', icon: 'clipboard', label: 'Phiếu kiểm tra', to: '/technician/inspection' },
+  { key: 'work-orders', icon: 'wrench', label: 'Lệnh được giao', to: '/technician/work-orders' },
+  { key: 'repair-notes', icon: 'invoice', label: 'Ghi chú sửa chữa', to: '/technician/repair-notes' },
+] satisfies Array<{ key: TechnicianNavKey; icon: IconName; label: string; to: string }>
 
-export function ServiceAdvisorShell({
+export function TechnicianShell({
   active,
   children,
-  eyebrow = 'Service Advisor',
+  eyebrow = 'Technician',
+  notificationCount = 2,
   title,
 }: {
-  active: ServiceAdvisorNavKey
+  active: TechnicianNavKey
   children: ReactNode
   eyebrow?: string
+  notificationCount?: number
   title: string
 }) {
   const { logout, user } = useAuth()
   const displayName = user?.fullName || user?.email || 'Chưa có tên'
   const initials = getUserInitials(user)
-  const roleLabel = getRoleLabel(user?.role || 'serviceAdvisor')
+  const roleLabel = getRoleLabel(user?.role || 'technician')
 
   return (
     <div className="min-h-screen bg-[#fbf9f8] text-[#1b1c1c]">
       <aside className="hidden min-h-screen w-64 border-r border-[#efeded] bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col">
         <div className="flex h-20 items-center gap-3 border-b border-[#efeded] px-7">
           <div className="flex h-11 w-11 items-center justify-center bg-[#ba0013] text-white">
-            <Icon name="clipboard" />
+            <Icon name="wrench" />
           </div>
           <div>
-            <p className="text-lg font-black leading-none text-[#171717]">Kapa Service</p>
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#8a8686]">Service Advisor</p>
+            <p className="text-lg font-black leading-none text-[#171717]">Kapa Workshop</p>
+            <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#8a8686]">Technician</p>
           </div>
         </div>
 
         <div className="border-b border-[#efeded] px-7 py-6">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a8686]">Xưởng chính</p>
-          <p className="mt-2 text-sm font-black text-[#1b1c1c]">Cố vấn: {displayName}</p>
+          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a8686]">Kỹ thuật viên</p>
+          <p className="mt-2 text-sm font-black text-[#1b1c1c]">{displayName}</p>
           <p className="mt-1 text-xs text-[#6a6767]">{roleLabel}</p>
         </div>
 
@@ -82,14 +66,7 @@ export function ServiceAdvisorShell({
           ))}
         </nav>
 
-        <div className="space-y-3 border-t border-[#efeded] p-5">
-          <Link
-            className="flex min-h-12 items-center justify-center gap-2 bg-[#ba0013] px-4 text-sm font-black text-white transition hover:bg-[#94000f]"
-            to="/advisor/reception"
-          >
-            <Icon name="plus" />
-            Tiếp nhận xe mới
-          </Link>
+        <div className="border-t border-[#efeded] p-5">
           <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" onClick={logout} type="button">
             <Icon name="logout" />
             Đăng xuất
@@ -105,15 +82,9 @@ export function ServiceAdvisorShell({
               <h1 className="text-2xl font-black text-[#171717] sm:text-3xl">{title}</h1>
             </div>
             <div className="hidden items-center gap-4 sm:flex">
-              <button
-                aria-label="Thông báo"
-                className="relative flex h-11 w-11 items-center justify-center border border-[#dedada] text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]"
-                type="button"
-              >
+              <button aria-label="Thông báo" className="relative flex h-11 w-11 items-center justify-center border border-[#dedada] text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
                 <Icon name="bell" />
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center bg-[#ba0013] px-1 text-[10px] font-black text-white">
-                  3
-                </span>
+                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center bg-[#ba0013] px-1 text-[10px] font-black text-white">{notificationCount}</span>
               </button>
               <div className="flex h-11 w-11 items-center justify-center bg-[#1b1c1c] text-sm font-black text-white">{initials}</div>
             </div>

@@ -1,4 +1,6 @@
-﻿import { useEffect, useMemo, useRef, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
+import { createVehicleReception, fetchVehicleHistory } from '../../shared/api/workshop'
+import { useAuth } from '../../shared/auth'
 import { Icon } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 import { Field, SelectField, TextAreaField } from '../../widgets/vehicle-reception/ui/FormFields'
@@ -55,56 +57,27 @@ const emptyForm: ReceptionForm = {
   year: '2026',
 }
 
-const historySuggestions: HistorySuggestion[] = [
-  {
-    address: '123 Nguyễn Văn Linh, Quận 7, TP.HCM',
-    customerEmail: 'alex.nguyen@example.com',
-    customerName: 'Alex Nguyễn',
-    engineNo: 'S58B30T0-8821',
-    id: 'history-51k88288',
-    lastVisit: '12/06/2026 - thay dầu, kiểm tra phanh',
-    mileage: '18,240 km',
-    model: 'BMW M4 Competition',
-    phone: '090 123 4567',
-    plate: '51K-882.88',
-    recommendedServices: ['Chẩn đoán động cơ', 'Kiểm tra phanh', 'Cân bằng động'],
-    riskNote: 'Lần trước khách báo xe rung nhẹ khi phanh tốc độ cao.',
-    vin: 'WBS33AZ08PCM44882',
-    year: '2024',
-  },
-  {
-    address: '45 Lê Lợi, Quận 1, TP.HCM',
-    customerEmail: 'sarah.tran@example.com',
-    customerName: 'Sarah Trần',
-    engineNo: 'AUDI-RS6-4401',
-    id: 'history-30f68601',
-    lastVisit: '03/05/2026 - phục hồi hệ thống phanh',
-    mileage: '27,900 km',
-    model: 'Audi RS6 Avant',
-    phone: '091 888 9999',
-    plate: '30F-686.01',
-    recommendedServices: ['Kiểm tra má phanh', 'Vệ sinh cảm biến ABS'],
-    riskNote: 'Má phanh trước còn khoảng 35%, nên kiểm tra lại trước khi báo giá.',
-    vin: 'WUAZZZF24MN904401',
-    year: '2023',
-  },
-  {
-    address: '88 Trần Não, TP. Thủ Đức',
-    customerEmail: 'david.le@example.com',
-    customerName: 'David Lê',
-    engineNo: 'B58-GR-4495',
-    id: 'history-29a40495',
-    lastVisit: '21/04/2026 - bảo dưỡng định kỳ',
-    mileage: '12,600 km',
-    model: 'Toyota GR Supra',
-    phone: '098 765 4321',
-    plate: '29A-404.95',
-    recommendedServices: ['Thay dầu động cơ', 'Kiểm tra lọc gió', 'Quét lỗi ECU'],
-    riskNote: 'Khách thường chọn gói bảo dưỡng nhanh, ưu tiên hoàn thành trong ngày.',
-    vin: 'JTSCZ4FE8M5004495',
-    year: '2022',
-  },
-]
+function mapHistorySuggestion(item: any): HistorySuggestion {
+  const vehicle = item.vehicleId || item.vehicle || item
+  const customer = item.customerId || item.customer || vehicle.customerId || {}
+
+  return {
+    address: customer.address || item.address || '',
+    customerEmail: customer.email || item.customerEmail || '',
+    customerName: customer.fullName || item.customerName || 'Khách hàng',
+    engineNo: vehicle.engineNumber || item.engineNo || '',
+    id: item._id || item.id || vehicle._id || crypto.randomUUID(),
+    lastVisit: item.lastVisit || item.updatedAt || item.createdAt || 'Chưa cập nhật',
+    mileage: item.mileage || vehicle.mileage || '',
+    model: [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || vehicle.model || item.model || '',
+    phone: customer.phone || item.phone || '',
+    plate: vehicle.licensePlate || vehicle.plate || item.plate || '',
+    recommendedServices: item.recommendedServices || item.services?.map((service: any) => service.name || service.serviceId?.name).filter(Boolean) || [],
+    riskNote: item.riskNote || item.note || 'Không có ghi chú rủi ro.',
+    vin: vehicle.vin || vehicle.chassisNumber || item.vin || '',
+    year: String(vehicle.year || item.year || ''),
+  }
+}
 
 function normalizePlate(value: string) {
   return value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
@@ -187,19 +160,37 @@ function HistorySuggestionPanel({
 }
 
 export function VehicleReceptionPage() {
+  const { token } = useAuth()
   const [form, setForm] = useState<ReceptionForm>(emptyForm)
+  const [historySuggestions, setHistorySuggestions] = useState<HistorySuggestion[]>([])
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
   const [plateStatus, setPlateStatus] = useState<PlateStatus>('idle')
   const [appliedSuggestionId, setAppliedSuggestionId] = useState<string>()
-  const pendingCheckTimeoutRef = useRef<ReturnType<typeof window.setTimeout> | undefined>(undefined)
 
   useEffect(() => {
-    return () => {
-      if (pendingCheckTimeoutRef.current) {
-        window.clearTimeout(pendingCheckTimeoutRef.current)
+    if (!token) return
+    const authToken = token
+
+    let cancelled = false
+
+    async function loadHistory() {
+      setApiMessage(undefined)
+      try {
+        const response = await fetchVehicleHistory(authToken)
+        const rawSuggestions = Array.isArray(response) ? response : response.suggestions || []
+        if (!cancelled) setHistorySuggestions(rawSuggestions.map(mapHistorySuggestion))
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được lịch sử tiếp nhận từ API')
       }
     }
-  }, [])
 
+    void loadHistory()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
   const matchingSuggestions = useMemo(() => {
     const normalizedPlate = normalizePlate(form.plate)
     if (!normalizedPlate) {
@@ -207,7 +198,7 @@ export function VehicleReceptionPage() {
     }
 
     return historySuggestions.filter((suggestion) => normalizePlate(suggestion.plate).includes(normalizedPlate))
-  }, [form.plate])
+  }, [form.plate, historySuggestions])
 
   const activeSuggestion = historySuggestions.find((suggestion) => suggestion.id === appliedSuggestionId)
 
@@ -216,10 +207,6 @@ export function VehicleReceptionPage() {
     if (key === 'plate') {
       setPlateStatus('idle')
       setAppliedSuggestionId(undefined)
-      if (pendingCheckTimeoutRef.current) {
-        window.clearTimeout(pendingCheckTimeoutRef.current)
-        pendingCheckTimeoutRef.current = undefined
-      }
     }
   }
 
@@ -242,15 +229,20 @@ export function VehicleReceptionPage() {
     }))
   }
 
-  function checkPlate() {
+  async function checkPlate() {
+    if (!token) return
+
     setPlateStatus('checking')
-    if (pendingCheckTimeoutRef.current) {
-      window.clearTimeout(pendingCheckTimeoutRef.current)
-    }
-    pendingCheckTimeoutRef.current = window.setTimeout(() => {
-      pendingCheckTimeoutRef.current = undefined
-      const exactMatch = historySuggestions.find((suggestion) => normalizePlate(suggestion.plate) === normalizePlate(form.plate))
-      const fallbackMatch = matchingSuggestions[0]
+    setApiMessage(undefined)
+
+    try {
+      const response = await fetchVehicleHistory(token, form.plate)
+      const rawSuggestions = Array.isArray(response) ? response : response.suggestions || []
+      const nextSuggestions = rawSuggestions.map(mapHistorySuggestion)
+      setHistorySuggestions(nextSuggestions)
+
+      const exactMatch = nextSuggestions.find((suggestion) => normalizePlate(suggestion.plate) === normalizePlate(form.plate))
+      const fallbackMatch = nextSuggestions[0]
       const suggestion = exactMatch ?? fallbackMatch
 
       if (suggestion) {
@@ -259,7 +251,30 @@ export function VehicleReceptionPage() {
         setAppliedSuggestionId(undefined)
         setPlateStatus('not-found')
       }
-    }, 600)
+    } catch (err) {
+      setAppliedSuggestionId(undefined)
+      setPlateStatus('not-found')
+      setApiMessage(err instanceof Error ? err.message : 'Không tra cứu được lịch sử xe từ API')
+    }
+  }
+
+  async function submitReception() {
+    if (!token) return
+
+    setSaving(true)
+    setApiMessage(undefined)
+
+    try {
+      await createVehicleReception(token, { ...form, historySuggestionId: appliedSuggestionId || '' })
+      setApiMessage('Đã lưu phiếu tiếp nhận qua API.')
+      setForm(emptyForm)
+      setAppliedSuggestionId(undefined)
+      setPlateStatus('idle')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không lưu được phiếu tiếp nhận')
+    } finally {
+      setSaving(false)
+    }
   }
 
   const searchLabel = {
@@ -280,7 +295,9 @@ export function VehicleReceptionPage() {
           </p>
         </section>
 
-        <form className="space-y-8" onSubmit={(event) => event.preventDefault()}>
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
+
+        <form className="space-y-8" onSubmit={(event) => { event.preventDefault(); void submitReception() }}>
           <section className="relative overflow-hidden border border-[#e4e2e2] bg-white p-8 shadow-sm">
             <div className="absolute bottom-0 left-0 top-0 w-1 bg-[#ba0013]" />
             <div className="flex flex-col gap-6 md:flex-row md:items-end">
@@ -378,9 +395,10 @@ export function VehicleReceptionPage() {
                   </div>
                   <button
                     className="flex min-h-[68px] w-full items-center justify-center gap-4 bg-[#ba0013] px-8 text-xl font-black uppercase text-white shadow-[0_18px_32px_rgba(186,0,19,0.22)] transition hover:bg-[#e31e24]"
+                    disabled={saving}
                     type="submit"
                   >
-                    Lưu biểu mẫu
+                    {saving ? 'Đang lưu...' : 'Lưu biểu mẫu'}
                     <Icon name="check" />
                   </button>
                 </div>

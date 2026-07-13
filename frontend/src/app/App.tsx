@@ -33,8 +33,12 @@ const VehicleReceptionPage = lazy(() =>
 const RepairOrderAssignmentPage = lazy(() =>
   import('../pages/advisor/RepairOrderAssignmentPage').then((module) => ({ default: module.RepairOrderAssignmentPage })),
 )
+const QuotationPage = lazy(() => import('../pages/advisor/QuotationPage').then((module) => ({ default: module.QuotationPage })))
 const AdditionalServiceSuggestionPage = lazy(() =>
   import('../pages/advisor/AdditionalServiceSuggestionPage').then((module) => ({ default: module.AdditionalServiceSuggestionPage })),
+)
+const QualityVerificationPage = lazy(() =>
+  import('../pages/advisor/QualityVerificationPage').then((module) => ({ default: module.QualityVerificationPage })),
 )
 const RepairProgressTimelinePage = lazy(() =>
   import('../pages/advisor/RepairProgressTimelinePage').then((module) => ({ default: module.RepairProgressTimelinePage })),
@@ -46,6 +50,9 @@ const TechnicianScheduleCoordinationPage = lazy(() =>
 )
 const TechnicianInspectionPage = lazy(() =>
   import('../pages/technician/TechnicianInspectionPage').then((module) => ({ default: module.TechnicianInspectionPage })),
+)
+const VehicleInspectionFormPage = lazy(() =>
+  import('../pages/technician/VehicleInspectionFormPage').then((module) => ({ default: module.VehicleInspectionFormPage })),
 )
 const TechnicianWorkOrdersPage = lazy(() =>
   import('../pages/technician/TechnicianWorkOrdersPage').then((module) => ({ default: module.TechnicianWorkOrdersPage })),
@@ -275,12 +282,36 @@ export default function App() {
         }
       />
       <Route
+        path="/advisor/quotation"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <QuotationPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
         path="/advisor/additional-services"
         element={
           <Suspense fallback={<RouteFallback />}>
             <RequireAuth>
               <RequireRole roles={['serviceAdvisor']}>
                 <AdditionalServiceSuggestionPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/quality-check"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <QualityVerificationPage />
               </RequireRole>
             </RequireAuth>
           </Suspense>
@@ -310,7 +341,6 @@ export default function App() {
           </Suspense>
         }
       />
-
       <Route path="/technician" element={<Navigate to="/technician/tasks" replace />} />
       <Route
         path="/technician/tasks"
@@ -319,6 +349,18 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['technician']}>
                 <TechnicianInspectionPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/technician/inspection"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['technician']}>
+                <VehicleInspectionFormPage />
               </RequireRole>
             </RequireAuth>
           </Suspense>

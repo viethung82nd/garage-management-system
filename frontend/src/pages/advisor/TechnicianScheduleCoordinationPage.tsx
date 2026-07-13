@@ -1,4 +1,6 @@
-﻿import { useState } from 'react'
+﻿import { useEffect, useState } from 'react'
+import { fetchWorkshopRepairOrders, fetchWorkshopTechnicians, orderId, personName, unwrapArray, updateWorkshopRepairOrder, vehicleName, vehiclePlate, type ApiRepairOrder, type ApiTechnician } from '../../shared/api/workshop'
+import { useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -27,80 +29,39 @@ type ScheduleTask = {
   vehicle: string
 }
 
-const technicians: Technician[] = [
-  { bay: 'Cầu nâng 01', id: 'tech-minh', name: 'Nguyễn Minh', skill: 'Động cơ, xe Đức', status: 'busy' },
-  { bay: 'Cầu nâng 02', id: 'tech-huy', name: 'Trần Quang Huy', skill: 'Phanh, gầm, treo', status: 'available' },
-  { bay: 'Khu nhanh', id: 'tech-lan', name: 'Lê Lan Chi', skill: 'Bảo dưỡng nhanh', status: 'available' },
-  { bay: 'Cầu nâng 04', id: 'tech-phuc', name: 'Phạm Gia Phúc', skill: 'Hộp số tự động', status: 'off' },
-]
-
-const initialTasks: ScheduleTask[] = [
-  {
-    advisorNote: 'Khách cần xe trước 16:30, ưu tiên kiểm tra phanh trước.',
-    customer: 'Alex Nguyễn',
-    duration: 90,
-    id: 'task-m4-brake',
-    plate: '51K-882.88',
-    priority: 'high',
-    service: 'Kiểm tra phanh & rung vô lăng',
-    start: '09:00',
-    status: 'in-progress',
-    technicianId: 'tech-minh',
-    vehicle: 'BMW M4 Competition',
-  },
-  {
-    advisorNote: 'Đã có phụ tùng trong kho, chỉ cần xác nhận tình trạng má phanh.',
-    customer: 'Sarah Trần',
-    duration: 75,
-    id: 'task-rs6-brake',
-    plate: '30F-686.01',
-    priority: 'medium',
-    service: 'Phục hồi hệ thống phanh',
-    start: '10:30',
-    status: 'scheduled',
-    technicianId: 'tech-huy',
-    vehicle: 'Audi RS6 Avant',
-  },
-  {
-    advisorNote: 'Bảo dưỡng nhanh, khách đang chờ tại lounge.',
-    customer: 'David Lê',
-    duration: 45,
-    id: 'task-supra-oil',
-    plate: '29A-404.95',
-    priority: 'medium',
-    service: 'Thay dầu & lọc dầu',
-    start: '13:30',
-    status: 'scheduled',
-    technicianId: 'tech-lan',
-    vehicle: 'Toyota GR Supra',
-  },
-  {
-    advisorNote: 'Xe đã tiếp nhận, cần phân công trước 15:00.',
-    customer: 'Phạm Hoàng',
-    duration: 60,
-    id: 'task-lux-diagnostic',
-    plate: '51H-888.20',
-    priority: 'low',
-    service: 'Chẩn đoán tiếng kêu gầm',
-    start: '14:00',
-    status: 'waiting',
-    vehicle: 'VinFast Lux A2.0',
-  },
-  {
-    advisorNote: 'Khách yêu cầu báo lại nếu phát sinh quá 2 triệu.',
-    customer: 'Ngọc Anh',
-    duration: 120,
-    id: 'task-c300-engine',
-    plate: '51G-222.10',
-    priority: 'high',
-    service: 'Quét lỗi động cơ & kiểm tra turbo',
-    start: '15:00',
-    status: 'waiting',
-    vehicle: 'Mercedes-Benz C300',
-  },
-]
-
 const timeSlots = ['08:00', '09:00', '10:30', '13:30', '15:00', '16:30']
+
+
+function mapTechnicianFromApi(technician: ApiTechnician, index: number): Technician {
+  return {
+    bay: technician.bay || 'Cầu nâng ' + String(index + 1).padStart(2, '0'),
+    id: technician._id || technician.id || crypto.randomUUID(),
+    name: technician.fullName || technician.email || 'Kỹ thuật viên',
+    skill: technician.skill || 'Chưa cập nhật kỹ năng',
+    status: technician.status === 'off' || technician.status === 'offline' ? 'off' : technician.status === 'busy' ? 'busy' : 'available',
+  }
+}
+
+function mapScheduleTaskFromApi(order: ApiRepairOrder, index: number): ScheduleTask {
+  const vehicle = order.vehicleId || order.vehicle
+  const firstService = order.services?.[0]
+  const serviceName = typeof firstService?.serviceId === 'object' ? firstService.serviceId.name : firstService?.name
+  const technician = order.technicianId || order.technician
+
+  return {
+    advisorNote: order.stepNotes?.at(-1)?.content || 'Chưa có ghi chú điều phối.',
+    customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Khách hàng'),
+    duration: order.services?.reduce((sum, item) => sum + ((typeof item.serviceId === 'object' ? item.serviceId.estimatedDuration : 45) || 45) * (item.quantity || 1), 0) || 45,
+    id: order._id || order.id || orderId(order),
+    plate: vehiclePlate(vehicle),
+    priority: index === 0 ? 'high' : 'medium',
+    service: serviceName || 'Lệnh sửa chữa',
+    start: order.startedAt ? new Date(order.startedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : timeSlots[index % timeSlots.length],
+    status: order.status === 'inProgress' || order.status === 'in-progress' ? 'in-progress' : technician ? 'scheduled' : 'waiting',
+    technicianId: typeof technician === 'string' ? technician : technician?._id || technician?.id,
+    vehicle: vehicleName(vehicle),
+  }
+}
 
 function statusLabel(status: TechnicianStatus) {
   return {
@@ -199,15 +160,50 @@ function TaskCard({ task }: { task: ScheduleTask }) {
 }
 
 export function TechnicianScheduleCoordinationPage() {
-  const [tasks, setTasks] = useState(initialTasks)
-  const [selectedTechnicianId, setSelectedTechnicianId] = useState(technicians[0].id)
-  const [selectedWaitingTaskId, setSelectedWaitingTaskId] = useState(initialTasks.find((task) => !task.technicianId)?.id ?? initialTasks[0].id)
+  const { token } = useAuth()
+  const [technicianList, setTechnicianList] = useState<Technician[]>([])
+  const [tasks, setTasks] = useState<ScheduleTask[]>([])
+  const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
+  const [selectedWaitingTaskId, setSelectedWaitingTaskId] = useState('')
   const [selectedTime, setSelectedTime] = useState('15:00')
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
 
-  const selectedTechnician = technicians.find((technician) => technician.id === selectedTechnicianId) ?? technicians[0]
+  useEffect(() => {
+    if (!token) return
+    const authToken = token
+
+    let cancelled = false
+
+    async function loadSchedule() {
+      setApiMessage(undefined)
+      try {
+        const [techResponse, orderResponse] = await Promise.all([fetchWorkshopTechnicians(authToken), fetchWorkshopRepairOrders(authToken)])
+        const nextTechnicians = techResponse.map(mapTechnicianFromApi)
+        const nextTasks = unwrapArray<ApiRepairOrder>(orderResponse, ['repairOrders', 'orders']).map(mapScheduleTaskFromApi)
+
+        if (!cancelled) {
+          setTechnicianList(nextTechnicians)
+          setTasks(nextTasks)
+          setSelectedTechnicianId((current) => current || nextTechnicians[0]?.id || '')
+          setSelectedWaitingTaskId((current) => current || nextTasks.find((task) => !task.technicianId)?.id || '')
+        }
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được lịch kỹ thuật viên từ API')
+      }
+    }
+
+    void loadSchedule()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
+
+  const selectedTechnician = technicianList.find((technician) => technician.id === selectedTechnicianId) ?? technicianList[0]
   const waitingTasks = tasks.filter((task) => !task.technicianId)
   const assignedTasks = tasks.filter((task) => task.technicianId)
-  const todayLoad = technicians.map((technician) => {
+  const todayLoad = technicianList.map((technician) => {
     const minutes = assignedTasks.filter((task) => task.technicianId === technician.id).reduce((sum, task) => sum + task.duration, 0)
     return { technicianId: technician.id, load: Math.round((minutes / 360) * 100) }
   })
@@ -217,22 +213,30 @@ export function TechnicianScheduleCoordinationPage() {
   const totalScheduledMinutes = assignedTasks.reduce((sum, task) => sum + task.duration, 0)
   const highPriorityWaiting = waitingTasks.filter((task) => task.priority === 'high').length
 
-  function assignSelectedTask() {
-    if (!selectedWaitingTask) {
+  async function assignSelectedTask() {
+    if (!selectedWaitingTask || !selectedTechnician || !token) {
       return
     }
 
-    setTasks((current) =>
-      current.map((task) =>
-        task.id === selectedWaitingTask.id
-          ? { ...task, start: selectedTime, status: 'scheduled', technicianId: selectedTechnician.id }
-          : task,
-      ),
-    )
+    setSaving(true)
+    setApiMessage(undefined)
 
-    const nextWaiting = tasks.find((task) => !task.technicianId && task.id !== selectedWaitingTask.id)
-    if (nextWaiting) {
-      setSelectedWaitingTaskId(nextWaiting.id)
+    try {
+      await updateWorkshopRepairOrder(token, selectedWaitingTask.id, { scheduledStart: selectedTime, status: 'pending', technicianId: selectedTechnician.id })
+      setTasks((current) =>
+        current.map((task) =>
+          task.id === selectedWaitingTask.id
+            ? { ...task, start: selectedTime, status: 'scheduled', technicianId: selectedTechnician.id }
+            : task,
+        ),
+      )
+
+      const nextWaiting = tasks.find((task) => !task.technicianId && task.id !== selectedWaitingTask.id)
+      setSelectedWaitingTaskId(nextWaiting?.id || '')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không gán được lịch cho kỹ thuật viên')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -250,8 +254,10 @@ export function TechnicianScheduleCoordinationPage() {
           </p>
         </section>
 
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
+
         <section className="grid gap-4 md:grid-cols-4">
-          <SummaryCard icon="team" label="KTV sẵn sàng" value={`${technicians.filter((tech) => tech.status === 'available').length}/${technicians.length}`} />
+          <SummaryCard icon="team" label="KTV sẵn sàng" value={`${technicianList.filter((tech) => tech.status === 'available').length}/${technicianList.length}`} />
           <SummaryCard icon="clipboard" label="Xe chờ phân công" value={String(waitingTasks.length).padStart(2, '0')} />
           <SummaryCard icon="alert" label="Ưu tiên cao" value={String(highPriorityWaiting).padStart(2, '0')} />
           <SummaryCard icon="calendar" label="Giờ đã xếp" value={`${Math.round(totalScheduledMinutes / 60)}h`} />
@@ -260,7 +266,7 @@ export function TechnicianScheduleCoordinationPage() {
         <div className="grid items-start gap-7 xl:grid-cols-[minmax(0,1fr)_390px]">
           <div className="space-y-7">
             <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              {technicians.map((technician) => (
+              {technicianList.map((technician) => (
                 <TechnicianCard
                   active={technician.id === selectedTechnician.id}
                   key={technician.id}
@@ -284,7 +290,7 @@ export function TechnicianScheduleCoordinationPage() {
                 <div className="min-w-[980px]">
                   <div className="grid grid-cols-[130px_repeat(4,minmax(190px,1fr))] border-b border-[#efeded] bg-[#fbf9f8]">
                     <div className="px-4 py-3 font-mono text-[11px] font-black uppercase tracking-[0.12em] text-[#6a6767]">Khung giờ</div>
-                    {technicians.map((technician) => (
+                    {technicianList.map((technician) => (
                       <div className="border-l border-[#efeded] px-4 py-3" key={technician.id}>
                         <p className="font-black text-[#171717]">{technician.name}</p>
                         <p className="text-xs font-semibold text-[#6a6767]">{technician.bay}</p>
@@ -295,7 +301,7 @@ export function TechnicianScheduleCoordinationPage() {
                   {timeSlots.map((slot) => (
                     <div className="grid min-h-32 grid-cols-[130px_repeat(4,minmax(190px,1fr))] border-b border-[#efeded]" key={slot}>
                       <div className="bg-[#fbf9f8] px-4 py-4 font-mono text-sm font-black text-[#ba0013]">{slot}</div>
-                      {technicians.map((technician) => {
+                      {technicianList.map((technician) => {
                         const task = tasks.find((item) => item.technicianId === technician.id && item.start === slot)
 
                         return (
@@ -345,7 +351,7 @@ export function TechnicianScheduleCoordinationPage() {
             <section className="bg-[#1b1c1c] p-6 text-white shadow-[0_18px_45px_rgba(15,14,14,0.18)]">
               <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ffb4ab]">Điều phối nhanh</p>
               <h3 className="mt-3 text-2xl font-black">{selectedWaitingTask?.vehicle ?? 'Chọn xe chờ'}</h3>
-              <p className="mt-2 text-sm text-white/65">KTV: {selectedTechnician.name} - {selectedTechnician.skill}</p>
+              <p className="mt-2 text-sm text-white/65">KTV: {selectedTechnician?.name ?? 'Chọn KTV'} - {selectedTechnician?.skill ?? 'Chưa cập nhật'}</p>
 
               <label className="mt-5 block space-y-2">
                 <span className="block font-mono text-[11px] font-black uppercase tracking-[0.14em] text-white/55">Khung giờ</span>
@@ -358,7 +364,7 @@ export function TechnicianScheduleCoordinationPage() {
 
               <button
                 className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#e31e24] disabled:cursor-not-allowed disabled:opacity-45"
-                disabled={!selectedWaitingTask || selectedTechnician.status === 'off'}
+                disabled={saving || !selectedWaitingTask || !selectedTechnician || selectedTechnician.status === 'off'}
                 onClick={assignSelectedTask}
                 type="button"
               >
@@ -366,7 +372,7 @@ export function TechnicianScheduleCoordinationPage() {
                 Gán lịch cho KTV
               </button>
 
-              {selectedTechnician.status === 'off' ? (
+              {selectedTechnician?.status === 'off' ? (
                 <p className="mt-3 text-sm font-semibold text-[#ffb4ab]">KTV đang nghỉ ca, chọn kỹ thuật viên khác để phân công.</p>
               ) : null}
             </section>

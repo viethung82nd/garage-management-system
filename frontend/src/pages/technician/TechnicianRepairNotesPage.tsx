@@ -1,6 +1,8 @@
-﻿import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { useAuth } from '../../shared/auth'
+import { getUserInitials, useAuth } from '../../shared/auth'
+import { addWorkshopStepNote, fetchWorkshopRepairOrders, orderId, unwrapArray, updateWorkshopRepairProgress, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
+import { TechnicianShell } from '../../widgets/technician-shell'
 import { Icon, type IconName } from '../../shared/ui/base'
 
 type RepairStepStatus = 'completed' | 'active' | 'waiting'
@@ -28,97 +30,47 @@ type RepairStep = {
   title: string
 }
 
-const initialSteps: RepairStep[] = [
-  {
-    checklist: ['Đối chiếu biển số và số RO', 'Chụp ảnh tổng thể trước sửa chữa', 'Khóa vô lăng và kiểm tra odo'],
-    completedAt: '09:10',
-    estimate: '10 phút',
-    evidences: [
-      { label: 'Ảnh tổng thể', note: 'Đã chụp 4 góc thân xe trước khi nâng.' },
-      { label: 'ODO', note: '42.180 km, không có đèn cảnh báo mới.' },
-    ],
-    id: 'receive-car',
-    materials: [],
-    metrics: [
-      { label: 'ODO', unit: 'km', value: '42.180' },
-      { label: 'Nhiên liệu', unit: '%', value: '58' },
-    ],
-    order: 1,
-    owner: 'Nguyễn Minh',
-    startedAt: '09:00',
-    status: 'completed',
-    summary: 'Xe đã được đưa vào cầu nâng 01, tình trạng ngoại thất khớp phiếu kiểm tra ban đầu.',
-    title: 'Tiếp nhận xe tại cầu nâng',
-  },
-  {
-    checklist: ['Tháo bánh trước bên trái', 'Đo độ dày má phanh', 'Kiểm tra bề mặt đĩa phanh', 'Ghi nhận rung khi quay bánh'],
-    estimate: '35 phút',
-    evidences: [
-      { label: 'Má phanh trước trái', note: 'Cần chụp cận cảnh sau khi tháo bánh.' },
-      { label: 'Đĩa phanh', note: 'Ghi lại vết xước nếu vượt ngưỡng.' },
-    ],
-    id: 'front-brake-check',
-    materials: [
-      { name: 'Dung dịch vệ sinh phanh', qty: '1 chai' },
-      { name: 'Găng tay kỹ thuật', qty: '1 bộ' },
-    ],
-    metrics: [
-      { label: 'Má phanh trái', status: 'warning', unit: 'mm', value: '2.8' },
-      { label: 'Má phanh phải', status: 'warning', unit: 'mm', value: '3.1' },
-      { label: 'Đĩa phanh', unit: 'mm', value: '30.2' },
-    ],
-    order: 2,
-    owner: 'Nguyễn Minh',
-    startedAt: '09:12',
-    status: 'active',
-    summary: 'Đang kiểm tra hệ thống phanh trước do khách báo rung vô lăng khi phanh ở tốc độ cao.',
-    title: 'Kiểm tra phanh trước',
-  },
-  {
-    checklist: ['Tháo cụm má phanh', 'Đo độ đảo đĩa phanh', 'Vệ sinh cùm phanh', 'Báo cố vấn nếu cần thay thêm đĩa'],
-    estimate: '45 phút',
-    evidences: [
-      { label: 'Cùm phanh', note: 'Chưa thực hiện.' },
-      { label: 'Phiếu đo', note: 'Chờ nhập chỉ số độ đảo.' },
-    ],
-    id: 'remove-pad-measure',
-    materials: [
-      { name: 'Má phanh trước BMW M4', qty: '1 bộ' },
-      { name: 'Keo chống ồn má phanh', qty: '1 tuýp' },
-    ],
-    metrics: [
-      { label: 'Độ đảo đĩa', unit: 'mm', value: 'Chờ đo' },
-      { label: 'Torque bánh', unit: 'Nm', value: '140' },
-    ],
-    order: 3,
-    owner: 'Nguyễn Minh',
-    status: 'waiting',
-    summary: 'Bước tiếp theo sau khi cố vấn xác nhận thay má phanh trước.',
-    title: 'Tháo má phanh và đo độ mòn',
-  },
-  {
-    checklist: ['Lắp má phanh mới', 'Siết lực đúng tiêu chuẩn', 'Xóa bụi phanh', 'Chạy thử và kiểm tra tiếng ồn'],
-    estimate: '50 phút',
-    evidences: [
-      { label: 'Ảnh sau lắp', note: 'Chưa thực hiện.' },
-      { label: 'Biên bản chạy thử', note: 'Chưa thực hiện.' },
-    ],
-    id: 'install-test-drive',
-    materials: [
-      { name: 'Má phanh trước BMW M4', qty: '1 bộ' },
-      { name: 'Khăn lau kỹ thuật', qty: '2 cái' },
-    ],
-    metrics: [
-      { label: 'Quãng đường chạy thử', unit: 'km', value: 'Chờ chạy' },
-      { label: 'Rung vô lăng', unit: '', value: 'Chờ xác nhận' },
-    ],
-    order: 4,
-    owner: 'Nguyễn Minh',
-    status: 'waiting',
-    summary: 'Hoàn thiện sửa chữa và ghi nhận kết quả chạy thử trước khi bàn giao lại cho SA.',
-    title: 'Lắp má phanh mới và chạy thử',
-  },
-]
+const emptyStep: RepairStep = {
+  checklist: [],
+  estimate: '0 phút',
+  evidences: [],
+  id: '',
+  materials: [],
+  metrics: [],
+  order: 0,
+  owner: 'Kỹ thuật viên',
+  status: 'waiting',
+  summary: 'Chưa có bước sửa chữa từ API.',
+  title: 'Chưa có dữ liệu',
+}
+
+function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
+  const services = order.services?.length ? order.services : [{ name: 'Kiểm tra và sửa chữa', quantity: 1 }]
+  const notes = order.stepNotes || []
+
+  return services.map((service, index) => {
+    const apiService = typeof service.serviceId === 'object' ? service.serviceId : undefined
+    const note = notes[index]
+    const completed = order.status === 'completed'
+    const active = !completed && (order.status === 'inProgress' || order.status === 'in-progress') && index === 0
+
+    return {
+      checklist: ['Xác nhận đúng hạng mục', 'Thực hiện theo quy trình kỹ thuật', 'Ghi nhận kết quả và bằng chứng'],
+      completedAt: completed ? order.completedAt ? new Date(order.completedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Đã xong' : undefined,
+      estimate: String(apiService?.estimatedDuration || 45) + ' phút',
+      evidences: [{ label: 'Ảnh kỹ thuật', note: 'Tải ảnh từ phiếu kiểm tra của lệnh sửa chữa.' }],
+      id: (typeof service.serviceId === 'string' ? service.serviceId : apiService?._id || apiService?.id) || 'service-' + index,
+      materials: [],
+      metrics: [],
+      order: index + 1,
+      owner: 'Kỹ thuật viên',
+      startedAt: active && order.startedAt ? new Date(order.startedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : undefined,
+      status: completed ? 'completed' : active ? 'active' : 'waiting',
+      summary: note?.content || 'Chưa có ghi chú cho hạng mục này.',
+      title: apiService?.name || service.name || 'Hạng mục sửa chữa',
+    }
+  })
+}
 
 const statusLabels: Record<RepairStepStatus, string> = {
   active: 'Đang thực hiện',
@@ -138,97 +90,6 @@ function nowTime() {
   return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date())
 }
 
-function TechnicianShell({ children }: { children: React.ReactNode }) {
-  const { logout } = useAuth()
-  const navItems: Array<{ href: string; icon: IconName; label: string }> = [
-    { href: '/technician/tasks', icon: 'clipboard', label: 'Phiếu kiểm tra' },
-    { href: '/technician/work-orders', icon: 'wrench', label: 'Lệnh được giao' },
-    { href: '/technician/repair-notes', icon: 'invoice', label: 'Ghi chú sửa chữa' },
-    { href: '/technician/parts-requests', icon: 'sliders', label: 'Yêu cầu phụ tùng' },
-  ]
-
-  return (
-    <div className="min-h-screen bg-[#fbf9f8] text-[#1b1c1c]">
-      <aside className="hidden min-h-screen w-64 border-r border-[#efeded] bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col">
-        <div className="flex h-20 items-center gap-3 border-b border-[#efeded] px-7">
-          <div className="flex h-11 w-11 items-center justify-center bg-[#ba0013] text-white">
-            <Icon name="wrench" />
-          </div>
-          <div>
-            <p className="text-lg font-black leading-none text-[#171717]">Kapa Workshop</p>
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#8a8686]">Technician</p>
-          </div>
-        </div>
-
-        <div className="border-b border-[#efeded] px-7 py-6">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a8686]">Kỹ thuật viên</p>
-          <p className="mt-2 text-sm font-black text-[#1b1c1c]">Nguyễn Minh</p>
-          <p className="mt-1 text-xs text-[#6a6767]">Cầu nâng 01 - Ca sáng</p>
-        </div>
-
-        <nav className="flex-1 space-y-1 px-4 py-6">
-          {navItems.map((item) => {
-            if (item.href === '/technician/parts-requests') {
-              return (
-                <span
-                  aria-disabled="true"
-                  className="flex min-h-12 cursor-not-allowed items-center gap-3 px-4 text-sm font-bold text-[#c8c6c5]"
-                  key={item.href}
-                  title="Tính năng đang được phát triển"
-                >
-                  <Icon name={item.icon} />
-                  {item.label}
-                  <span className="ml-auto text-[10px] font-black uppercase tracking-[0.08em] text-[#c8c6c5]">Sắp ra mắt</span>
-                </span>
-              )
-            }
-
-            const active = item.href === '/technician/repair-notes'
-
-            return (
-              <Link
-                className={active ? 'flex min-h-12 items-center gap-3 border-l-4 border-[#ba0013] bg-[#fff1f1] px-4 text-sm font-black text-[#ba0013]' : 'flex min-h-12 items-center gap-3 px-4 text-sm font-bold text-[#555151] transition hover:bg-[#fbf9f8] hover:text-[#ba0013]'}
-                key={item.href}
-                to={item.href}
-              >
-                <Icon name={item.icon} />
-                {item.label}
-              </Link>
-            )
-          })}
-        </nav>
-
-        <div className="border-t border-[#efeded] p-5">
-          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" onClick={logout} type="button">
-            <Icon name="logout" />
-            Đăng xuất
-          </button>
-        </div>
-      </aside>
-
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 border-b border-[#efeded] bg-white/90 backdrop-blur-xl">
-          <div className="flex min-h-20 items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
-            <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ba0013]">Technician Repair Notes</p>
-              <h1 className="text-2xl font-black text-[#171717] sm:text-3xl">Ghi chú sửa chữa từng bước</h1>
-            </div>
-            <div className="hidden items-center gap-4 sm:flex">
-              <button aria-label="Thông báo" className="relative flex h-11 w-11 items-center justify-center border border-[#dedada] text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
-                <Icon name="bell" />
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center bg-[#ba0013] px-1 text-[10px] font-black text-white">2</span>
-              </button>
-              <div className="flex h-11 w-11 items-center justify-center bg-[#1b1c1c] text-sm font-black text-white">NM</div>
-            </div>
-          </div>
-        </header>
-
-        <main className="w-full px-5 py-7 sm:px-8 lg:px-10">{children}</main>
-      </div>
-    </div>
-  )
-}
-
 function SummaryCard({ icon, label, value }: { icon: IconName; label: string; value: string }) {
   return (
     <section className="border border-[#efeded] bg-white p-6 shadow-[0_18px_40px_rgba(27,28,28,0.04)]">
@@ -245,7 +106,7 @@ function SummaryCard({ icon, label, value }: { icon: IconName; label: string; va
   )
 }
 
-function StepButton({ active, onSelect, step }: { active: boolean; onSelect: () => void; step: RepairStep }) {
+function StepButton({ active, onSelect, ownerName, step }: { active: boolean; onSelect: () => void; ownerName: string; step: RepairStep }) {
   return (
     <button
       className={active ? 'w-full border-l-4 border-[#ba0013] bg-[#fffafa] p-5 text-left shadow-[0_10px_30px_rgba(27,28,28,0.05)]' : 'w-full border border-[#efeded] bg-white p-5 text-left transition hover:border-[#ba0013] hover:bg-[#fffafa]'}
@@ -268,7 +129,7 @@ function StepButton({ active, onSelect, step }: { active: boolean; onSelect: () 
       <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-[#6a6767]">
         {step.startedAt ? <span className="bg-[#fbf9f8] px-3 py-2">Bắt đầu {step.startedAt}</span> : null}
         {step.completedAt ? <span className="bg-green-50 px-3 py-2 text-green-700">Xong {step.completedAt}</span> : null}
-        <span className="bg-[#fbf9f8] px-3 py-2">Phụ trách: {step.owner}</span>
+        <span className="bg-[#fbf9f8] px-3 py-2">Phụ trách: {ownerName}</span>
       </div>
     </button>
   )
@@ -276,20 +137,26 @@ function StepButton({ active, onSelect, step }: { active: boolean; onSelect: () 
 
 function StepDetail({
   checkedItems,
+  disabled,
   note,
   onComplete,
   onNoteChange,
+  onSave,
   onStart,
   onToggleChecklist,
   step,
+  technicianInitials,
 }: {
   checkedItems: string[]
+  disabled: boolean
   note: string
   onComplete: () => void
   onNoteChange: (value: string) => void
+  onSave: () => void
   onStart: () => void
   onToggleChecklist: (item: string) => void
   step: RepairStep
+  technicianInitials: string
 }) {
   return (
     <aside className="sticky top-28 space-y-7">
@@ -309,7 +176,7 @@ function StepDetail({
           </div>
           <div className="bg-white/10 p-4">
             <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-white/55">Kỹ thuật viên</p>
-            <p className="mt-2 text-xl font-black">NM</p>
+            <p className="mt-2 text-xl font-black">{technicianInitials}</p>
           </div>
         </div>
       </section>
@@ -344,7 +211,7 @@ function StepDetail({
             <Icon name="bolt" />
             Bắt đầu
           </button>
-          <button className="flex min-h-12 items-center justify-center gap-3 bg-[#ba0013] px-4 text-sm font-black uppercase text-white transition hover:bg-[#94000f]" type="button">
+          <button className="flex min-h-12 items-center justify-center gap-3 bg-[#ba0013] px-4 text-sm font-black uppercase text-white transition hover:bg-[#94000f] disabled:opacity-60" disabled={disabled} onClick={onSave} type="button">
             <Icon name="clipboard" />
             Lưu ghi chú
           </button>
@@ -359,23 +226,57 @@ function StepDetail({
 }
 
 export function TechnicianRepairNotesPage() {
-  const [steps, setSteps] = useState(initialSteps)
-  const [selectedStepId, setSelectedStepId] = useState(initialSteps[1].id)
-  const [notes, setNotes] = useState<Record<string, string>>({
-    'front-brake-check': 'Má phanh trước mòn không đều, bên trái thấp hơn bên phải. Cần báo SA đề xuất thay má phanh trước và kiểm tra độ đảo đĩa phanh trước khi lắp mới.',
-    'receive-car': 'Xe vào cầu nâng đúng lịch, ngoại thất khớp ảnh nhận xe. Không phát sinh cảnh báo trên tablo.',
-  })
-  const [checkedByStep, setCheckedByStep] = useState<Record<string, string[]>>({
-    'front-brake-check': ['Tháo bánh trước bên trái', 'Đo độ dày má phanh'],
-    'receive-car': initialSteps[0].checklist,
-  })
+  const { token, user } = useAuth()
+  const technicianInitials = getUserInitials(user)
+  const technicianName = user?.fullName || user?.email || 'Kỹ thuật viên'
+  const [repairOrder, setRepairOrder] = useState<ApiRepairOrder>()
+  const [steps, setSteps] = useState<RepairStep[]>([])
+  const [selectedStepId, setSelectedStepId] = useState('')
+  const [notes, setNotes] = useState<Record<string, string>>({})
+  const [checkedByStep, setCheckedByStep] = useState<Record<string, string[]>>({})
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
 
-  const selectedStep = steps.find((step) => step.id === selectedStepId) ?? steps[0]
+  useEffect(() => {
+    if (!token) return
+    const authToken = token
+
+    let cancelled = false
+
+    async function loadRepairOrder() {
+      setApiMessage(undefined)
+      try {
+        const userId = user?._id || user?.id
+        const response = await fetchWorkshopRepairOrders(authToken, userId ? '?technicianId=' + encodeURIComponent(userId) : '')
+        const order = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])[0]
+        if (!cancelled && order) {
+          const nextSteps = mapRepairSteps(order)
+          setRepairOrder(order)
+          setSteps(nextSteps)
+          setSelectedStepId(nextSteps.find((step) => step.status === 'active')?.id || nextSteps[0]?.id || '')
+          setNotes(Object.fromEntries(nextSteps.map((step) => [step.id, step.summary === 'Chưa có ghi chú cho hạng mục này.' ? '' : step.summary])))
+        }
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được ghi chú sửa chữa từ API')
+      }
+    }
+
+    void loadRepairOrder()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token, user?._id, user?.id])
+
+  const selectedStep = steps.find((step) => step.id === selectedStepId) ?? steps[0] ?? emptyStep
   const completedCount = steps.filter((step) => step.status === 'completed').length
   const activeCount = steps.filter((step) => step.status === 'active').length
   const checkedItems = checkedByStep[selectedStep.id] ?? []
   const note = notes[selectedStep.id] ?? ''
-  const progress = Math.round((completedCount / steps.length) * 100)
+  const progress = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
+  const currentVehicle = repairOrder?.vehicleId || repairOrder?.vehicle
+  const repairOrderLabel = repairOrder ? orderId(repairOrder) : 'Chưa có lệnh'
+  const repairVehicleLabel = repairOrder ? vehicleName(currentVehicle) + ' - ' + vehiclePlate(currentVehicle) : 'Chưa có xe được giao'
 
   const totalEvidence = useMemo(() => steps.reduce((sum, step) => sum + step.evidences.length, 0), [steps])
 
@@ -398,14 +299,46 @@ export function TechnicianRepairNotesPage() {
     )
   }
 
-  function completeSelectedStep() {
-    updateStepStatus('completed')
+  async function persistStepStatus(status: RepairStepStatus) {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !selectedStep.id || !token) return
+
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      await updateWorkshopRepairProgress(token, repairOrderId, { status: status === 'active' ? 'inProgress' : status === 'completed' ? 'completed' : 'pending', stepId: selectedStep.id })
+      updateStepStatus(status)
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được tiến độ bước sửa chữa')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function completeSelectedStep() {
+    await persistStepStatus('completed')
     setSteps((current) =>
       current.map((step) => {
         const nextWaiting = step.order === selectedStep.order + 1 && step.status === 'waiting'
         return nextWaiting ? { ...step, startedAt: nowTime(), status: 'active' } : step
       }),
     )
+  }
+
+  async function saveSelectedNote() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !selectedStep.id || !token) return
+
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      await addWorkshopStepNote(token, repairOrderId, { checklist: checkedItems, content: note, stepId: selectedStep.id })
+      setApiMessage('Đã lưu ghi chú bước sửa chữa qua API.')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không lưu được ghi chú sửa chữa')
+    } finally {
+      setSaving(false)
+    }
   }
 
   function toggleChecklist(item: string) {
@@ -418,13 +351,14 @@ export function TechnicianRepairNotesPage() {
   }
 
   return (
-    <TechnicianShell>
+    <TechnicianShell active="repair-notes" eyebrow="Technician Repair Notes" notificationCount={2} title="Ghi chú sửa chữa từng bước">
       <div className="space-y-7">
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
         <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
           <div className="grid gap-6 xl:grid-cols-[1fr_340px] xl:items-center">
             <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">RO-2026-0882 - 51K-882.88</p>
-              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Ghi chú sửa chữa BMW M4 Competition</h2>
+              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">{repairOrderLabel}</p>
+              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Ghi chú sửa chữa {repairVehicleLabel}</h2>
               <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
                 Kỹ thuật viên cập nhật từng bước thực hiện, chỉ số đo, vật tư đã dùng và bằng chứng trước khi cố vấn dịch vụ gửi kết quả cho khách hàng.
               </p>
@@ -465,7 +399,7 @@ export function TechnicianRepairNotesPage() {
 
             <section className="grid gap-4">
               {steps.map((step) => (
-                <StepButton active={step.id === selectedStep.id} key={step.id} onSelect={() => setSelectedStepId(step.id)} step={step} />
+                <StepButton active={step.id === selectedStep.id} key={step.id} onSelect={() => setSelectedStepId(step.id)} ownerName={technicianName} step={step} />
               ))}
             </section>
 
@@ -518,15 +452,22 @@ export function TechnicianRepairNotesPage() {
 
           <StepDetail
             checkedItems={checkedItems}
+            disabled={saving}
             note={note}
-            onComplete={completeSelectedStep}
+            onComplete={() => { void completeSelectedStep() }}
             onNoteChange={(value) => setNotes((current) => ({ ...current, [selectedStep.id]: value }))}
-            onStart={() => updateStepStatus('active')}
+            onSave={() => { void saveSelectedNote() }}
+            onStart={() => { void persistStepStatus('active') }}
             onToggleChecklist={toggleChecklist}
             step={selectedStep}
+            technicianInitials={technicianInitials}
           />
         </div>
       </div>
     </TechnicianShell>
   )
 }
+
+
+
+

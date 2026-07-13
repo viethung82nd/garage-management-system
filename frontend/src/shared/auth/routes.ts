@@ -17,20 +17,14 @@ export function isSupportedFrontendRole(role: AuthRole) {
 }
 
 export function getRoleLabel(role: AuthRole) {
-  switch (role) {
-    case 'onlineCustomer':
-      return 'Customer'
-    case 'walkInCustomer':
-      return 'Walk-in customer'
-    case 'serviceAdvisor':
-      return 'Service advisor'
-    case 'technician':
-      return 'Technician'
-    case 'accountant':
-      return 'Accountant'
-    case 'admin':
-      return 'Admin'
-    default:
-      return role
+  const labels: Record<AuthRole, string> = {
+    accountant: 'Kế toán',
+    admin: 'Quản trị viên',
+    onlineCustomer: 'Khách hàng online',
+    serviceAdvisor: 'Cố vấn dịch vụ',
+    technician: 'Kỹ thuật viên',
+    walkInCustomer: 'Khách vãng lai',
   }
+
+  return labels[role]
 }

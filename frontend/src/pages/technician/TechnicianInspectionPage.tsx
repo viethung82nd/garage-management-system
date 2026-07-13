@@ -1,6 +1,7 @@
-﻿import { useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+﻿import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../shared/auth'
+import { fetchWorkshopRepairOrders, orderId, unwrapArray, uploadInspectionPhotos, saveInspectionNote, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
+import { TechnicianShell } from '../../widgets/technician-shell'
 import { Icon, type IconName } from '../../shared/ui/base'
 
 type InspectionStatus = 'done' | 'active' | 'waiting'
@@ -76,83 +77,6 @@ function formatFileSize(size: number) {
   return `${(size / (1024 * 1024)).toFixed(1)} MB`
 }
 
-function TechnicianShell({ children }: { children: React.ReactNode }) {
-  const { logout } = useAuth()
-
-  return (
-    <div className="min-h-screen bg-[#fbf9f8] text-[#1b1c1c]">
-      <aside className="hidden min-h-screen w-64 border-r border-[#efeded] bg-white lg:fixed lg:inset-y-0 lg:left-0 lg:flex lg:flex-col">
-        <div className="flex h-20 items-center gap-3 border-b border-[#efeded] px-7">
-          <div className="flex h-11 w-11 items-center justify-center bg-[#ba0013] text-white">
-            <Icon name="wrench" />
-          </div>
-          <div>
-            <p className="text-lg font-black leading-none text-[#171717]">Kapa Workshop</p>
-            <p className="mt-1 text-xs font-bold uppercase tracking-[0.16em] text-[#8a8686]">Technician</p>
-          </div>
-        </div>
-
-        <div className="border-b border-[#efeded] px-7 py-6">
-          <p className="text-xs font-black uppercase tracking-[0.18em] text-[#8a8686]">Kỹ thuật viên</p>
-          <p className="mt-2 text-sm font-black text-[#1b1c1c]">Nguyễn Minh</p>
-          <p className="mt-1 text-xs text-[#6a6767]">Cầu nâng 03 - Ca sáng</p>
-        </div>
-
-        <nav className="flex-1 space-y-1 px-4 py-6">
-          <Link className="flex min-h-12 items-center gap-3 border-l-4 border-[#ba0013] bg-[#fff1f1] px-4 text-sm font-black text-[#ba0013]" to="/technician/tasks">
-            <Icon name="clipboard" />
-            Phiếu kiểm tra
-          </Link>
-          <Link className="flex min-h-12 items-center gap-3 px-4 text-sm font-bold text-[#555151] transition hover:bg-[#fbf9f8] hover:text-[#ba0013]" to="/technician/work-orders">
-            <Icon name="wrench" />
-            Lệnh được giao
-          </Link>
-          <Link className="flex min-h-12 items-center gap-3 px-4 text-sm font-bold text-[#555151] transition hover:bg-[#fbf9f8] hover:text-[#ba0013]" to="/technician/repair-notes">
-            <Icon name="invoice" />
-            Ghi chú sửa chữa
-          </Link>
-          <span
-            aria-disabled="true"
-            className="flex min-h-12 cursor-not-allowed items-center gap-3 px-4 text-sm font-bold text-[#c8c6c5]"
-            title="Tính năng đang được phát triển"
-          >
-            <Icon name="sliders" />
-            Yêu cầu phụ tùng
-            <span className="ml-auto text-[10px] font-black uppercase tracking-[0.08em] text-[#c8c6c5]">Sắp ra mắt</span>
-          </span>
-        </nav>
-
-        <div className="border-t border-[#efeded] p-5">
-          <button className="flex min-h-11 w-full items-center gap-3 px-2 text-sm font-bold text-[#555151] hover:text-[#ba0013]" onClick={logout} type="button">
-            <Icon name="logout" />
-            Đăng xuất
-          </button>
-        </div>
-      </aside>
-
-      <div className="lg:pl-64">
-        <header className="sticky top-0 z-30 border-b border-[#efeded] bg-white/90 backdrop-blur-xl">
-          <div className="flex min-h-20 items-center justify-between gap-4 px-5 sm:px-8 lg:px-10">
-            <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ba0013]">Technician Inspection</p>
-              <h1 className="text-2xl font-black text-[#171717] sm:text-3xl">Upload ảnh xe trong phiếu kiểm tra</h1>
-            </div>
-            <div className="hidden items-center gap-4 sm:flex">
-              <button aria-label="Thông báo" className="relative flex h-11 w-11 items-center justify-center border border-[#dedada] text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
-                <Icon name="bell" />
-                <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center bg-[#ba0013] px-1 text-[10px] font-black text-white">1</span>
-              </button>
-              <div className="flex h-11 w-11 items-center justify-center bg-[#1b1c1c] text-sm font-black text-white">NM</div>
-            </div>
-          </div>
-        </header>
-
-        <main className="w-full px-5 py-7 sm:px-8 lg:px-10">{children}</main>
-      </div>
-    </div>
-  )
-}
-
 function StatusBadge({ status }: { status: InspectionStatus }) {
   const className = {
     active: 'bg-[#fff1f1] text-[#ba0013] border-[#ba0013]',
@@ -193,19 +117,49 @@ function InspectionChecklist() {
 }
 
 export function TechnicianInspectionPage() {
+  const { token, user } = useAuth()
   const [selectedCategoryId, setSelectedCategoryId] = useState(photoCategories[0].id)
   const [photos, setPhotos] = useState<UploadedPhoto[]>([])
-  const [note, setNote] = useState('Cản trước có vết xước nhẹ bên phải. Cần chụp thêm gầm xe sau khi nâng.')
+  const [note, setNote] = useState('')
+  const [repairOrder, setRepairOrder] = useState<ApiRepairOrder>()
+  const [apiMessage, setApiMessage] = useState<string>()
+  const [saving, setSaving] = useState(false)
   const inputRef = useRef<HTMLInputElement>(null)
 
-  function handleUpload(files: FileList | null) {
-    if (!files?.length) {
+  useEffect(() => {
+    if (!token) return
+    const authToken = token
+
+    let cancelled = false
+
+    async function loadAssignedOrder() {
+      setApiMessage(undefined)
+      try {
+        const userId = user?._id || user?.id
+        const response = await fetchWorkshopRepairOrders(authToken, userId ? '?technicianId=' + encodeURIComponent(userId) : '')
+        const orders = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
+        if (!cancelled) setRepairOrder(orders[0])
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được phiếu kiểm tra từ API')
+      }
+    }
+
+    void loadAssignedOrder()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token, user?._id, user?.id])
+
+  async function handleUpload(files: FileList | null) {
+    if (!files?.length || !token) {
       return
     }
 
-    const uploadedPhotos = Array.from(files).map((file) => ({
+    const fileArray = Array.from(files)
+    const uploadedPhotos = fileArray.map((file) => ({
       categoryId: selectedCategoryId,
-      id: `${file.name}-${file.lastModified}-${crypto.randomUUID()}`,
+      id: file.name + '-' + file.lastModified + '-' + crypto.randomUUID(),
       name: file.name,
       note: '',
       previewUrl: URL.createObjectURL(file),
@@ -216,6 +170,47 @@ export function TechnicianInspectionPage() {
 
     if (inputRef.current) {
       inputRef.current.value = ''
+    }
+
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId) {
+      setApiMessage('Chưa có lệnh sửa chữa được giao để tải ảnh.')
+      return
+    }
+
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      const formData = new FormData()
+      formData.append('categoryId', selectedCategoryId)
+      fileArray.forEach((file) => formData.append('photos', file))
+      await uploadInspectionPhotos(token, repairOrderId, formData)
+      setApiMessage('Đã tải ảnh kiểm tra lên lệnh sửa chữa.')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không tải được ảnh kiểm tra')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function saveInspection() {
+    if (!token) return
+
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId) {
+      setApiMessage('Chưa có lệnh sửa chữa được giao để lưu phiếu.')
+      return
+    }
+
+    setSaving(true)
+    setApiMessage(undefined)
+    try {
+      await saveInspectionNote(token, repairOrderId, note)
+      setApiMessage('Đã lưu ghi chú kiểm tra qua API.')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không lưu được phiếu kiểm tra')
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -230,15 +225,19 @@ export function TechnicianInspectionPage() {
   const selectedCategory = photoCategories.find((category) => category.id === selectedCategoryId) ?? photoCategories[0]
   const uploadedCount = photos.length
   const requiredCount = photoCategories.reduce((sum, category) => sum + category.required, 0)
+  const repairVehicle = repairOrder?.vehicleId || repairOrder?.vehicle
+  const repairOrderLabel = repairOrder ? orderId(repairOrder) : 'Chưa có lệnh'
+  const vehicleLabel = repairOrder ? vehicleName(repairVehicle) + ' - ' + vehiclePlate(repairVehicle) : 'Chưa có xe được giao'
 
   return (
-    <TechnicianShell>
+    <TechnicianShell active="tasks" eyebrow="Technician Inspection" notificationCount={1} title="Upload ảnh xe trong phiếu kiểm tra">
       <div className="space-y-7">
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
         <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
           <div className="grid gap-6 xl:grid-cols-[1fr_320px] xl:items-center">
             <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Phiếu kiểm tra RO-2026-0882</p>
-              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">BMW M4 Competition - 51K-882.88</h2>
+              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">Phiếu kiểm tra {repairOrderLabel}</p>
+              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">{vehicleLabel}</h2>
               <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
                 Kỹ thuật viên chụp ảnh xe theo từng hạng mục trước khi bắt đầu sửa chữa. Ảnh dùng để minh bạch tình trạng xe với cố vấn và khách hàng.
               </p>
@@ -273,7 +272,7 @@ export function TechnicianInspectionPage() {
                   <Icon name="plus" />
                   Tải ảnh xe
                 </button>
-                <input accept="image/*" className="hidden" multiple onChange={(event) => handleUpload(event.target.files)} ref={inputRef} type="file" />
+                <input accept="image/*" className="hidden" multiple onChange={(event) => { void handleUpload(event.target.files) }} ref={inputRef} type="file" />
               </div>
 
               <div className="mt-6 grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -366,7 +365,7 @@ export function TechnicianInspectionPage() {
                 onChange={(event) => setNote(event.target.value)}
                 value={note}
               />
-              <button className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#e31e24]" type="button">
+              <button className="mt-5 flex min-h-12 w-full items-center justify-center gap-3 bg-[#ba0013] px-5 text-sm font-black uppercase text-white transition hover:bg-[#e31e24] disabled:opacity-60" disabled={saving} onClick={() => { void saveInspection() }} type="button">
                 <Icon name="check" />
                 Lưu phiếu kiểm tra
               </button>
@@ -377,5 +376,6 @@ export function TechnicianInspectionPage() {
     </TechnicianShell>
   )
 }
+
 
 

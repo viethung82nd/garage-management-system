@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react'
+﻿import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
+import { confirmWorkshopBooking, fetchWorkshopBookings, personName, rejectWorkshopBooking, unwrapArray, vehicleName, vehiclePlate, type ApiBooking } from '../../shared/api/workshop'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected'
 
 type BookingRequest = {
-  id: number
+  id: string
   advisor: string
   customer: string
   date: string
@@ -20,69 +22,38 @@ type BookingRequest = {
   vin: string
 }
 
-const initialBookings: BookingRequest[] = [
-  {
-    advisor: 'Minh Anh',
-    customer: 'Alex Nguyễn',
-    date: 'Ngày mai',
-    id: 1,
-    initials: 'AN',
-    phone: '090 123 4567',
-    plate: '51K-882.88',
-    service: 'Chẩn đoán động cơ & cân chỉnh hiệu suất',
-    status: 'pending',
-    time: '10:30',
-    vehicle: 'BMW M4 Competition',
-    vin: 'WBS33AZ08PCM44882',
-  },
-  {
-    advisor: 'Quang Huy',
-    customer: 'Sarah Trần',
-    date: '24/10/2026',
-    id: 2,
-    initials: 'ST',
-    phone: '091 888 9999',
-    plate: '30F-686.01',
-    service: 'Kiểm tra và phục hồi hệ thống phanh',
-    status: 'pending',
-    time: '14:00',
-    vehicle: 'Audi RS6 Avant',
-    vin: 'WUAZZZF24MN904401',
-  },
-  {
-    advisor: 'Lan Chi',
-    customer: 'David Lê',
-    date: 'Hôm nay',
-    id: 3,
-    initials: 'DL',
-    phone: '098 765 4321',
-    plate: '29A-404.95',
-    service: 'Thay dầu, lọc và kiểm tra dung dịch',
-    status: 'pending',
-    time: '16:30',
-    vehicle: 'Toyota GR Supra',
-    vin: 'JTSCZ4FE8M5004495',
-  },
-  {
-    advisor: 'Minh Anh',
-    customer: 'Phạm Hoàng',
-    date: '25/10/2026',
-    id: 4,
-    initials: 'PH',
-    phone: '097 111 2222',
-    plate: '51H-888.20',
-    service: 'Bảo dưỡng tổng quát và vệ sinh khoang máy',
-    status: 'pending',
-    time: '09:15',
-    vehicle: 'VinFast Lux A2.0',
-    vin: 'RLVCE2SA5NV088820',
-  },
-]
+function normalizeBookingStatus(status?: string): BookingStatus {
+  if (status === 'confirmed') return 'confirmed'
+  if (status === 'rejected' || status === 'cancelled' || status === 'canceled') return 'rejected'
+  return 'pending'
+}
+
+function mapBooking(booking: ApiBooking): BookingRequest {
+  const customer = booking.customerId || booking.customer
+  const vehicle = booking.vehicleId || booking.vehicle
+  const service = booking.serviceId || booking.service
+  const advisor = booking.advisorId || booking.advisor
+
+  return {
+    advisor: personName(advisor, 'Chưa phân công'),
+    customer: personName(customer, 'Khách hàng'),
+    date: booking.bookingDate || booking.date || 'Chưa cập nhật',
+    id: booking._id || booking.id || crypto.randomUUID(),
+    initials: getUserInitials(customer),
+    phone: customer?.phone || 'Chưa có SĐT',
+    plate: vehiclePlate(vehicle),
+    service: service?.name || 'Chưa chọn dịch vụ',
+    status: normalizeBookingStatus(booking.status),
+    time: booking.timeSlot || booking.time || '--:--',
+    vehicle: vehicleName(vehicle),
+    vin: vehicle?.vin || vehicle?.chassisNumber || 'Chưa cập nhật',
+  }
+}
 
 const statusLabels: Record<BookingStatus, string> = {
-  confirmed: 'Đã xác nhận',
-  pending: 'Chờ duyệt',
-  rejected: 'Đã từ chối',
+  confirmed: 'ÄÃ£ xÃ¡c nháº­n',
+  pending: 'Chá» duyá»‡t',
+  rejected: 'ÄÃ£ tá»« chá»‘i',
 }
 
 function StatCard({
@@ -128,13 +99,11 @@ function StatusBadge({ status }: { status: BookingStatus }) {
 }
 
 function FilterBar({
-  onExport,
   onQueryChange,
   onServiceChange,
   query,
   service,
 }: {
-  onExport: () => void
   onQueryChange: (value: string) => void
   onServiceChange: (value: string) => void
   query: string
@@ -147,36 +116,32 @@ function FilterBar({
         <input
           className="h-12 w-full border border-[#d8d5d5] bg-[#fbf9f8] pl-12 pr-4 text-sm font-semibold text-[#1b1c1c] outline-none transition placeholder:text-[#8a8686] focus:border-[#ba0013] focus:bg-white"
           onChange={(event) => onQueryChange(event.target.value)}
-          placeholder="Tìm khách hàng, biển số hoặc VIN..."
+          placeholder="TÃ¬m khÃ¡ch hÃ ng, biá»ƒn sá»‘ hoáº·c VIN..."
           type="search"
           value={query}
         />
       </label>
 
       <select
+        aria-label="Lọc theo dịch vụ"
         className="h-12 border border-[#d8d5d5] bg-[#fbf9f8] px-4 text-sm font-bold text-[#1b1c1c] outline-none transition focus:border-[#ba0013] focus:bg-white"
         onChange={(event) => onServiceChange(event.target.value)}
         value={service}
       >
-        <option value="all">Tất cả dịch vụ</option>
-        <option value="diagnostic">Chẩn đoán động cơ</option>
-        <option value="brake">Dịch vụ phanh</option>
-        <option value="maintenance">Bảo dưỡng tổng quát</option>
+        <option value="all">Táº¥t cáº£ dá»‹ch vá»¥</option>
+        <option value="diagnostic">Cháº©n Ä‘oÃ¡n Ä‘á»™ng cÆ¡</option>
+        <option value="brake">Dá»‹ch vá»¥ phanh</option>
+        <option value="maintenance">Báº£o dÆ°á»¡ng tá»•ng quÃ¡t</option>
       </select>
 
-      <button
-        className="flex h-12 cursor-not-allowed items-center justify-center gap-2 border border-[#d8d5d5] px-5 text-sm font-black text-[#c8c6c5]"
-        disabled
-        title="Tính năng đang được phát triển"
-        type="button"
-      >
+      <button className="flex h-12 items-center justify-center gap-2 border border-[#d8d5d5] px-5 text-sm font-black text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" type="button">
         <Icon name="sliders" />
-        Bộ lọc nâng cao
+        Bá»™ lá»c nÃ¢ng cao
       </button>
 
-      <button className="flex h-12 items-center justify-center gap-2 bg-[#ba0013] px-5 text-sm font-black text-white transition hover:bg-[#94000f]" onClick={onExport} type="button">
+      <button className="flex h-12 items-center justify-center gap-2 bg-[#ba0013] px-5 text-sm font-black text-white transition hover:bg-[#94000f]" type="button">
         <Icon name="download" />
-        Xuất danh sách
+        Xuáº¥t danh sÃ¡ch
       </button>
     </section>
   )
@@ -187,7 +152,7 @@ function BookingTable({
   onStatusChange,
 }: {
   bookings: BookingRequest[]
-  onStatusChange: (id: number, status: BookingStatus) => void
+  onStatusChange: (id: string, status: BookingStatus) => void
 }) {
   return (
     <section className="overflow-hidden border border-[#efeded] bg-white">
@@ -195,12 +160,12 @@ function BookingTable({
         <table className="w-full min-w-[1080px] border-collapse text-left">
           <thead>
             <tr className="border-b border-[#efeded] bg-[#fbf9f8] text-xs font-black uppercase tracking-[0.14em] text-[#6a6767]">
-              <th className="px-6 py-4">Thông tin khách hàng</th>
-              <th className="px-6 py-4">Xe & biển số</th>
-              <th className="px-6 py-4">Dịch vụ yêu cầu</th>
-              <th className="px-6 py-4">Khung giờ</th>
-              <th className="px-6 py-4">Trạng thái</th>
-              <th className="px-6 py-4 text-right">Thao tác</th>
+              <th className="px-6 py-4">ThÃ´ng tin khÃ¡ch hÃ ng</th>
+              <th className="px-6 py-4">Xe & biá»ƒn sá»‘</th>
+              <th className="px-6 py-4">Dá»‹ch vá»¥ yÃªu cáº§u</th>
+              <th className="px-6 py-4">Khung giá»</th>
+              <th className="px-6 py-4">Tráº¡ng thÃ¡i</th>
+              <th className="px-6 py-4 text-right">Thao tÃ¡c</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#efeded]">
@@ -224,7 +189,7 @@ function BookingTable({
                 </td>
                 <td className="px-6 py-5">
                   <p className="max-w-[260px] text-sm font-bold leading-6 text-[#1b1c1c]">{booking.service}</p>
-                  <p className="mt-1 text-xs font-semibold text-[#8a8686]">Cố vấn: {booking.advisor}</p>
+                  <p className="mt-1 text-xs font-semibold text-[#8a8686]">Cá»‘ váº¥n: {booking.advisor}</p>
                 </td>
                 <td className="px-6 py-5">
                   <p className="text-lg font-black text-[#171717]">{booking.time}</p>
@@ -236,23 +201,23 @@ function BookingTable({
                 <td className="px-6 py-5">
                   <div className="flex justify-end gap-2">
                     <button
-                      aria-label={`Xác nhận lịch của ${booking.customer}`}
+                      aria-label={`XÃ¡c nháº­n lá»‹ch cá»§a ${booking.customer}`}
                       className="flex h-10 w-10 items-center justify-center bg-[#ba0013] text-white transition hover:bg-[#94000f] disabled:cursor-not-allowed disabled:bg-[#d8d5d5]"
                       disabled={booking.status !== 'pending'}
                       onClick={() => onStatusChange(booking.id, 'confirmed')}
-                      title="Xác nhận"
+                      title="XÃ¡c nháº­n"
                       type="button"
                     >
                       <Icon name="check" />
                     </button>
                     <button
-                      aria-label={`Từ chối lịch của ${booking.customer}`}
+                      aria-label={`Tá»« chá»‘i lá»‹ch cá»§a ${booking.customer}`}
                       className="flex h-10 min-w-24 items-center justify-center border border-[#d8d5d5] px-4 text-sm font-black text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013] disabled:cursor-not-allowed disabled:opacity-40"
                       disabled={booking.status !== 'pending'}
                       onClick={() => onStatusChange(booking.id, 'rejected')}
                       type="button"
                     >
-                      Từ chối
+                      Tá»« chá»‘i
                     </button>
                   </div>
                 </td>
@@ -265,39 +230,40 @@ function BookingTable({
   )
 }
 
-function exportBookingsToCsv(bookings: BookingRequest[]) {
-  const header = ['Khách hàng', 'Điện thoại', 'Xe', 'Biển số', 'VIN', 'Dịch vụ', 'Ngày', 'Giờ', 'Cố vấn', 'Trạng thái']
-  const rows = bookings.map((booking) => [
-    booking.customer,
-    booking.phone,
-    booking.vehicle,
-    booking.plate,
-    booking.vin,
-    booking.service,
-    booking.date,
-    booking.time,
-    booking.advisor,
-    statusLabels[booking.status],
-  ])
-
-  const csvContent = [header, ...rows]
-    .map((row) => row.map((cell) => `"${cell.replace(/"/g, '""')}"`).join(','))
-    .join('\r\n')
-
-  const blob = new Blob([`﻿${csvContent}`], { type: 'text/csv;charset=utf-8;' })
-  const url = URL.createObjectURL(blob)
-  const link = document.createElement('a')
-  link.href = url
-  link.download = `danh-sach-dat-lich-${new Date().toISOString().slice(0, 10)}.csv`
-  link.click()
-  URL.revokeObjectURL(url)
-}
-
 export function BookingRequestsPage() {
-  const [bookings, setBookings] = useState(initialBookings)
+  const { token } = useAuth()
+  const [bookings, setBookings] = useState<BookingRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [apiMessage, setApiMessage] = useState<string>()
   const [query, setQuery] = useState('')
   const [service, setService] = useState('all')
 
+  useEffect(() => {
+    if (!token) return
+    const authToken = token
+
+    let cancelled = false
+
+    async function loadBookings() {
+      setLoading(true)
+      setApiMessage(undefined)
+      try {
+        const response = await fetchWorkshopBookings(authToken)
+        const nextBookings = unwrapArray<ApiBooking>(response, ['bookings']).map(mapBooking)
+        if (!cancelled) setBookings(nextBookings)
+      } catch (err) {
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được danh sách booking từ API')
+      } finally {
+        if (!cancelled) setLoading(false)
+      }
+    }
+
+    void loadBookings()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
 
@@ -311,8 +277,8 @@ export function BookingRequestsPage() {
       const serviceMap: Record<string, string[]> = {
         all: [],
         brake: ['phanh'],
-        diagnostic: ['chẩn đoán', 'động cơ'],
-        maintenance: ['bảo dưỡng', 'thay dầu'],
+        diagnostic: ['cháº©n Ä‘oÃ¡n', 'Ä‘á»™ng cÆ¡'],
+        maintenance: ['báº£o dÆ°á»¡ng', 'thay dáº§u'],
       }
       const serviceTerms = serviceMap[service] ?? []
       const matchesService = serviceTerms.length === 0 || serviceTerms.some((term) => booking.service.toLowerCase().includes(term))
@@ -321,43 +287,47 @@ export function BookingRequestsPage() {
     })
   }, [bookings, query, service])
 
-  function updateStatus(id: number, status: BookingStatus) {
-    setBookings((current) => current.map((booking) => (booking.id === id ? { ...booking, status } : booking)))
+  async function updateStatus(id: string, status: BookingStatus) {
+    if (!token) return
+
+    setApiMessage(undefined)
+    try {
+      const response = status === 'confirmed' ? await confirmWorkshopBooking(token, id) : await rejectWorkshopBooking(token, id)
+      const booking = 'booking' in response && response.booking ? response.booking : response
+      setBookings((current) => current.map((item) => (item.id === id ? mapBooking(booking as ApiBooking) : item)))
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được trạng thái booking')
+    }
   }
 
   const pendingCount = bookings.filter((booking) => booking.status === 'pending').length
 
   return (
-    <ServiceAdvisorShell active="bookings" title="Danh sách đặt lịch">
+    <ServiceAdvisorShell active="bookings" title="Danh sÃ¡ch Ä‘áº·t lá»‹ch">
       <div className="space-y-7">
         <section className="grid gap-4 md:grid-cols-3">
-          <StatCard icon="calendar" label="Đặt lịch chờ duyệt" note="+4 yêu cầu mới hôm nay" value={String(pendingCount).padStart(2, '0')} />
-          <StatCard icon="clipboard" label="Lịch hẹn hôm nay" note="6 xe chưa tiếp nhận" value="28" />
-          <StatCard icon="users" label="Khách hàng mới" note="Trong 7 ngày gần nhất" value="05" />
+          <StatCard icon="calendar" label="Äáº·t lá»‹ch chá» duyá»‡t" note="+4 yÃªu cáº§u má»›i hÃ´m nay" value={String(pendingCount).padStart(2, '0')} />
+          <StatCard icon="clipboard" label="Lá»‹ch háº¹n hÃ´m nay" note="6 xe chÆ°a tiáº¿p nháº­n" value="28" />
+          <StatCard icon="users" label="KhÃ¡ch hÃ ng má»›i" note="Trong 7 ngÃ y gáº§n nháº¥t" value="05" />
         </section>
 
-        <FilterBar
-          onExport={() => exportBookingsToCsv(filteredBookings)}
-          onQueryChange={setQuery}
-          onServiceChange={setService}
-          query={query}
-          service={service}
-        />
-        <BookingTable bookings={filteredBookings} onStatusChange={updateStatus} />
+        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
+        <FilterBar onQueryChange={setQuery} onServiceChange={setService} query={query} service={service} />
+        {loading ? <div className="border border-[#efeded] bg-white p-8 text-sm font-bold text-[#6a6767]">Đang tải booking từ API...</div> : <BookingTable bookings={filteredBookings} onStatusChange={updateStatus} />}
 
         <footer className="grid gap-6 bg-[#1b1c1c] p-8 text-white lg:grid-cols-[1fr_auto_auto] lg:items-center">
           <div>
             <p className="text-lg font-black">Kapa Service Desk</p>
             <p className="mt-2 max-w-xl text-sm leading-6 text-white/65">
-              Theo dõi lịch đặt, phân bổ cố vấn và chuyển nhanh sang quy trình tiếp nhận xe.
+              Theo dÃµi lá»‹ch Ä‘áº·t, phÃ¢n bá»• cá»‘ váº¥n vÃ  chuyá»ƒn nhanh sang quy trÃ¬nh tiáº¿p nháº­n xe.
             </p>
           </div>
           <div className="text-sm text-white/65">
-            <p className="font-black text-white">Ca trực hiện tại</p>
+            <p className="font-black text-white">Ca trá»±c hiá»‡n táº¡i</p>
             <p>08:00 - 17:30</p>
           </div>
           <Link className="inline-flex h-12 items-center justify-center bg-white px-5 text-sm font-black text-[#1b1c1c]" to="/advisor/reception">
-            Mở biểu mẫu nhận xe
+            Má»Ÿ biá»ƒu máº«u nháº­n xe
           </Link>
         </footer>
       </div>

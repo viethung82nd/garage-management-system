@@ -2,6 +2,7 @@ export type AuthRole = 'onlineCustomer' | 'walkInCustomer' | 'serviceAdvisor' | 
 
 export type AuthUser = {
   _id: string
+  id?: string
   fullName: string
   email?: string
   phone?: string
