@@ -2,12 +2,20 @@ import { Router } from "express";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/error.js";
 import {
+  listTransferRequests,
   createTransferRequest,
   approveTransferRequest,
   rejectTransferRequest,
 } from "../controllers/transfer-request.controller.js";
 
 export const transferRequestRouter = Router();
+
+transferRequestRouter.get(
+  "",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  asyncHandler(listTransferRequests),
+);
 
 transferRequestRouter.post(
   "",

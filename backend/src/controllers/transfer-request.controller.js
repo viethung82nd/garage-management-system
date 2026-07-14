@@ -4,6 +4,38 @@ import {
   UserModel,
 } from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
+import { TRANSFER_REQUEST_STATUSES } from "../models/TransferRequest.js";
+
+/** GET /api/transfer-requests — SA review queue for technician transfer requests. */
+export async function listTransferRequests(req, res) {
+  const { status, repairOrderId } = req.query;
+  const filter = {};
+
+  if (status) {
+    if (!TRANSFER_REQUEST_STATUSES.includes(status)) {
+      throw new HttpError(
+        400,
+        `status must be one of: ${TRANSFER_REQUEST_STATUSES.join(", ")}`,
+      );
+    }
+    filter.status = status;
+  }
+
+  if (repairOrderId) {
+    if (!repairOrderId.match(/^[0-9a-fA-F]{24}$/)) {
+      throw new HttpError(400, "Invalid repairOrderId format");
+    }
+    filter.repairOrderId = repairOrderId;
+  }
+
+  const transferRequests = await TransferRequestModel.find(filter)
+    .populate("repairOrderId")
+    .populate("fromTechnicianId", "fullName email phone role")
+    .populate("toTechnicianId", "fullName email phone role")
+    .sort({ requestedAt: -1 });
+
+  res.json({ transferRequests });
+}
 
 export async function createTransferRequest(req, res) {
   const fromTechnicianId = req.user?.sub;
