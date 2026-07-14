@@ -1,8 +1,8 @@
 import { CarOutlined, CheckOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Card, Col, Input, Row, Select, Tag } from 'antd'
+import { Avatar, Button, Card, Col, Input, Row, Select, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { createVehicleReception, fetchVehicleHistory } from '../../shared/api/workshop'
-import { useAuth } from '../../shared/auth'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import { advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -308,7 +308,10 @@ export function VehicleReceptionPage() {
                       </div>
                       {applied ? <Tag color="red">Applied</Tag> : null}
                     </div>
-                    <div style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 600, marginTop: 8 }}>{suggestion.customerName}</div>
+                    <div className="flex items-center gap-2" style={{ marginTop: 8 }}>
+                      <Avatar size={20} style={{ background: advisorPalette.ink, fontSize: 10 }}>{getUserInitials(suggestion.customerName)}</Avatar>
+                      <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 600 }}>{suggestion.customerName}</span>
+                    </div>
                     <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 4 }}>Last visit: {suggestion.lastVisit}</div>
                     <div className="flex flex-wrap gap-1" style={{ marginTop: 8 }}>
                       {suggestion.recommendedServices.slice(0, 2).map((service) => (
@@ -326,7 +329,8 @@ export function VehicleReceptionPage() {
 
           <div className="grid gap-5 lg:grid-cols-12">
             <div className="flex flex-col gap-5 lg:col-span-8">
-              <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Customer information">
+              <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Customer & vehicle information">
+                <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 12, textTransform: 'uppercase' }}>Customer</div>
                 <Row gutter={16}>
                   <Col span={12}>
                     <LabeledField label="Full name">
@@ -349,36 +353,37 @@ export function VehicleReceptionPage() {
                     </LabeledField>
                   </Col>
                 </Row>
-              </Card>
 
-              <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Vehicle information">
-                <Row gutter={16}>
-                  <Col span={16}>
-                    <LabeledField label="Make / model">
-                      <Input onChange={(event) => updateField('model', event.target.value)} placeholder="Toyota Camry" value={form.model} />
-                    </LabeledField>
-                  </Col>
-                  <Col span={8}>
-                    <LabeledField label="Model year">
-                      <Select onChange={(value) => updateField('year', value)} options={yearOptions} style={{ width: '100%' }} value={form.year} />
-                    </LabeledField>
-                  </Col>
-                  <Col span={12} style={{ marginTop: 16 }}>
-                    <LabeledField label="Current mileage">
-                      <Input onChange={(event) => updateField('mileage', event.target.value)} placeholder="24,500" value={form.mileage} />
-                    </LabeledField>
-                  </Col>
-                  <Col span={12} style={{ marginTop: 16 }}>
-                    <LabeledField label="VIN">
-                      <Input onChange={(event) => updateField('vin', event.target.value)} placeholder="WBS33AZ08PCM44882" value={form.vin} />
-                    </LabeledField>
-                  </Col>
-                  <Col span={12} style={{ marginTop: 16 }}>
-                    <LabeledField label="Engine number">
-                      <Input onChange={(event) => updateField('engineNo', event.target.value)} placeholder="ENG-987654" value={form.engineNo} />
-                    </LabeledField>
-                  </Col>
-                </Row>
+                <div style={{ borderTop: `1px solid ${advisorPalette.border}`, marginTop: 20, paddingTop: 20 }}>
+                  <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 12, textTransform: 'uppercase' }}>Vehicle</div>
+                  <Row gutter={16}>
+                    <Col span={16}>
+                      <LabeledField label="Make / model">
+                        <Input onChange={(event) => updateField('model', event.target.value)} placeholder="Toyota Camry" value={form.model} />
+                      </LabeledField>
+                    </Col>
+                    <Col span={8}>
+                      <LabeledField label="Model year">
+                        <Select onChange={(value) => updateField('year', value)} options={yearOptions} style={{ width: '100%' }} value={form.year} />
+                      </LabeledField>
+                    </Col>
+                    <Col span={12} style={{ marginTop: 16 }}>
+                      <LabeledField label="Current mileage">
+                        <Input onChange={(event) => updateField('mileage', event.target.value)} placeholder="24,500" value={form.mileage} />
+                      </LabeledField>
+                    </Col>
+                    <Col span={12} style={{ marginTop: 16 }}>
+                      <LabeledField label="VIN">
+                        <Input onChange={(event) => updateField('vin', event.target.value)} placeholder="WBS33AZ08PCM44882" value={form.vin} />
+                      </LabeledField>
+                    </Col>
+                    <Col span={12} style={{ marginTop: 16 }}>
+                      <LabeledField label="Engine number">
+                        <Input onChange={(event) => updateField('engineNo', event.target.value)} placeholder="ENG-987654" value={form.engineNo} />
+                      </LabeledField>
+                    </Col>
+                  </Row>
+                </div>
               </Card>
             </div>
 
