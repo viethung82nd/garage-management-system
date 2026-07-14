@@ -4,12 +4,15 @@ import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import {
   createQuotation,
+  fetchServiceCategories,
   fetchWorkshopServices,
   sendQuotation,
   type ApiQuotation,
   type ApiService,
+  type ApiServiceCategory,
   type QuotationLineKind,
 } from '../../shared/api/workshop'
+import { resolveApiAssetUrl } from '../../shared/lib/api-client'
 import { useAuth } from '../../shared/auth'
 import { advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
@@ -80,6 +83,7 @@ export function QuotationPage() {
   const [validDays, setValidDays] = useState(7)
   const [note, setNote] = useState('This quote includes labor for removal and installation. Price may change if extra work is found.')
   const [services, setServices] = useState<ApiService[]>([])
+  const [categories, setCategories] = useState<ApiServiceCategory[]>([])
   const [pickedServiceId, setPickedServiceId] = useState('')
   const [apiMessage, setApiMessage] = useState<string>()
   const [status, setStatus] = useState<'draft' | 'sent'>('draft')
@@ -92,8 +96,10 @@ export function QuotationPage() {
 
     async function loadServices() {
       try {
-        const catalog = await fetchWorkshopServices(authToken)
-        if (!cancelled) setServices(Array.isArray(catalog) ? catalog : [])
+        const [catalog, categoryResponse] = await Promise.all([fetchWorkshopServices(authToken), fetchServiceCategories()])
+        if (cancelled) return
+        setServices(Array.isArray(catalog) ? catalog : [])
+        setCategories(Array.isArray(categoryResponse) ? categoryResponse : categoryResponse?.categories || [])
       } catch (err) {
         if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load the service catalog from the API')
       }
@@ -104,6 +110,11 @@ export function QuotationPage() {
       cancelled = true
     }
   }, [token])
+
+  const categoryImageByName = useMemo(
+    () => new Map(categories.filter((category) => category.imageUrl).map((category) => [category.name, category.imageUrl])),
+    [categories],
+  )
 
   const partsTotal = useMemo(() => lines.filter((line) => line.kind === 'part').reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines])
   const laborTotal = useMemo(() => lines.filter((line) => line.kind !== 'part').reduce((sum, line) => sum + line.quantity * line.unitPrice, 0), [lines])
@@ -290,9 +301,22 @@ export function QuotationPage() {
               <div className="flex gap-2">
                 <Select
                   onChange={setPickedServiceId}
-                  options={services.map((service) => ({ label: `${service.name} — ${formatMoney(servicePrice(service))}`, value: service._id || service.id }))}
+                  options={services.map((service) => {
+                    const imageUrl = service.category ? categoryImageByName.get(service.category) : undefined
+                    return {
+                      label: (
+                        <span className="flex items-center gap-2">
+                          {imageUrl ? (
+                            <img alt={service.category} src={resolveApiAssetUrl(imageUrl)} style={{ borderRadius: 6, height: 20, objectFit: 'cover', width: 20 }} />
+                          ) : null}
+                          {service.name} — {formatMoney(servicePrice(service))}
+                        </span>
+                      ),
+                      value: service._id || service.id,
+                    }
+                  })}
                   placeholder="Add from catalog..."
-                  style={{ width: 240 }}
+                  style={{ width: 260 }}
                   value={pickedServiceId || undefined}
                 />
                 <Button disabled={!pickedServiceId} icon={<PlusOutlined />} onClick={addServiceLine} />

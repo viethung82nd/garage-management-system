@@ -1,7 +1,17 @@
 import { CheckOutlined, ProfileOutlined } from '@ant-design/icons'
 import { Button, Card, Col, Input, Row, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { createWorkshopRepairOrder, fetchWorkshopServices, fetchWorkshopTechnicians, updateWorkshopRepairOrder, type ApiService, type ApiTechnician } from '../../shared/api/workshop'
+import {
+  createWorkshopRepairOrder,
+  fetchServiceCategories,
+  fetchWorkshopServices,
+  fetchWorkshopTechnicians,
+  updateWorkshopRepairOrder,
+  type ApiService,
+  type ApiServiceCategory,
+  type ApiTechnician,
+} from '../../shared/api/workshop'
+import { resolveApiAssetUrl } from '../../shared/lib/api-client'
 import { useAuth } from '../../shared/auth'
 import { advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
@@ -81,6 +91,7 @@ function newOrderCode() {
 export function RepairOrderAssignmentPage() {
   const { token } = useAuth()
   const [tasks, setTasks] = useState<ServiceTask[]>([])
+  const [categories, setCategories] = useState<ApiServiceCategory[]>([])
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
   const [header, setHeader] = useState<RepairOrderHeader>(emptyHeader)
@@ -99,13 +110,18 @@ export function RepairOrderAssignmentPage() {
     async function loadAssignmentData() {
       setApiMessage(undefined)
       try {
-        const [services, technicianList] = await Promise.all([fetchWorkshopServices(authToken), fetchWorkshopTechnicians(authToken)])
+        const [services, technicianList, categoryResponse] = await Promise.all([
+          fetchWorkshopServices(authToken),
+          fetchWorkshopTechnicians(authToken),
+          fetchServiceCategories(),
+        ])
         if (cancelled) return
 
         const serviceTasks = services.map(mapServiceTask)
         const nextTechnicians = technicianList.map(mapTechnician)
         setTasks(serviceTasks)
         setTechnicians(nextTechnicians)
+        setCategories(Array.isArray(categoryResponse) ? categoryResponse : categoryResponse?.categories || [])
         setSelectedTechnicianId(nextTechnicians[0]?.id || '')
       } catch (err) {
         if (!cancelled) {
@@ -120,6 +136,11 @@ export function RepairOrderAssignmentPage() {
       cancelled = true
     }
   }, [token])
+
+  const categoryImageByName = useMemo(
+    () => new Map(categories.filter((category) => category.imageUrl).map((category) => [category.name, category.imageUrl])),
+    [categories],
+  )
 
   const selectedTasks = useMemo(() => tasks.filter((task) => task.selected), [tasks])
   const selectedTechnician = technicians.find((tech) => tech.id === selectedTechnicianId)
@@ -241,6 +262,9 @@ export function RepairOrderAssignmentPage() {
                         >
                           {task.selected ? <CheckOutlined style={{ fontSize: 12 }} /> : null}
                         </span>
+                        {categoryImageByName.get(task.parts) ? (
+                          <img alt={task.parts} src={resolveApiAssetUrl(categoryImageByName.get(task.parts))} style={{ borderRadius: 8, flexShrink: 0, height: 32, objectFit: 'cover', width: 32 }} />
+                        ) : null}
                         <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>{task.name}</span>
                       </div>
                       <Tag color="red">{task.estimate}</Tag>
