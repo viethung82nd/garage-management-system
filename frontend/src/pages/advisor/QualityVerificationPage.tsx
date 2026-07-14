@@ -1,8 +1,9 @@
 import { CheckOutlined, SearchOutlined, ToolOutlined } from '@ant-design/icons'
-import { Button, Card, Input, Table, Tag } from 'antd'
+import { Avatar, Button, Card, Input, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import {
+  fetchInspectionReports,
   fetchWorkshopRepairOrders,
   formatApiDate,
   orderId,
@@ -11,10 +12,12 @@ import {
   unwrapArray,
   vehicleName,
   vehiclePlate,
+  type ApiInspectionReport,
   type ApiRepairOrder,
   type QualityCheckResult,
 } from '../../shared/api/workshop'
-import { useAuth } from '../../shared/auth'
+import { resolveApiAssetUrl } from '../../shared/lib/api-client'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -87,6 +90,7 @@ export function QualityVerificationPage() {
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [query, setQuery] = useState('')
+  const [evidenceReports, setEvidenceReports] = useState<ApiInspectionReport[]>([])
 
   useEffect(() => {
     if (!token) return
@@ -120,6 +124,32 @@ export function QualityVerificationPage() {
   }, [token])
 
   const selectedOrder = orders.find((order) => order.id === selectedId) ?? orders[0]
+
+  useEffect(() => {
+    if (!token || !selectedOrder?.id) {
+      setEvidenceReports([])
+      return
+    }
+    const authToken = token
+    const repairOrderId = selectedOrder.id
+    let cancelled = false
+
+    async function loadEvidence() {
+      try {
+        const response = await fetchInspectionReports(authToken, `?repairOrderId=${repairOrderId}`)
+        if (!cancelled) setEvidenceReports(unwrapArray<ApiInspectionReport>(response, ['inspectionReports']))
+      } catch {
+        if (!cancelled) setEvidenceReports([])
+      }
+    }
+
+    void loadEvidence()
+    return () => {
+      cancelled = true
+    }
+  }, [token, selectedOrder?.id])
+
+  const evidencePhotos = useMemo(() => evidenceReports.flatMap((report) => report.photos || []), [evidenceReports])
   const checklist = (selectedOrder && checklistByOrder[selectedOrder.id]) || []
   const passCount = checklist.filter((item) => item.result === 'pass').length
   const failCount = checklist.filter((item) => item.result === 'fail').length
@@ -188,10 +218,45 @@ export function QualityVerificationPage() {
               )}
             </div>
             <p style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 6 }}>{order.vehicle}</p>
-            <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 2 }}>{order.plate} · {order.technician}</p>
+            <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
+              <Avatar size={20} style={{ background: advisorPalette.ink, fontSize: 10 }}>{getUserInitials(order.technician)}</Avatar>
+              <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>{order.plate} · {order.technician}</span>
+            </div>
           </div>
         )
       },
+    },
+  ]
+
+  const checklistColumns: ColumnsType<CheckItem> = [
+    {
+      key: 'label',
+      render: (_, item) => <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>{item.label}</span>,
+      title: 'Item',
+    },
+    {
+      key: 'result',
+      render: (_, item) => (
+        <div className="flex flex-wrap gap-2">
+          {(['pass', 'fail', 'na'] as QualityCheckResult[]).map((result) => (
+            <Tag color={item.result === result ? resultColors[result] : undefined} key={result} onClick={() => setResult(item.id, result)} style={{ cursor: 'pointer' }}>
+              {resultLabels[result]}
+            </Tag>
+          ))}
+        </div>
+      ),
+      title: 'Result',
+      width: 220,
+    },
+    {
+      key: 'note',
+      render: (_, item) =>
+        item.result === 'fail' ? (
+          <Input onChange={(event) => setItemNote(item.id, event.target.value)} placeholder="Describe the issue for the technician to rework" value={item.note} />
+        ) : (
+          <span style={{ color: advisorPalette.textMuted }}>—</span>
+        ),
+      title: 'Note',
     },
   ]
 
@@ -249,7 +314,10 @@ export function QualityVerificationPage() {
                   </div>
                   <div>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Customer</p>
-                    <p style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 4 }}>{selectedOrder.customer}</p>
+                    <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
+                      <Avatar size={22} style={{ background: advisorPalette.red }}>{getUserInitials(selectedOrder.customer)}</Avatar>
+                      <p style={{ color: advisorPalette.ink, fontWeight: 700 }}>{selectedOrder.customer}</p>
+                    </div>
                   </div>
                   <div>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Completed</p>
@@ -265,36 +333,23 @@ export function QualityVerificationPage() {
                 style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}
                 title="Verification checklist"
               >
-                <div className="flex flex-col gap-4">
-                  {checklist.map((item) => (
-                    <div key={item.id} style={{ background: item.result === 'fail' ? '#fff1f2' : advisorPalette.panelAlt, borderRadius: 18, padding: 16 }}>
-                      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                        <p style={{ color: advisorPalette.ink, fontWeight: 700 }}>{item.label}</p>
-                        <div className="flex flex-wrap gap-2">
-                          {(['pass', 'fail', 'na'] as QualityCheckResult[]).map((result) => (
-                            <Tag
-                              color={item.result === result ? resultColors[result] : undefined}
-                              key={result}
-                              onClick={() => setResult(item.id, result)}
-                              style={{ cursor: 'pointer' }}
-                            >
-                              {resultLabels[result]}
-                            </Tag>
-                          ))}
-                        </div>
-                      </div>
-                      {item.result === 'fail' ? (
-                        <Input
-                          onChange={(event) => setItemNote(item.id, event.target.value)}
-                          placeholder="Describe the issue for the technician to rework"
-                          style={{ marginTop: 12 }}
-                          value={item.note}
-                        />
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
+                <Table columns={checklistColumns} dataSource={checklist} pagination={false} rowKey="id" size="small" />
               </Card>
+
+              {evidencePhotos.length ? (
+                <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Evidence photos">
+                  <div className="flex flex-wrap gap-3">
+                    {evidencePhotos.map((photo, index) => (
+                      <img
+                        alt={`Evidence photo ${index + 1}`}
+                        key={photo}
+                        src={resolveApiAssetUrl(photo)}
+                        style={{ borderRadius: 12, height: 84, objectFit: 'cover', width: 84 }}
+                      />
+                    ))}
+                  </div>
+                </Card>
+              ) : null}
             </div>
 
             <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
