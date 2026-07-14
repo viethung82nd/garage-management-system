@@ -1,5 +1,5 @@
 import { CheckCircleFilled } from '@ant-design/icons'
-import { Card, Empty, Progress, Steps, Tag } from 'antd'
+import { Card, Empty, Progress, Select, Steps, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchWorkshopRepairOrders, formatApiDate, orderId, personName, unwrapArray, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
@@ -136,51 +136,10 @@ const priorityColors: Record<Priority, string> = {
   medium: 'gold',
 }
 
-function OrderCard({ active, onSelect, timeline }: { active: boolean; onSelect: () => void; timeline: RepairTimeline }) {
-  const activeStage = timeline.stages.find((stage) => stage.status === 'active')
-  const blockedStage = timeline.stages.find((stage) => stage.status === 'blocked')
-
-  return (
-    <button
-      className="w-full rounded-[24px] p-5 text-left transition"
-      onClick={onSelect}
-      style={{
-        background: active ? advisorPalette.panelAlt : advisorPalette.panel,
-        border: active ? `2px solid ${advisorPalette.red}` : `1px solid ${advisorPalette.border}`,
-        boxShadow: advisorPalette.shadow,
-      }}
-      type="button"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Tag color={priorityColors[timeline.priority]}>{priorityLabels[timeline.priority]}</Tag>
-            <Tag>{timeline.statusText}</Tag>
-          </div>
-          <h3 style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 10 }}>{timeline.vehicle}</h3>
-          <p style={{ color: advisorPalette.red, fontSize: 12, fontWeight: 700, marginTop: 4 }}>{timeline.id} - {timeline.plate}</p>
-        </div>
-        <div className="text-right">
-          <p style={{ color: advisorPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Promised</p>
-          <p style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 6 }}>{timeline.promisedAt}</p>
-        </div>
-      </div>
-      <Progress percent={timeline.progress} showInfo={false} strokeColor={advisorPalette.red} style={{ marginTop: 14 }} />
-      <div className="mt-3 flex flex-wrap gap-2" style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
-        <span style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>Customer: {timeline.customer}</span>
-        <span style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>Tech: {timeline.technician}</span>
-      </div>
-      <p style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 600, marginTop: 10 }}>
-        {blockedStage ? `Blocked at: ${blockedStage.title}` : activeStage ? `Current step: ${activeStage.title}` : 'No step currently in progress'}
-      </p>
-    </button>
-  )
-}
-
 function StageDetail({ stage, timeline }: { stage: TimelineStage; timeline: RepairTimeline }) {
   return (
     <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
-      <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
+      <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p style={{ color: '#ffb4ab', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Selected step</p>
@@ -189,35 +148,34 @@ function StageDetail({ stage, timeline }: { stage: TimelineStage; timeline: Repa
           <Tag color={statusColors[stage.status]}>{statusLabels[stage.status]}</Tag>
         </div>
         <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 12 }}>{stage.description}</p>
-        <div className="mt-5 grid grid-cols-2 gap-3">
-          <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14 }}>
+        <div className="mt-4 grid grid-cols-2 gap-3">
+          <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 12 }}>
             <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Time</p>
-            <p style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 6 }}>{stage.time}</p>
+            <p style={{ color: 'white', fontSize: 16, fontWeight: 700, marginTop: 4 }}>{stage.time}</p>
           </div>
-          <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14 }}>
+          <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 12 }}>
             <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Owner</p>
-            <p style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 6 }}>{stage.owner}</p>
+            <p style={{ color: 'white', fontSize: 16, fontWeight: 700, marginTop: 4 }}>{stage.owner}</p>
           </div>
         </div>
       </Card>
 
-      <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Things to watch">
+      <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Things to watch">
         <div className="flex flex-col gap-3">
-          <div style={{ background: advisorPalette.panelAlt, borderRadius: 16, padding: 14 }}>
-            <p style={{ color: advisorPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Customer</p>
-            <p style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 6 }}>{timeline.customer}</p>
-            <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 2 }}>{timeline.vehicle} - {timeline.plate}</p>
+          <div style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 14, display: 'flex', gap: 10, justifyContent: 'space-between', padding: 12 }}>
+            <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Customer</span>
+            <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700, textAlign: 'right' }}>{timeline.customer} · {timeline.vehicle} - {timeline.plate}</span>
           </div>
-          <div style={{ background: advisorPalette.panelAlt, borderRadius: 16, padding: 14 }}>
-            <p style={{ color: advisorPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Evidence</p>
-            <p style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 600, marginTop: 6 }}>{stage.evidence}</p>
+          <div style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 14, display: 'flex', gap: 10, justifyContent: 'space-between', padding: 12 }}>
+            <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Evidence</span>
+            <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 600, textAlign: 'right' }}>{stage.evidence}</span>
           </div>
-          <div style={{ background: advisorPalette.panelAlt, borderRadius: 16, padding: 14 }}>
-            <p style={{ color: advisorPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Visible to customer</p>
-            <p style={{ alignItems: 'center', color: stage.customerVisible ? '#15803d' : advisorPalette.red, display: 'flex', fontWeight: 700, gap: 6, marginTop: 6 }}>
+          <div style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 14, display: 'flex', gap: 10, justifyContent: 'space-between', padding: 12 }}>
+            <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Visible to customer</span>
+            <span style={{ alignItems: 'center', color: stage.customerVisible ? '#15803d' : advisorPalette.red, display: 'flex', fontWeight: 700, fontSize: 13, gap: 6 }}>
               {stage.customerVisible ? <CheckCircleFilled /> : null}
-              {stage.customerVisible ? 'Yes, the customer can see this step' : 'No, shop-internal only'}
-            </p>
+              {stage.customerVisible ? 'Yes' : 'Internal only'}
+            </span>
           </div>
         </div>
       </Card>
@@ -290,7 +248,7 @@ export function RepairProgressTimelinePage() {
       ) : null}
 
       {!selectedTimeline || !selectedStage ? (
-        <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
+        <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
           <Empty description="No repair orders from the API to show a timeline for." />
         </Card>
       ) : (
@@ -302,15 +260,27 @@ export function RepairProgressTimelinePage() {
             <StatCard label="Steps visible to customer" palette={advisorPalette} value={`${customerVisibleStages}/${selectedTimeline.stages.length}`} />
           </div>
 
+          <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }}>
+            <div className="flex flex-wrap items-center gap-4">
+              <Select
+                onChange={selectTimeline}
+                options={timelines.map((timeline) => ({ label: `${timeline.id} — ${timeline.vehicle} (${timeline.plate})`, value: timeline.id }))}
+                style={{ minWidth: 320 }}
+                value={selectedTimeline.id}
+              />
+              <Tag color={priorityColors[selectedTimeline.priority]}>{priorityLabels[selectedTimeline.priority]}</Tag>
+              <Tag>{selectedTimeline.statusText}</Tag>
+              <div className="flex items-center gap-2" style={{ flex: '1 1 200px', minWidth: 160 }}>
+                <Progress percent={selectedTimeline.progress} showInfo={false} strokeColor={advisorPalette.red} style={{ flex: 1 }} />
+                <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>{selectedTimeline.progress}%</span>
+              </div>
+              <span style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 600 }}>Promised: {selectedTimeline.promisedAt}</span>
+            </div>
+          </Card>
+
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="flex flex-col gap-5">
-              <div className="grid gap-4 lg:grid-cols-3">
-                {timelines.map((timeline) => (
-                  <OrderCard active={timeline.id === selectedTimeline.id} key={timeline.id} onSelect={() => selectTimeline(timeline.id)} timeline={timeline} />
-                ))}
-              </div>
-
-              <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title={`${selectedTimeline.id} — progress steps`}>
+              <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title={`${selectedTimeline.id} — progress steps`}>
                 <Steps
                   current={selectedTimeline.stages.findIndex((stage) => stage.id === selectedStage.id)}
                   items={selectedTimeline.stages.map((stage) => ({
@@ -326,20 +296,22 @@ export function RepairProgressTimelinePage() {
                 />
               </Card>
 
-              <div className="grid gap-4 md:grid-cols-3">
-                <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
-                  <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Advisor</p>
-                  <p style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 8 }}>{selectedTimeline.advisor}</p>
-                </Card>
-                <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
-                  <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Technician</p>
-                  <p style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 8 }}>{selectedTimeline.technician}</p>
-                </Card>
-                <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
-                  <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Status</p>
-                  <p style={{ color: advisorPalette.red, fontSize: 16, fontWeight: 700, marginTop: 8 }}>{selectedTimeline.statusText}</p>
-                </Card>
-              </div>
+              <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }}>
+                <div className="flex flex-wrap gap-x-8 gap-y-3">
+                  <div>
+                    <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Advisor</p>
+                    <p style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 4 }}>{selectedTimeline.advisor}</p>
+                  </div>
+                  <div>
+                    <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Technician</p>
+                    <p style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 4 }}>{selectedTimeline.technician}</p>
+                  </div>
+                  <div>
+                    <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Status</p>
+                    <p style={{ color: advisorPalette.red, fontSize: 15, fontWeight: 700, marginTop: 4 }}>{selectedTimeline.statusText}</p>
+                  </div>
+                </div>
+              </Card>
             </div>
 
             <StageDetail stage={selectedStage} timeline={selectedTimeline} />
