@@ -1,4 +1,5 @@
 @import "./shared/config/theme.css";
+@import "tailwindcss/theme.css";
 @import "tailwindcss/utilities";
 
 :root {
