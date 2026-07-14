@@ -1,5 +1,6 @@
-import { CheckOutlined, ToolOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Input, Tag } from 'antd'
+import { CheckOutlined, SearchOutlined, ToolOutlined } from '@ant-design/icons'
+import { Button, Card, Input, Table, Tag } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import {
   fetchWorkshopRepairOrders,
@@ -85,6 +86,7 @@ export function QualityVerificationPage() {
   const [verdictByOrder, setVerdictByOrder] = useState<Record<string, 'passed' | 'rework'>>({})
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -125,6 +127,14 @@ export function QualityVerificationPage() {
   const awaitingCount = orders.filter((order) => !verdictByOrder[order.id]).length
   const passedCount = useMemo(() => Object.values(verdictByOrder).filter((verdict) => verdict === 'passed').length, [verdictByOrder])
 
+  const filteredOrders = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) return orders
+    return orders.filter((order) =>
+      `${order.code} ${order.vehicle} ${order.plate} ${order.technician}`.toLowerCase().includes(normalizedQuery),
+    )
+  }, [orders, query])
+
   function setResult(itemId: string, result: QualityCheckResult) {
     if (!selectedOrder) return
     setChecklistByOrder((current) => ({
@@ -162,6 +172,29 @@ export function QualityVerificationPage() {
     }
   }
 
+  const orderListColumns: ColumnsType<OrderView> = [
+    {
+      key: 'order',
+      render: (_, order) => {
+        const verdict = verdictByOrder[order.id]
+        return (
+          <div>
+            <div className="flex items-center justify-between gap-2">
+              <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{order.code}</span>
+              {verdict ? (
+                <Tag color={verdict === 'passed' ? 'green' : 'red'}>{verdict === 'passed' ? 'Passed' : 'Returned'}</Tag>
+              ) : (
+                <Tag color="gold">Awaiting QC</Tag>
+              )}
+            </div>
+            <p style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 6 }}>{order.vehicle}</p>
+            <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 2 }}>{order.plate} · {order.technician}</p>
+          </div>
+        )
+      },
+    },
+  ]
+
   return (
     <ServiceAdvisorShell title="Quality verification">
       {apiMessage ? (
@@ -176,41 +209,29 @@ export function QualityVerificationPage() {
         <StatCard label="Failed items" palette={advisorPalette} value={failCount} />
       </div>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid items-start gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
         <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title={`Completed orders (${orders.length})`}>
-          <div className="flex flex-col gap-3">
-            {orders.length ? (
-              orders.map((order) => {
-                const active = order.id === selectedOrder?.id
-                const verdict = verdictByOrder[order.id]
-                return (
-                  <button
-                    className="w-full rounded-[18px] p-4 text-left transition"
-                    key={order.id}
-                    onClick={() => setSelectedId(order.id)}
-                    style={{
-                      background: active ? advisorPalette.panelAlt : 'transparent',
-                      border: active ? `2px solid ${advisorPalette.red}` : `1px solid ${advisorPalette.border}`,
-                    }}
-                    type="button"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{order.code}</span>
-                      {verdict ? (
-                        <Tag color={verdict === 'passed' ? 'green' : 'red'}>{verdict === 'passed' ? 'Passed' : 'Returned'}</Tag>
-                      ) : (
-                        <Tag color="gold">Awaiting QC</Tag>
-                      )}
-                    </div>
-                    <p style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 8 }}>{order.vehicle}</p>
-                    <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 2 }}>{order.plate} · {order.technician}</p>
-                  </button>
-                )
-              })
-            ) : (
-              <Empty description="No orders awaiting quality check from the API." />
-            )}
-          </div>
+          <Input
+            allowClear
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Search order, vehicle, plate, or technician..."
+            prefix={<SearchOutlined />}
+            style={{ marginBottom: 16 }}
+            value={query}
+          />
+          <Table
+            columns={orderListColumns}
+            dataSource={filteredOrders}
+            locale={{ emptyText: 'No orders awaiting quality check from the API.' }}
+            onRow={(record) => ({
+              onClick: () => setSelectedId(record.id),
+              style: { background: record.id === selectedOrder?.id ? advisorPalette.panelAlt : undefined, cursor: 'pointer' },
+            })}
+            pagination={false}
+            rowKey="id"
+            showHeader={false}
+            size="small"
+          />
         </Card>
 
         {selectedOrder ? (
