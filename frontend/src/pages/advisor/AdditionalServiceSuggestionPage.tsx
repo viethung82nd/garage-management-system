@@ -1,6 +1,5 @@
-import { CheckOutlined, FileTextOutlined, PictureOutlined, SearchOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Input, Table, Tag } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+import { CheckOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons'
+import { Avatar, Button, Card, Select, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
@@ -128,7 +127,6 @@ export function AdditionalServiceSuggestionPage() {
   const [selectedId, setSelectedId] = useState('')
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
-  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -165,14 +163,6 @@ export function AdditionalServiceSuggestionPage() {
     [proposals],
   )
 
-  const filteredProposals = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    if (!normalizedQuery) return proposals
-    return proposals.filter((proposal) =>
-      `${proposal.serviceName} ${proposal.reason} ${proposal.affectedPart} ${proposal.technician}`.toLowerCase().includes(normalizedQuery),
-    )
-  }, [proposals, query])
-
   async function updateStatus(status: ProposalStatus) {
     if (!selectedProposal || !token) return
 
@@ -190,43 +180,6 @@ export function AdditionalServiceSuggestionPage() {
     }
   }
 
-  const proposalColumns: ColumnsType<ExtraServiceProposal> = [
-    {
-      key: 'proposal',
-      render: (_, proposal) => {
-        const total = proposal.laborCost + proposal.partsCost
-        return (
-          <div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Tag color={priorityColors[proposal.priority]}>{priorityLabels[proposal.priority]}</Tag>
-                  <Tag color={statusColors[proposal.status]}>{statusLabels[proposal.status]}</Tag>
-                </div>
-                <h3 style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 8 }}>{proposal.serviceName}</h3>
-                <p style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 600, marginTop: 4 }}>{proposal.reason}</p>
-              </div>
-              <div className="text-right">
-                <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Estimate</p>
-                <p style={{ color: advisorPalette.red, fontSize: 16, fontWeight: 700, marginTop: 6 }}>{formatMoney(total)}</p>
-              </div>
-            </div>
-            <div className="mt-3 flex flex-wrap gap-2" style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
-              <span style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 10, display: 'inline-flex', gap: 6, padding: '4px 10px' }}>
-                <Avatar size={16} style={{ background: advisorPalette.ink, fontSize: 8 }}>{getUserInitials(proposal.technician)}</Avatar>
-                {proposal.technician}
-              </span>
-              <span style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>+{proposal.estimateMinutes} min</span>
-              <span style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 10, display: 'inline-flex', gap: 4, padding: '4px 10px' }}>
-                <PictureOutlined /> {proposal.evidenceCount} photo(s)
-              </span>
-            </div>
-          </div>
-        )
-      },
-    },
-  ]
-
   return (
     <ServiceAdvisorShell title="Additional service proposals">
       {apiMessage ? (
@@ -241,40 +194,42 @@ export function AdditionalServiceSuggestionPage() {
         <StatCard label="Pending value" palette={advisorPalette} value={formatMoney(totalPendingValue)} />
       </div>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="flex flex-col gap-4">
-          <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Proposals from technicians">
-            <Input
-              allowClear
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search service, reason, part, or technician..."
-              prefix={<SearchOutlined />}
-              style={{ marginBottom: 16 }}
-              value={query}
+      <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }} title="Proposals from technicians">
+        {proposals.length ? (
+          <>
+            <Select
+              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              onChange={setSelectedId}
+              options={proposals.map((proposal) => ({ label: `${proposal.serviceName} — ${proposal.reason}`, value: proposal.id }))}
+              showSearch
+              style={{ width: '100%' }}
+              value={selectedProposal?.id}
             />
-            <Table
-              columns={proposalColumns}
-              dataSource={filteredProposals}
-              locale={{ emptyText: 'No additional service proposals from the API yet.' }}
-              onRow={(record) => ({
-                onClick: () => setSelectedId(record.id),
-                style: { background: record.id === selectedProposal?.id ? advisorPalette.panelAlt : undefined, cursor: 'pointer' },
-              })}
-              pagination={false}
-              rowKey="id"
-              showHeader={false}
-            />
-          </Card>
-        </div>
-
-        {selectedProposal ? (
-          <ProposalDetail disabled={saving} onStatusChange={updateStatus} proposal={selectedProposal} />
+            {selectedProposal ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <Tag color={priorityColors[selectedProposal.priority]}>{priorityLabels[selectedProposal.priority]}</Tag>
+                <Tag color={statusColors[selectedProposal.status]}>{statusLabels[selectedProposal.status]}</Tag>
+                <span style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 10, display: 'inline-flex', fontSize: 13, fontWeight: 600, gap: 6, padding: '4px 10px' }}>
+                  <Avatar size={18} style={{ background: advisorPalette.ink, fontSize: 9 }}>{getUserInitials(selectedProposal.technician)}</Avatar>
+                  {selectedProposal.technician}
+                </span>
+                <span style={{ background: advisorPalette.panelAlt, borderRadius: 10, fontSize: 13, fontWeight: 600, padding: '4px 10px' }}>+{selectedProposal.estimateMinutes} min</span>
+                <span style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 10, display: 'inline-flex', fontSize: 13, fontWeight: 600, gap: 4, padding: '4px 10px' }}>
+                  <PictureOutlined /> {selectedProposal.evidenceCount} photo(s)
+                </span>
+              </div>
+            ) : null}
+          </>
         ) : (
-          <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
-            Select a proposal to review it.
-          </Card>
+          <span style={{ color: advisorPalette.textMuted }}>No additional service proposals from the API yet.</span>
         )}
-      </div>
+      </Card>
+
+      {selectedProposal ? (
+        <div style={{ maxWidth: 480 }}>
+          <ProposalDetail disabled={saving} onStatusChange={updateStatus} proposal={selectedProposal} />
+        </div>
+      ) : null}
     </ServiceAdvisorShell>
   )
 }

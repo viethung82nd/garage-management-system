@@ -1,6 +1,5 @@
-import { CheckOutlined, SearchOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Empty, Input, Select, Table, Tag } from 'antd'
-import type { ColumnsType } from 'antd/es/table'
+import { CheckOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Avatar, Button, Card, Empty, Input, Select, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { getUserInitials, useAuth } from '../../shared/auth'
 import {
@@ -109,7 +108,6 @@ export function TechnicianWorkOrdersPage() {
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [requestingTransfer, setRequestingTransfer] = useState(false)
-  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -148,12 +146,6 @@ export function TechnicianWorkOrdersPage() {
   const totalMinutes = orders.reduce((sum, order) => sum + order.duration, 0)
   const completedCount = orders.filter((order) => order.status === 'completed').length
   const inProgressCount = orders.filter((order) => order.status === 'in-progress').length
-
-  const filteredOrders = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    if (!normalizedQuery) return orders
-    return orders.filter((order) => `${order.id} ${order.vehicle} ${order.plate} ${order.customer} ${order.service}`.toLowerCase().includes(normalizedQuery))
-  }, [orders, query])
 
   const scheduledSlots = useMemo(
     () => timeBlocks.flatMap((slot) => {
@@ -208,39 +200,6 @@ export function TechnicianWorkOrdersPage() {
     }
   }
 
-  const orderColumns: ColumnsType<WorkOrder> = [
-    {
-      key: 'order',
-      render: (_, order) => (
-        <div>
-          <div className="flex items-start justify-between gap-4">
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <Tag color={priorityColors[order.priority]}>{priorityLabels[order.priority]}</Tag>
-                <Tag color={statusColors[order.status]}>{statusLabels[order.status]}</Tag>
-              </div>
-              <h3 style={{ color: technicianPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 8 }}>{order.vehicle}</h3>
-              <p style={{ color: technicianPalette.red, fontSize: 12, fontWeight: 700, marginTop: 4 }}>{order.id} - {order.plate}</p>
-            </div>
-            <div className="text-right">
-              <p style={{ color: technicianPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Start</p>
-              <p style={{ color: technicianPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 6 }}>{order.start}</p>
-            </div>
-          </div>
-          <p style={{ color: technicianPalette.ink, fontSize: 13, fontWeight: 600, marginTop: 10 }}>{order.service}</p>
-          <div className="mt-2 flex flex-wrap items-center gap-2" style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
-            <span style={{ alignItems: 'center', background: technicianPalette.panelAlt, borderRadius: 10, display: 'inline-flex', gap: 6, padding: '4px 10px' }}>
-              <Avatar size={16} style={{ background: technicianPalette.ink, fontSize: 8 }}>{getUserInitials(order.customer)}</Avatar>
-              {order.customer}
-            </span>
-            <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>{order.duration} min</span>
-            <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>{order.bay}</span>
-          </div>
-        </div>
-      ),
-    },
-  ]
-
   return (
     <TechnicianShell eyebrow="Technician Workspace" title="My work orders">
       {apiMessage ? (
@@ -282,26 +241,31 @@ export function TechnicianWorkOrdersPage() {
           </Card>
 
           <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Assigned orders">
-            <Input
-              allowClear
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="Search order, vehicle, plate, or customer..."
-              prefix={<SearchOutlined />}
-              style={{ marginBottom: 16 }}
-              value={query}
-            />
-            <Table
-              columns={orderColumns}
-              dataSource={filteredOrders}
-              locale={{ emptyText: 'No orders assigned from the API yet.' }}
-              onRow={(record) => ({
-                onClick: () => setSelectedOrderId(record.id),
-                style: { background: record.id === selectedOrder.id ? technicianPalette.panelAlt : undefined, cursor: 'pointer' },
-              })}
-              pagination={false}
-              rowKey="id"
-              showHeader={false}
-            />
+            {orders.length ? (
+              <>
+                <Select
+                  filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                  onChange={setSelectedOrderId}
+                  options={orders.map((order) => ({ label: `${order.id} — ${order.vehicle} (${order.plate})`, value: order.id }))}
+                  showSearch
+                  style={{ width: '100%' }}
+                  value={selectedOrder.id || undefined}
+                />
+                <div className="flex flex-wrap items-center gap-2" style={{ marginTop: 16 }}>
+                  <Tag color={priorityColors[selectedOrder.priority]}>{priorityLabels[selectedOrder.priority]}</Tag>
+                  <Tag color={statusColors[selectedOrder.status]}>{statusLabels[selectedOrder.status]}</Tag>
+                  <span style={{ alignItems: 'center', background: technicianPalette.panelAlt, borderRadius: 10, display: 'inline-flex', fontSize: 12, fontWeight: 600, gap: 6, padding: '4px 10px' }}>
+                    <Avatar size={16} style={{ background: technicianPalette.ink, fontSize: 8 }}>{getUserInitials(selectedOrder.customer)}</Avatar>
+                    {selectedOrder.customer}
+                  </span>
+                  <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, fontSize: 12, fontWeight: 600, padding: '4px 10px' }}>{selectedOrder.duration} min</span>
+                  <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, fontSize: 12, fontWeight: 600, padding: '4px 10px' }}>{selectedOrder.bay}</span>
+                </div>
+                <p style={{ color: technicianPalette.ink, fontSize: 14, fontWeight: 600, marginTop: 12 }}>{selectedOrder.service}</p>
+              </>
+            ) : (
+              <Empty description="No orders assigned from the API yet." />
+            )}
           </Card>
         </div>
 

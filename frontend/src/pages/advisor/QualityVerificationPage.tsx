@@ -1,5 +1,5 @@
-import { CheckOutlined, SearchOutlined, ToolOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Input, Table, Tag } from 'antd'
+import { CheckOutlined, ToolOutlined } from '@ant-design/icons'
+import { Avatar, Button, Card, Input, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -89,7 +89,6 @@ export function QualityVerificationPage() {
   const [verdictByOrder, setVerdictByOrder] = useState<Record<string, 'passed' | 'rework'>>({})
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
-  const [query, setQuery] = useState('')
   const [evidenceReports, setEvidenceReports] = useState<ApiInspectionReport[]>([])
 
   useEffect(() => {
@@ -157,14 +156,6 @@ export function QualityVerificationPage() {
   const awaitingCount = orders.filter((order) => !verdictByOrder[order.id]).length
   const passedCount = useMemo(() => Object.values(verdictByOrder).filter((verdict) => verdict === 'passed').length, [verdictByOrder])
 
-  const filteredOrders = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase()
-    if (!normalizedQuery) return orders
-    return orders.filter((order) =>
-      `${order.code} ${order.vehicle} ${order.plate} ${order.technician}`.toLowerCase().includes(normalizedQuery),
-    )
-  }, [orders, query])
-
   function setResult(itemId: string, result: QualityCheckResult) {
     if (!selectedOrder) return
     setChecklistByOrder((current) => ({
@@ -201,32 +192,6 @@ export function QualityVerificationPage() {
       setSaving(false)
     }
   }
-
-  const orderListColumns: ColumnsType<OrderView> = [
-    {
-      key: 'order',
-      render: (_, order) => {
-        const verdict = verdictByOrder[order.id]
-        return (
-          <div>
-            <div className="flex items-center justify-between gap-2">
-              <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{order.code}</span>
-              {verdict ? (
-                <Tag color={verdict === 'passed' ? 'green' : 'red'}>{verdict === 'passed' ? 'Passed' : 'Returned'}</Tag>
-              ) : (
-                <Tag color="gold">Awaiting QC</Tag>
-              )}
-            </div>
-            <p style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 6 }}>{order.vehicle}</p>
-            <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
-              <Avatar size={20} style={{ background: advisorPalette.ink, fontSize: 10 }}>{getUserInitials(order.technician)}</Avatar>
-              <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>{order.plate} · {order.technician}</span>
-            </div>
-          </div>
-        )
-      },
-    },
-  ]
 
   const checklistColumns: ColumnsType<CheckItem> = [
     {
@@ -274,32 +239,37 @@ export function QualityVerificationPage() {
         <StatCard label="Failed items" palette={advisorPalette} value={failCount} />
       </div>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[380px_minmax(0,1fr)]">
-        <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title={`Completed orders (${orders.length})`}>
-          <Input
-            allowClear
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="Search order, vehicle, plate, or technician..."
-            prefix={<SearchOutlined />}
-            style={{ marginBottom: 16 }}
-            value={query}
-          />
-          <Table
-            columns={orderListColumns}
-            dataSource={filteredOrders}
-            locale={{ emptyText: 'No orders awaiting quality check from the API.' }}
-            onRow={(record) => ({
-              onClick: () => setSelectedId(record.id),
-              style: { background: record.id === selectedOrder?.id ? advisorPalette.panelAlt : undefined, cursor: 'pointer' },
-            })}
-            pagination={false}
-            rowKey="id"
-            showHeader={false}
-            size="small"
-          />
-        </Card>
+      <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }}>
+        {orders.length ? (
+          <>
+            <Select
+              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+              onChange={setSelectedId}
+              options={orders.map((order) => ({ label: `${order.code} — ${order.vehicle} (${order.plate})`, value: order.id }))}
+              showSearch
+              style={{ width: '100%' }}
+              value={selectedOrder?.id}
+            />
+            {selectedOrder ? (
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                {verdictByOrder[selectedOrder.id] ? (
+                  <Tag color={verdictByOrder[selectedOrder.id] === 'passed' ? 'green' : 'red'}>{verdictByOrder[selectedOrder.id] === 'passed' ? 'Passed' : 'Returned'}</Tag>
+                ) : (
+                  <Tag color="gold">Awaiting QC</Tag>
+                )}
+                <span style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 10, display: 'inline-flex', fontSize: 13, fontWeight: 600, gap: 6, padding: '4px 10px' }}>
+                  <Avatar size={18} style={{ background: advisorPalette.ink, fontSize: 9 }}>{getUserInitials(selectedOrder.technician)}</Avatar>
+                  {selectedOrder.technician}
+                </span>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <span style={{ color: advisorPalette.textMuted }}>No orders awaiting quality check from the API.</span>
+        )}
+      </Card>
 
-        {selectedOrder ? (
+      {selectedOrder ? (
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-5">
               <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
@@ -394,7 +364,6 @@ export function QualityVerificationPage() {
             Select a work order to verify.
           </Card>
         )}
-      </div>
     </ServiceAdvisorShell>
   )
 }
