@@ -14,6 +14,7 @@ import {
   vehiclePlate,
   type ApiRepairOrder,
 } from '../../shared/api/workshop'
+import { StatCard } from '../../widgets/backoffice-shell'
 import { TechnicianShell, technicianPalette } from '../../widgets/technician-shell'
 
 const { TextArea } = Input
@@ -295,18 +296,9 @@ export function TechnicianRepairNotesPage() {
       ) : null}
 
       <div className="flex flex-wrap items-center gap-4">
-        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
-          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Steps done</p>
-          <p style={{ color: technicianPalette.ink, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{completedCount}/{steps.length}</p>
-        </Card>
-        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
-          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>In progress</p>
-          <p style={{ color: technicianPalette.ink, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{String(activeCount).padStart(2, '0')}</p>
-        </Card>
-        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
-          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Order progress</p>
-          <p style={{ color: technicianPalette.red, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{progress}%</p>
-        </Card>
+        <StatCard label="Steps done" palette={technicianPalette} value={`${completedCount}/${steps.length}`} />
+        <StatCard label="In progress" palette={technicianPalette} value={String(activeCount).padStart(2, '0')} />
+        <StatCard label="Order progress" palette={technicianPalette} value={`${progress}%`} />
         <Link to="/technician/work-orders" style={{ color: technicianPalette.textMuted, fontSize: 13, fontWeight: 700 }}>
           ← Back to work orders
         </Link>

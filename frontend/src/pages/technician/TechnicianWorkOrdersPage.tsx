@@ -15,6 +15,7 @@ import {
   type ApiRepairOrder,
   type ApiTechnician,
 } from '../../shared/api/workshop'
+import { StatCard } from '../../widgets/backoffice-shell'
 import { TechnicianShell, technicianPalette } from '../../widgets/technician-shell'
 
 type WorkOrderStatus = 'assigned' | 'in-progress' | 'paused' | 'completed'
@@ -237,22 +238,10 @@ export function TechnicianWorkOrdersPage() {
       ) : null}
 
       <div className="flex flex-wrap gap-4">
-        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
-          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Assigned</p>
-          <p style={{ color: technicianPalette.ink, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{String(orders.length).padStart(2, '0')}</p>
-        </Card>
-        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
-          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>In progress</p>
-          <p style={{ color: technicianPalette.ink, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{String(inProgressCount).padStart(2, '0')}</p>
-        </Card>
-        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
-          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Completed</p>
-          <p style={{ color: technicianPalette.ink, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{String(completedCount).padStart(2, '0')}</p>
-        </Card>
-        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
-          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Total duration</p>
-          <p style={{ color: technicianPalette.ink, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{`${Math.round(totalMinutes / 60)}h${totalMinutes % 60 ? ` ${totalMinutes % 60}m` : ''}`}</p>
-        </Card>
+        <StatCard label="Assigned" palette={technicianPalette} value={String(orders.length).padStart(2, '0')} />
+        <StatCard label="In progress" palette={technicianPalette} value={String(inProgressCount).padStart(2, '0')} />
+        <StatCard label="Completed" palette={technicianPalette} value={String(completedCount).padStart(2, '0')} />
+        <StatCard label="Total duration" palette={technicianPalette} value={`${Math.round(totalMinutes / 60)}h${totalMinutes % 60 ? ` ${totalMinutes % 60}m` : ''}`} />
       </div>
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
