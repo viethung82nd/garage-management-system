@@ -1,8 +1,17 @@
 import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
-import { Avatar, Badge, Button, Menu, Space, Typography } from 'antd'
+import { Avatar, Badge, Button, Empty, List, Menu, Popover, Space, Typography } from 'antd'
 import type { MenuProps } from 'antd'
-import { useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
+import {
+  fetchNotifications,
+  fetchUnreadNotificationCount,
+  markAllNotificationsRead,
+  type ApiNotification,
+} from '../../../shared/api/notifications'
+import { useAuth } from '../../../shared/auth'
 import type { BackOfficePalette } from '../model/palettes'
+
+const NOTIFICATION_POLL_INTERVAL_MS = 30000
 
 const { Title } = Typography
 const KAPA_LOGO_URL = '/kapa-auth/wp-content/uploads/2023/01/Kapa_Logo-1.svg'
@@ -42,8 +51,53 @@ export function BackOfficeShell({
   selectedMenuKeys: string[]
   children: ReactNode
 }) {
+  const { token } = useAuth()
   const [collapsed, setCollapsed] = useState(false)
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [recentNotifications, setRecentNotifications] = useState<ApiNotification[]>([])
   const sidebarWidth = collapsed ? 76 : 288
+
+  useEffect(() => {
+    if (!token) return
+    const authToken = token
+    let cancelled = false
+
+    async function poll() {
+      try {
+        const response = await fetchUnreadNotificationCount(authToken)
+        if (!cancelled) setUnreadCount(response.count)
+      } catch {
+        // Best-effort — retried on the next interval.
+      }
+    }
+
+    void poll()
+    const intervalId = window.setInterval(() => {
+      void poll()
+    }, NOTIFICATION_POLL_INTERVAL_MS)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(intervalId)
+    }
+  }, [token])
+
+  async function loadRecentNotifications() {
+    if (!token) return
+    try {
+      const response = await fetchNotifications(token, '?limit=10')
+      setRecentNotifications(response.notifications)
+    } catch {
+      // Best-effort — the dropdown just stays empty.
+    }
+  }
+
+  async function handleMarkAllRead() {
+    if (!token) return
+    await markAllNotificationsRead(token)
+    setUnreadCount(0)
+    setRecentNotifications((current) => current.map((item) => ({ ...item, isRead: true })))
+  }
 
   return (
     <div
@@ -115,9 +169,40 @@ export function BackOfficeShell({
             </div>
 
             <Space size="middle">
-              <Badge dot offset={[-4, 8]}>
-                <Button shape="circle" icon={notificationIcon} />
-              </Badge>
+              <Popover
+                content={
+                  <div style={{ width: 320 }}>
+                    <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
+                      <span style={{ color: palette.ink, fontWeight: 700 }}>Notifications</span>
+                      <Button onClick={handleMarkAllRead} size="small" type="link">
+                        Mark all read
+                      </Button>
+                    </div>
+                    <List
+                      dataSource={recentNotifications}
+                      locale={{ emptyText: <Empty description="No notifications yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+                      renderItem={(item) => (
+                        <List.Item key={item._id} style={{ opacity: item.isRead ? 0.55 : 1, padding: '8px 0' }}>
+                          <div>
+                            <div style={{ color: palette.ink, fontSize: 13, fontWeight: 600 }}>{item.title}</div>
+                            {item.message ? <div style={{ color: palette.textMuted, fontSize: 12, marginTop: 2 }}>{item.message}</div> : null}
+                          </div>
+                        </List.Item>
+                      )}
+                      style={{ maxHeight: 360, overflowY: 'auto' }}
+                    />
+                  </div>
+                }
+                onOpenChange={(open) => {
+                  if (open) void loadRecentNotifications()
+                }}
+                placement="bottomRight"
+                trigger="click"
+              >
+                <Badge count={unreadCount} offset={[-4, 8]}>
+                  <Button shape="circle" icon={notificationIcon} />
+                </Badge>
+              </Popover>
               <Space size="middle" className="rounded-full border px-3 py-2" style={{ borderColor: palette.border, background: palette.panel }}>
                 <Avatar style={{ background: profileAccent, color: '#fff' }}>{profileInitial}</Avatar>
                 <div className="leading-tight">
