@@ -1,6 +1,7 @@
-import { RepairOrderModel, ServiceQuoteModel } from "../models/index.js";
+import { RepairOrderModel, ServiceQuoteModel, UserModel } from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
 import { createNotification } from "../utils/notify.js";
+import { sendEmail } from "../utils/mailer.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 
@@ -85,15 +86,37 @@ export async function sendQuotation(req, res) {
   quote.status = "sent";
   await quote.save();
 
+  // customerId is only set when repairOrderId (a free-text field in the SA
+  // form) happened to resolve to a real repair order at creation time — fall
+  // back to matching the customer by phone, the same de-dup key
+  // resolveCustomer() uses for walk-ins/bookings.
+  let customer = null;
   if (quote.customerId) {
+    customer = await UserModel.findById(quote.customerId);
+  } else if (quote.customerPhone) {
+    customer = await UserModel.findOne({
+      phone: quote.customerPhone,
+      role: { $in: ["onlineCustomer", "walkInCustomer"] },
+    });
+  }
+
+  if (customer) {
     await createNotification({
-      userId: quote.customerId,
+      userId: customer._id,
       type: "quotationSent",
-      title: "Báo giá sửa chữa mới",
-      message: `${quote.vehicleName || "Xe của bạn"} có báo giá mới, vui lòng xem chi tiết.`,
+      title: "New repair quote",
+      message: `Your quote for ${quote.vehicleName || "your vehicle"} is ready to review.`,
       refId: quote.repairOrderId,
       refModel: quote.repairOrderId ? "RepairOrder" : undefined,
     });
+
+    if (customer.email) {
+      await sendEmail({
+        to: customer.email,
+        subject: `Your repair quote ${quote.code} is ready`,
+        html: `<p>Hi ${customer.fullName || "there"},</p><p>Your quote for <strong>${quote.vehicleName || "your vehicle"}</strong> (${quote.vehiclePlate || ""}) is ready — total estimate <strong>${quote.totalEstimate?.toLocaleString("vi-VN")} ₫</strong>.</p><p>Please log in to your account to review and approve it.</p>`,
+      });
+    }
   }
 
   res.json(quote);
