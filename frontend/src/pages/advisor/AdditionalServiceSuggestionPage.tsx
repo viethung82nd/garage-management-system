@@ -1,5 +1,6 @@
-import { CheckOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Tag } from 'antd'
+import { CheckOutlined, FileTextOutlined, PictureOutlined, SearchOutlined } from '@ant-design/icons'
+import { Button, Card, Input, Table, Tag } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
@@ -70,52 +71,6 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
 }
 
-function ProposalCard({ active, onSelect, proposal }: { active: boolean; onSelect: () => void; proposal: ExtraServiceProposal }) {
-  const total = proposal.laborCost + proposal.partsCost
-
-  return (
-    <button
-      className="w-full rounded-[24px] p-5 text-left transition"
-      onClick={onSelect}
-      style={{
-        background: active ? advisorPalette.panelAlt : advisorPalette.panel,
-        border: active ? `2px solid ${advisorPalette.red}` : `1px solid ${advisorPalette.border}`,
-        boxShadow: advisorPalette.shadow,
-      }}
-      type="button"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Tag color={priorityColors[proposal.priority]}>{priorityLabels[proposal.priority]}</Tag>
-            <Tag color={statusColors[proposal.status]}>{statusLabels[proposal.status]}</Tag>
-          </div>
-          <h3 style={{ color: advisorPalette.ink, fontSize: 18, fontWeight: 700, marginTop: 12 }}>{proposal.serviceName}</h3>
-          <p style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 600, marginTop: 6 }}>{proposal.reason}</p>
-        </div>
-        <div className="text-right">
-          <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Estimate</p>
-          <p style={{ color: advisorPalette.red, fontSize: 18, fontWeight: 700, marginTop: 6 }}>{formatMoney(total)}</p>
-        </div>
-      </div>
-      <div className="mt-4 grid gap-3 sm:grid-cols-3">
-        <div style={{ background: advisorPalette.panelAlt, borderRadius: 14, padding: 12 }}>
-          <p style={{ color: advisorPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Suggested by</p>
-          <p style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700, marginTop: 4 }}>{proposal.technician}</p>
-        </div>
-        <div style={{ background: advisorPalette.panelAlt, borderRadius: 14, padding: 12 }}>
-          <p style={{ color: advisorPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Extra time</p>
-          <p style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700, marginTop: 4 }}>+{proposal.estimateMinutes} min</p>
-        </div>
-        <div style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 14, display: 'flex', gap: 6, padding: 12 }}>
-          <PictureOutlined style={{ color: advisorPalette.textMuted }} />
-          <p style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>{proposal.evidenceCount} photo(s)</p>
-        </div>
-      </div>
-    </button>
-  )
-}
-
 function ProposalDetail({ disabled, onStatusChange, proposal }: { disabled: boolean; onStatusChange: (status: ProposalStatus) => void; proposal: ExtraServiceProposal }) {
   const total = proposal.laborCost + proposal.partsCost
 
@@ -173,6 +128,7 @@ export function AdditionalServiceSuggestionPage() {
   const [selectedId, setSelectedId] = useState('')
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -209,6 +165,14 @@ export function AdditionalServiceSuggestionPage() {
     [proposals],
   )
 
+  const filteredProposals = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) return proposals
+    return proposals.filter((proposal) =>
+      `${proposal.serviceName} ${proposal.reason} ${proposal.affectedPart} ${proposal.technician}`.toLowerCase().includes(normalizedQuery),
+    )
+  }, [proposals, query])
+
   async function updateStatus(status: ProposalStatus) {
     if (!selectedProposal || !token) return
 
@@ -225,6 +189,40 @@ export function AdditionalServiceSuggestionPage() {
       setSaving(false)
     }
   }
+
+  const proposalColumns: ColumnsType<ExtraServiceProposal> = [
+    {
+      key: 'proposal',
+      render: (_, proposal) => {
+        const total = proposal.laborCost + proposal.partsCost
+        return (
+          <div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Tag color={priorityColors[proposal.priority]}>{priorityLabels[proposal.priority]}</Tag>
+                  <Tag color={statusColors[proposal.status]}>{statusLabels[proposal.status]}</Tag>
+                </div>
+                <h3 style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 8 }}>{proposal.serviceName}</h3>
+                <p style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 600, marginTop: 4 }}>{proposal.reason}</p>
+              </div>
+              <div className="text-right">
+                <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Estimate</p>
+                <p style={{ color: advisorPalette.red, fontSize: 16, fontWeight: 700, marginTop: 6 }}>{formatMoney(total)}</p>
+              </div>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2" style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
+              <span style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>By: {proposal.technician}</span>
+              <span style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>+{proposal.estimateMinutes} min</span>
+              <span style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 10, display: 'inline-flex', gap: 4, padding: '4px 10px' }}>
+                <PictureOutlined /> {proposal.evidenceCount} photo(s)
+              </span>
+            </div>
+          </div>
+        )
+      },
+    },
+  ]
 
   return (
     <ServiceAdvisorShell title="Additional service proposals">
@@ -243,15 +241,26 @@ export function AdditionalServiceSuggestionPage() {
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-4">
           <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Proposals from technicians">
-            <div className="flex flex-col gap-4">
-              {proposals.length ? (
-                proposals.map((proposal) => (
-                  <ProposalCard active={proposal.id === selectedProposal?.id} key={proposal.id} onSelect={() => setSelectedId(proposal.id)} proposal={proposal} />
-                ))
-              ) : (
-                <Empty description="No additional service proposals from the API yet." />
-              )}
-            </div>
+            <Input
+              allowClear
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search service, reason, part, or technician..."
+              prefix={<SearchOutlined />}
+              style={{ marginBottom: 16 }}
+              value={query}
+            />
+            <Table
+              columns={proposalColumns}
+              dataSource={filteredProposals}
+              locale={{ emptyText: 'No additional service proposals from the API yet.' }}
+              onRow={(record) => ({
+                onClick: () => setSelectedId(record.id),
+                style: { background: record.id === selectedProposal?.id ? advisorPalette.panelAlt : undefined, cursor: 'pointer' },
+              })}
+              pagination={false}
+              rowKey="id"
+              showHeader={false}
+            />
           </Card>
         </div>
 
