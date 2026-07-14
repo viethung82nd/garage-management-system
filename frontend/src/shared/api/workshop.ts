@@ -288,6 +288,38 @@ export function createInspectionReport(token: string, payload: CreateInspectionR
   return apiRequest('/api/inspection-reports', { method: 'POST', token, body: formData })
 }
 
+export type ApiInspectionReport = {
+  _id?: string
+  id?: string
+  bookingId?: string
+  repairOrderId?: string
+  vehicleId?: string
+  findings?: string
+  estimatedCost?: number
+  odometer?: number
+  fuelLevel?: string
+  items?: ApiInspectionItem[]
+  photos?: string[]
+  status?: 'pending' | 'completed'
+  inspectedAt?: string
+}
+
+export function fetchInspectionReports(token: string, query = '') {
+  return apiRequest<{ inspectionReports?: ApiInspectionReport[] } | ApiInspectionReport[]>(`/api/inspection-reports${query}`, { token })
+}
+
+export type ApiServiceCategory = {
+  _id?: string
+  id?: string
+  name?: string
+  description?: string
+  imageUrl?: string
+}
+
+export function fetchServiceCategories() {
+  return apiRequest<{ categories?: ApiServiceCategory[] } | ApiServiceCategory[]>('/api/services/categories')
+}
+
 export function createQuotation(token: string, payload: ApiQuotation) {
   return apiRequest<{ quotation?: ApiQuotation } | ApiQuotation>('/api/quotations', {
     method: 'POST',
