@@ -6,7 +6,6 @@ import {
   FieldTimeOutlined,
   FileTextOutlined,
   PlusCircleOutlined,
-  TeamOutlined,
   ToolOutlined,
 } from '@ant-design/icons'
 import type { ReactNode } from 'react'
@@ -24,7 +23,6 @@ function activeMenuKey(pathname: string) {
   if (pathname.startsWith('/advisor/additional-services')) return 'additional-services'
   if (pathname.startsWith('/advisor/quality-check')) return 'quality-check'
   if (pathname.startsWith('/advisor/repair-timeline')) return 'repair-timeline'
-  if (pathname.startsWith('/advisor/technician-schedule')) return 'technician-schedule'
   return 'dashboard'
 }
 
@@ -59,7 +57,6 @@ export function ServiceAdvisorShell({ title, eyebrow = 'Service Advisor', childr
         { key: 'additional-services', icon: <PlusCircleOutlined />, label: <Link to="/advisor/additional-services">Additional services</Link> },
         { key: 'quality-check', icon: <CheckCircleOutlined />, label: <Link to="/advisor/quality-check">Quality check</Link> },
         { key: 'repair-timeline', icon: <FieldTimeOutlined />, label: <Link to="/advisor/repair-timeline">Repair timeline</Link> },
-        { key: 'technician-schedule', icon: <TeamOutlined />, label: <Link to="/advisor/technician-schedule">Technician schedule</Link> },
       ]}
     >
       {children}
