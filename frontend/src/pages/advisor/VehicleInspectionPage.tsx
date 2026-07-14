@@ -188,9 +188,11 @@ export function VehicleInspectionPage() {
           <div style={{ minWidth: 340 }}>
             <div style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>Booking or repair order</div>
             <Select
+              filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
               onChange={setSubjectKey}
               options={subjectOptions.map((option) => ({ label: option.label, value: option.value }))}
               placeholder="Select a confirmed booking or an open repair order..."
+              showSearch
               style={{ width: '100%' }}
               value={subjectKey || undefined}
             />
