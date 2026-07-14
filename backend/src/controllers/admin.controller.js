@@ -267,9 +267,25 @@ export async function getTechnicianPerformance(req, res) {
  * GET /api/admin/users — list users for admin account management. Optional
  * `role` query filters to a single role (validated against USER_ROLES). Returns
  * a lean projection without passwordHash, newest first.
+ *
+ * Technicians are also allowed to call this (to pick a peer when requesting a
+ * task transfer), but only ever see the technician list — the role filter is
+ * forced regardless of the query string, so a technician can't enumerate
+ * admins/customers through this endpoint.
  */
 export async function listUsers(req, res) {
   const { role } = req.query;
+
+  if (req.user?.role === "technician") {
+    const users = await UserModel.find(
+      { role: "technician" },
+      USER_LIST_FIELDS
+    )
+      .sort({ createdAt: -1 })
+      .lean();
+    res.json({ users });
+    return;
+  }
 
   const filter = {};
   if (role !== undefined) {

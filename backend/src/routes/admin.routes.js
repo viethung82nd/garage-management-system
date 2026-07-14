@@ -12,11 +12,13 @@ import {
 export const adminRouter = Router();
 
 // User account management: admins manage accounts; service advisors also read
-// the list to staff repair orders (e.g. assigning a technician).
+// the list to staff repair orders (e.g. assigning a technician); technicians
+// may call this too but only ever get the technician list back (enforced in
+// the controller) — needed to pick a peer when requesting a task transfer.
 adminRouter.get(
   "/users",
   requireAuth,
-  requireRole("admin", "serviceAdvisor"),
+  requireRole("admin", "serviceAdvisor", "technician"),
   asyncHandler(listUsers)
 );
 adminRouter.patch(
