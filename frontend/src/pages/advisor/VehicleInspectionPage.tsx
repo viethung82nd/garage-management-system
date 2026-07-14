@@ -1,9 +1,11 @@
 import { CheckCircleFilled, PlusOutlined, UploadOutlined } from '@ant-design/icons'
-import { Button, Card, Input, Select, Tag, Upload } from 'antd'
+import { Button, Card, Input, InputNumber, Select, Table, Tag, Upload } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { useEffect, useMemo, useState } from 'react'
 import {
   createInspectionReport,
+  fetchInspectionReports,
   fetchWorkshopBookings,
   fetchWorkshopRepairOrders,
   orderId,
@@ -13,9 +15,11 @@ import {
   vehiclePlate,
   type ApiBooking,
   type ApiInspectionItem,
+  type ApiInspectionReport,
   type ApiRepairOrder,
   type InspectionItemStatus,
 } from '../../shared/api/workshop'
+import { resolveApiAssetUrl } from '../../shared/lib/api-client'
 import { useAuth } from '../../shared/auth'
 import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
@@ -66,7 +70,7 @@ function seedItems(): InspectionItemRow[] {
   )
 }
 
-type SubjectOption = { label: string; value: string; kind: 'booking' | 'repairOrder' }
+type SubjectOption = { label: string; value: string; kind: 'booking' | 'repairOrder'; vehicleId?: string }
 
 export function VehicleInspectionPage() {
   const { token } = useAuth()
@@ -78,6 +82,7 @@ export function VehicleInspectionPage() {
   const [fuelLevel, setFuelLevel] = useState('1/2')
   const [findings, setFindings] = useState('')
   const [photoFiles, setPhotoFiles] = useState<UploadFile[]>([])
+  const [priorReports, setPriorReports] = useState<ApiInspectionReport[]>([])
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [submitted, setSubmitted] = useState(false)
@@ -109,20 +114,54 @@ export function VehicleInspectionPage() {
   }, [token])
 
   const subjectOptions: SubjectOption[] = useMemo(() => {
-    const bookingOptions = bookings.map((booking) => ({
-      kind: 'booking' as const,
-      label: `${personName(booking.customerId || booking.customer, 'Customer')} — ${vehicleName(booking.vehicleId || booking.vehicle)} (${vehiclePlate(booking.vehicleId || booking.vehicle)}) · booking`,
-      value: `booking:${booking._id || booking.id}`,
-    }))
-    const orderOptions = repairOrders.map((order) => ({
-      kind: 'repairOrder' as const,
-      label: `${personName(order.customer, 'Customer')} — ${vehicleName(order.vehicleId || order.vehicle)} (${vehiclePlate(order.vehicleId || order.vehicle)}) · ${orderId(order)}`,
-      value: `repairOrder:${order._id || order.id}`,
-    }))
+    const bookingOptions = bookings.map((booking) => {
+      const vehicle = booking.vehicleId || booking.vehicle
+      return {
+        kind: 'booking' as const,
+        label: `${personName(booking.customerId || booking.customer, 'Customer')} — ${vehicleName(vehicle)} (${vehiclePlate(vehicle)}) · booking`,
+        value: `booking:${booking._id || booking.id}`,
+        vehicleId: vehicle?._id || vehicle?.id,
+      }
+    })
+    const orderOptions = repairOrders.map((order) => {
+      const vehicle = order.vehicleId || order.vehicle
+      return {
+        kind: 'repairOrder' as const,
+        label: `${personName(order.customer, 'Customer')} — ${vehicleName(vehicle)} (${vehiclePlate(vehicle)}) · ${orderId(order)}`,
+        value: `repairOrder:${order._id || order.id}`,
+        vehicleId: vehicle?._id || vehicle?.id,
+      }
+    })
     return [...bookingOptions, ...orderOptions]
   }, [bookings, repairOrders])
 
   const selectedSubject = subjectOptions.find((option) => option.value === subjectKey)
+
+  useEffect(() => {
+    if (!token || !selectedSubject?.vehicleId) {
+      setPriorReports([])
+      return
+    }
+    const authToken = token
+    const vehicleId = selectedSubject.vehicleId
+    let cancelled = false
+
+    async function loadPriorReports() {
+      try {
+        const response = await fetchInspectionReports(authToken, `?vehicleId=${vehicleId}`)
+        if (!cancelled) setPriorReports(unwrapArray<ApiInspectionReport>(response, ['inspectionReports']))
+      } catch {
+        if (!cancelled) setPriorReports([])
+      }
+    }
+
+    void loadPriorReports()
+    return () => {
+      cancelled = true
+    }
+  }, [token, selectedSubject?.vehicleId])
+
+  const priorPhotos = useMemo(() => priorReports.flatMap((report) => report.photos || []), [priorReports])
 
   function updateItem(id: string, patch: Partial<InspectionItemRow>) {
     setSubmitted(false)
@@ -137,7 +176,6 @@ export function VehicleInspectionPage() {
   const repairItems = useMemo(() => items.filter((item) => item.status === 'repair'), [items])
   const monitorCount = items.filter((item) => item.status === 'monitor').length
   const totalEstimate = repairItems.reduce((sum, item) => sum + item.laborCost + item.partsCost, 0)
-  const groups = useMemo(() => checklistSeed.map((seed) => ({ ...seed, list: items.filter((item) => item.category === seed.category) })), [items])
 
   async function submitInspection() {
     if (!token || !selectedSubject) {
@@ -169,6 +207,66 @@ export function VehicleInspectionPage() {
     }
   }
 
+  const columns: ColumnsType<InspectionItemRow> = [
+    {
+      key: 'item',
+      render: (_, item) => (
+        <div>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{item.category}</div>
+          <div style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 2 }}>{item.label}</div>
+        </div>
+      ),
+      title: 'Item',
+      width: 220,
+    },
+    {
+      key: 'status',
+      render: (_, item) => (
+        <div className="flex flex-wrap gap-2">
+          {(['ok', 'monitor', 'repair'] as InspectionItemStatus[]).map((status) => (
+            <Tag color={item.status === status ? statusColors[status] : undefined} key={status} onClick={() => setStatus(item.id, status)} style={{ cursor: 'pointer' }}>
+              {statusLabels[status]}
+            </Tag>
+          ))}
+        </div>
+      ),
+      title: 'Status',
+      width: 220,
+    },
+    {
+      key: 'note',
+      render: (_, item) =>
+        item.status !== 'ok' ? (
+          <Input onChange={(event) => updateItem(item.id, { note: event.target.value })} placeholder="Condition / recommendation" value={item.note} />
+        ) : (
+          <span style={{ color: advisorPalette.textMuted }}>—</span>
+        ),
+      title: 'Note',
+    },
+    {
+      key: 'laborCost',
+      render: (_, item) =>
+        item.status === 'repair' ? (
+          <InputNumber min={0} onChange={(value) => updateItem(item.id, { laborCost: Math.max(0, Number(value) || 0) })} style={{ width: '100%' }} value={item.laborCost} />
+        ) : (
+          <span style={{ color: advisorPalette.textMuted }}>—</span>
+        ),
+      title: 'Labor',
+      width: 130,
+    },
+    {
+      key: 'partsCost',
+      render: (_, item) =>
+        item.status === 'repair' ? (
+          <InputNumber min={0} onChange={(value) => updateItem(item.id, { partsCost: Math.max(0, Number(value) || 0) })} style={{ width: '100%' }} value={item.partsCost} />
+        ) : (
+          <span style={{ color: advisorPalette.textMuted }}>—</span>
+        ),
+      title: 'Parts',
+      width: 130,
+    },
+  ]
+
   return (
     <ServiceAdvisorShell title="Vehicle inspection">
       {apiMessage ? (
@@ -183,7 +281,7 @@ export function VehicleInspectionPage() {
         <StatCard label="Estimated cost" palette={advisorPalette} value={formatMoney(totalEstimate)} />
       </div>
 
-      <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Inspection subject">
+      <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Inspection subject">
         <div className="flex flex-wrap items-end gap-4">
           <div style={{ minWidth: 340 }}>
             <div style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>Booking or repair order</div>
@@ -209,47 +307,30 @@ export function VehicleInspectionPage() {
         </div>
       </Card>
 
+      {priorPhotos.length ? (
+        <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Prior inspection photos for this vehicle">
+          <div className="flex flex-wrap gap-3">
+            {priorPhotos.map((photo, index) => (
+              <img
+                alt={`Prior inspection photo ${index + 1}`}
+                key={photo}
+                src={resolveApiAssetUrl(photo)}
+                style={{ borderRadius: 12, height: 84, objectFit: 'cover', width: 84 }}
+              />
+            ))}
+          </div>
+        </Card>
+      ) : null}
+
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-5">
-          {groups.map((group) => (
-            <Card bordered={false} className="rounded-[28px]" key={group.category} style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title={group.category}>
-              <div className="flex flex-col gap-4">
-                {group.list.map((item) => (
-                  <div key={item.id} style={{ background: item.status === 'repair' ? '#fff1f2' : advisorPalette.panelAlt, borderRadius: 18, padding: 16 }}>
-                    <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                      <p style={{ color: advisorPalette.ink, fontWeight: 700 }}>{item.label}</p>
-                      <div className="flex flex-wrap gap-2">
-                        {(['ok', 'monitor', 'repair'] as InspectionItemStatus[]).map((status) => (
-                          <Tag color={item.status === status ? statusColors[status] : undefined} key={status} onClick={() => setStatus(item.id, status)} style={{ cursor: 'pointer' }}>
-                            {statusLabels[status]}
-                          </Tag>
-                        ))}
-                      </div>
-                    </div>
-                    {item.status !== 'ok' ? (
-                      <div className="mt-3 grid gap-3 lg:grid-cols-[1.6fr_1fr_1fr]">
-                        <Input onChange={(event) => updateItem(item.id, { note: event.target.value })} placeholder="Condition / recommendation" value={item.note} />
-                        {item.status === 'repair' ? (
-                          <>
-                            <Input addonBefore="Labor" onChange={(event) => updateItem(item.id, { laborCost: Math.max(0, Number(event.target.value) || 0) })} type="number" value={item.laborCost} />
-                            <Input addonBefore="Parts" onChange={(event) => updateItem(item.id, { partsCost: Math.max(0, Number(event.target.value) || 0) })} type="number" value={item.partsCost} />
-                          </>
-                        ) : (
-                          <div className="flex items-center px-1 lg:col-span-2" style={{ color: '#b45309', fontSize: 13, fontWeight: 600 }}>
-                            Recommend re-checking at the next service visit.
-                          </div>
-                        )}
-                      </div>
-                    ) : null}
-                  </div>
-                ))}
-              </div>
-            </Card>
-          ))}
+          <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Inspection checklist">
+            <Table columns={columns} dataSource={items} pagination={false} rowKey="id" scroll={{ x: 820 }} size="small" />
+          </Card>
         </div>
 
         <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
-          <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
+          <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
             <p style={{ color: '#ffb4ab', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Inspection summary</p>
             <div className="mt-4 flex flex-col gap-3" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
               <div className="flex items-center justify-between">
@@ -271,7 +352,7 @@ export function VehicleInspectionPage() {
             </div>
           </Card>
 
-          <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Photos">
+          <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Photos">
             <Upload
               beforeUpload={() => false}
               fileList={photoFiles}
@@ -289,7 +370,7 @@ export function VehicleInspectionPage() {
             </Upload>
           </Card>
 
-          <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Findings">
+          <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Findings">
             <TextArea onChange={(event) => setFindings(event.target.value)} placeholder="Overall assessment of the vehicle's condition..." rows={4} value={findings} />
             <Button block icon={<UploadOutlined />} loading={saving} onClick={submitInspection} style={{ marginTop: 16 }} type="primary">
               Submit inspection report
