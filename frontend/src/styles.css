@@ -41,7 +41,6 @@ body {
 .admin-dashboard-table .ant-table {
   background: transparent;
   color: var(--color-text);
-  font-family: var(--font-body);
 }
 
 .admin-dashboard-table .ant-table-thead > tr > th {

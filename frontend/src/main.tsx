@@ -1,3 +1,4 @@
+import { ConfigProvider } from 'antd'
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -7,10 +8,12 @@ import './styles.css'
 
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
-    <AuthProvider>
-      <BrowserRouter>
-        <App />
-      </BrowserRouter>
-    </AuthProvider>
+    <ConfigProvider theme={{ token: { fontFamily: 'var(--font-body)' } }}>
+      <AuthProvider>
+        <BrowserRouter>
+          <App />
+        </BrowserRouter>
+      </AuthProvider>
+    </ConfigProvider>
   </StrictMode>,
 )
