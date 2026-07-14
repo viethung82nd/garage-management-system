@@ -47,6 +47,9 @@ const RepairProgressTimelinePage = lazy(() =>
 const VehicleInspectionPage = lazy(() =>
   import('../pages/advisor/VehicleInspectionPage').then((module) => ({ default: module.VehicleInspectionPage })),
 )
+const TransferRequestReviewPage = lazy(() =>
+  import('../pages/advisor/TransferRequestReviewPage').then((module) => ({ default: module.TransferRequestReviewPage })),
+)
 const TechnicianWorkOrdersPage = lazy(() =>
   import('../pages/technician/TechnicianWorkOrdersPage').then((module) => ({ default: module.TechnicianWorkOrdersPage })),
 )
@@ -341,6 +344,18 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['serviceAdvisor']}>
                 <VehicleInspectionPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/transfer-requests"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <TransferRequestReviewPage />
               </RequireRole>
             </RequireAuth>
           </Suspense>

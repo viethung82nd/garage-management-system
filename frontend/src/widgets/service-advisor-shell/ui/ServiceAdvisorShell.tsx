@@ -7,6 +7,7 @@ import {
   FileSearchOutlined,
   FileTextOutlined,
   PlusCircleOutlined,
+  SwapOutlined,
   ToolOutlined,
 } from '@ant-design/icons'
 import type { ReactNode } from 'react'
@@ -25,6 +26,7 @@ function activeMenuKey(pathname: string) {
   if (pathname.startsWith('/advisor/additional-services')) return 'additional-services'
   if (pathname.startsWith('/advisor/quality-check')) return 'quality-check'
   if (pathname.startsWith('/advisor/repair-timeline')) return 'repair-timeline'
+  if (pathname.startsWith('/advisor/transfer-requests')) return 'transfer-requests'
   return 'dashboard'
 }
 
@@ -60,6 +62,7 @@ export function ServiceAdvisorShell({ title, eyebrow = 'Service Advisor', childr
         { key: 'additional-services', icon: <PlusCircleOutlined />, label: <Link to="/advisor/additional-services">Additional services</Link> },
         { key: 'quality-check', icon: <CheckCircleOutlined />, label: <Link to="/advisor/quality-check">Quality check</Link> },
         { key: 'repair-timeline', icon: <FieldTimeOutlined />, label: <Link to="/advisor/repair-timeline">Repair timeline</Link> },
+        { key: 'transfer-requests', icon: <SwapOutlined />, label: <Link to="/advisor/transfer-requests">Transfer requests</Link> },
       ]}
     >
       {children}
