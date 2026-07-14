@@ -5,7 +5,7 @@ const ROLE_HOME_BY_ROLE: Partial<Record<AuthRole, string>> = {
   admin: '/admin/dashboard',
   accountant: '/accountant/invoices',
   serviceAdvisor: '/advisor/dashboard',
-  technician: '/technician/tasks',
+  technician: '/technician/work-orders',
 }
 
 export function getPostLoginPath(role: AuthRole) {
