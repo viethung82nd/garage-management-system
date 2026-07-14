@@ -1,2 +1,1 @@
-﻿export { TechnicianShell, type TechnicianNavKey } from './ui/TechnicianShell'
-
+export { TechnicianShell } from './ui/TechnicianShell'
