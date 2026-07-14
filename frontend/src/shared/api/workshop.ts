@@ -356,8 +356,15 @@ export function vehicleName(vehicle?: ApiVehicle | null) {
   return [vehicle?.brand, vehicle?.model].filter(Boolean).join(' ') || vehicle?.model || 'Chưa rõ xe'
 }
 
+/**
+ * RepairOrder has no human-friendly code in the backend (raw Mongo _id
+ * only), so this derives a short, stable display code instead of
+ * surfacing the full 24-char ObjectId.
+ */
 export function orderId(order: Pick<ApiRepairOrder, '_id' | 'id' | 'code'>) {
-  return order.code || order.id || order._id || 'RO-N/A'
+  if (order.code) return order.code
+  const rawId = order.id || order._id
+  return rawId ? `RO-${rawId.slice(-6).toUpperCase()}` : 'RO-N/A'
 }
 
 export function formatApiDate(value?: string) {
