@@ -1,8 +1,8 @@
 import { CheckOutlined, SearchOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { Button, Card, Input, Select, Table, Tag } from 'antd'
+import { Avatar, Button, Card, Empty, Input, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../../shared/auth'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import {
   createTransferRequestApi,
   fetchWorkshopRepairOrders,
@@ -155,6 +155,14 @@ export function TechnicianWorkOrdersPage() {
     return orders.filter((order) => `${order.id} ${order.vehicle} ${order.plate} ${order.customer} ${order.service}`.toLowerCase().includes(normalizedQuery))
   }, [orders, query])
 
+  const scheduledSlots = useMemo(
+    () => timeBlocks.flatMap((slot) => {
+      const order = orders.find((item) => item.start === slot)
+      return order ? [{ order, slot }] : []
+    }),
+    [orders],
+  )
+
   function findSelectedApiOrder() {
     return apiOrders.find((order) => orderId(order) === selectedOrder.id)
   }
@@ -220,8 +228,11 @@ export function TechnicianWorkOrdersPage() {
             </div>
           </div>
           <p style={{ color: technicianPalette.ink, fontSize: 13, fontWeight: 600, marginTop: 10 }}>{order.service}</p>
-          <div className="mt-2 flex flex-wrap gap-2" style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
-            <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>Customer: {order.customer}</span>
+          <div className="mt-2 flex flex-wrap items-center gap-2" style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
+            <span style={{ alignItems: 'center', background: technicianPalette.panelAlt, borderRadius: 10, display: 'inline-flex', gap: 6, padding: '4px 10px' }}>
+              <Avatar size={16} style={{ background: technicianPalette.ink, fontSize: 8 }}>{getUserInitials(order.customer)}</Avatar>
+              {order.customer}
+            </span>
             <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>{order.duration} min</span>
             <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>{order.bay}</span>
           </div>
@@ -248,31 +259,26 @@ export function TechnicianWorkOrdersPage() {
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
         <div className="flex flex-col gap-5">
           <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Today's schedule">
-            <div className="flex flex-col">
-              {timeBlocks.map((slot) => {
-                const order = orders.find((item) => item.start === slot)
-                return (
+            {scheduledSlots.length ? (
+              <div className="flex flex-col">
+                {scheduledSlots.map(({ slot, order }) => (
                   <div className="grid gap-4 py-3" key={slot} style={{ borderBottom: `1px solid ${technicianPalette.border}`, gridTemplateColumns: '90px 1fr' }}>
                     <div style={{ color: technicianPalette.red, fontSize: 13, fontWeight: 700 }}>{slot}</div>
-                    {order ? (
-                      <div style={{ background: order.status === 'in-progress' ? '#fff1f2' : technicianPalette.panelAlt, borderRadius: 14, padding: 12 }}>
-                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
-                          <div>
-                            <p style={{ color: technicianPalette.ink, fontWeight: 700 }}>{order.service}</p>
-                            <p style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 2 }}>{order.vehicle} - {order.plate}</p>
-                          </div>
-                          <Tag color={statusColors[order.status]}>{statusLabels[order.status]}</Tag>
+                    <div style={{ background: order.status === 'in-progress' ? '#fff1f2' : technicianPalette.panelAlt, borderRadius: 14, padding: 12 }}>
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
+                        <div>
+                          <p style={{ color: technicianPalette.ink, fontWeight: 700 }}>{order.service}</p>
+                          <p style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 2 }}>{order.vehicle} - {order.plate}</p>
                         </div>
+                        <Tag color={statusColors[order.status]}>{statusLabels[order.status]}</Tag>
                       </div>
-                    ) : (
-                      <div style={{ alignItems: 'center', border: `1px dashed ${technicianPalette.border}`, borderRadius: 14, color: technicianPalette.textMuted, display: 'flex', fontSize: 12, fontWeight: 700, padding: 12 }}>
-                        Free / awaiting dispatch
-                      </div>
-                    )}
+                    </div>
                   </div>
-                )
-              })}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <Empty description="No orders scheduled for today." />
+            )}
           </Card>
 
           <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Assigned orders">
