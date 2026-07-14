@@ -208,6 +208,23 @@ export function updateAdditionalServiceProposal(token: string, id: string, statu
   return apiRequest<ApiAdditionalServiceProposal>(`/api/additional-service-proposals/${id}`, { method: 'PATCH', token, body: JSON.stringify({ status }) })
 }
 
+export type CreateAdditionalServiceProposalPayload = {
+  repairOrderId: string
+  serviceName: string
+  affectedPart?: string
+  reason?: string
+  customerImpact?: string
+  laborCost?: number
+  partsCost?: number
+  estimateMinutes?: number
+  evidenceCount?: number
+  priority?: 'high' | 'medium' | 'low'
+}
+
+export function createAdditionalServiceProposal(token: string, payload: CreateAdditionalServiceProposalPayload) {
+  return apiRequest<ApiAdditionalServiceProposal>('/api/additional-service-proposals', { method: 'POST', token, body: JSON.stringify(payload) })
+}
+
 export function uploadInspectionPhotos(token: string, repairOrderId: string, formData: FormData) {
   formData.append('repairOrderId', repairOrderId)
   return apiRequest('/api/inspection-reports', { method: 'POST', token, body: formData })
@@ -288,6 +305,37 @@ export function sendQuotation(token: string, id: string) {
     token,
     body: JSON.stringify({}),
   })
+}
+
+export type TransferRequestStatus = 'pending' | 'approved' | 'rejected'
+
+export type ApiTransferRequest = {
+  _id?: string
+  id?: string
+  repairOrderId?: ApiRepairOrder | string
+  fromTechnicianId?: AuthUser | string
+  toTechnicianId?: AuthUser | string
+  reason?: string
+  status?: TransferRequestStatus
+  resolveNote?: string
+  requestedAt?: string
+  resolvedAt?: string
+}
+
+export function fetchTransferRequests(token: string, query = '') {
+  return apiRequest<{ transferRequests?: ApiTransferRequest[] } | ApiTransferRequest[]>(`/api/transfer-requests${query}`, { token })
+}
+
+export function createTransferRequestApi(token: string, payload: { repairOrderId: string; toTechnicianId: string; reason?: string }) {
+  return apiRequest<ApiTransferRequest>('/api/transfer-requests', { method: 'POST', token, body: JSON.stringify(payload) })
+}
+
+export function approveTransferRequestApi(token: string, id: string, resolveNote?: string) {
+  return apiRequest<ApiTransferRequest>(`/api/transfer-requests/${id}/approve`, { method: 'PATCH', token, body: JSON.stringify({ resolveNote }) })
+}
+
+export function rejectTransferRequestApi(token: string, id: string, resolveNote?: string) {
+  return apiRequest<ApiTransferRequest>(`/api/transfer-requests/${id}/reject`, { method: 'PATCH', token, body: JSON.stringify({ resolveNote }) })
 }
 
 export function unwrapArray<T>(value: T[] | Record<string, T[] | undefined>, keys: string[]) {
