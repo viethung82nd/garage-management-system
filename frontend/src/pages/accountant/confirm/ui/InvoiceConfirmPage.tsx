@@ -9,6 +9,7 @@ import {
   fetchRepairOrderDetail,
   generateInvoice,
   recordInvoicePayment,
+  sendInvoiceToCustomer,
   type InvoiceApiRecord,
   type RepairOrderApiRecord,
 } from '../../api/accountantApi'
@@ -103,6 +104,7 @@ export default function InvoiceConfirmPage() {
   const [requestError, setRequestError] = useState('')
   const [successMessage, setSuccessMessage] = useState('')
   const [isPrinting, setIsPrinting] = useState(false)
+  const [isSendingInvoice, setIsSendingInvoice] = useState(false)
   const printableRef = useRef<HTMLDivElement>(null)
 
   async function handlePrintCopy() {
@@ -209,6 +211,7 @@ export default function InvoiceConfirmPage() {
         subtotal: order.totalCost || 0,
         discount: 0,
         total: order.totalCost || 0,
+        sentAt: null as string | null,
       }
     }
 
@@ -244,6 +247,7 @@ export default function InvoiceConfirmPage() {
       subtotal: invoice.subtotal,
       discount: invoice.discount,
       total: invoice.total,
+      sentAt: invoice.sentAt || null,
     }
   }, [viewState])
 
@@ -291,6 +295,26 @@ export default function InvoiceConfirmPage() {
       setRequestError(error instanceof Error ? error.message : 'Unable to complete accountant action.')
     } finally {
       setIsSubmitting(false)
+    }
+  }
+
+  const handleSendInvoice = async () => {
+    if (!token || !viewState || viewState.kind !== 'invoice') {
+      return
+    }
+
+    setIsSendingInvoice(true)
+    setRequestError('')
+    setSuccessMessage('')
+
+    try {
+      const response = await sendInvoiceToCustomer(token, viewState.detail.id)
+      setViewState({ kind: 'invoice', detail: response.invoice })
+      setSuccessMessage('Invoice sent to the customer.')
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : 'Unable to send the invoice.')
+    } finally {
+      setIsSendingInvoice(false)
     }
   }
 
@@ -497,8 +521,14 @@ export default function InvoiceConfirmPage() {
                     Payment already settled
                   </Button>
                 )}
-                <Button icon={<SendOutlined />} size="large">
-                  Send invoice to customer
+                <Button
+                  disabled={viewState?.kind !== 'invoice'}
+                  icon={<SendOutlined />}
+                  loading={isSendingInvoice}
+                  onClick={handleSendInvoice}
+                  size="large"
+                >
+                  {detailMeta?.sentAt ? `Resend invoice (sent ${formatDateTime(detailMeta.sentAt)})` : 'Send invoice to customer'}
                 </Button>
                 <Button icon={<PrinterOutlined />} size="large" loading={isPrinting} disabled={!detailMeta} onClick={handlePrintCopy}>
                   {isPrinting ? 'Preparing PDF...' : 'Print invoice copy'}
