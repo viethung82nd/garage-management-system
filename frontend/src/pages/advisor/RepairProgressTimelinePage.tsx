@@ -1,8 +1,8 @@
 import { CheckCircleFilled } from '@ant-design/icons'
-import { Card, Empty, Progress, Select, Steps, Tag } from 'antd'
+import { Avatar, Card, Empty, Progress, Select, Steps, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchWorkshopRepairOrders, formatApiDate, orderId, personName, unwrapArray, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
-import { useAuth } from '../../shared/auth'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -315,11 +315,17 @@ export function RepairProgressTimelinePage() {
                 <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 32, rowGap: 12 }}>
                   <div>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Advisor</p>
-                    <p style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 4 }}>{selectedTimeline.advisor}</p>
+                    <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
+                      <Avatar size={22} style={{ background: advisorPalette.ink }}>{getUserInitials(selectedTimeline.advisor)}</Avatar>
+                      <p style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700 }}>{selectedTimeline.advisor}</p>
+                    </div>
                   </div>
                   <div>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Technician</p>
-                    <p style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 4 }}>{selectedTimeline.technician}</p>
+                    <div className="flex items-center gap-2" style={{ marginTop: 4 }}>
+                      <Avatar size={22} style={{ background: advisorPalette.red }}>{getUserInitials(selectedTimeline.technician)}</Avatar>
+                      <p style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700 }}>{selectedTimeline.technician}</p>
+                    </div>
                   </div>
                   <div>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Status</p>

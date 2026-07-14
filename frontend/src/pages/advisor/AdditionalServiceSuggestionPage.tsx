@@ -1,9 +1,9 @@
 import { CheckOutlined, FileTextOutlined, PictureOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Card, Input, Table, Tag } from 'antd'
+import { Avatar, Button, Card, Input, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal } from '../../shared/api/workshop'
-import { useAuth } from '../../shared/auth'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -212,7 +212,10 @@ export function AdditionalServiceSuggestionPage() {
               </div>
             </div>
             <div className="mt-3 flex flex-wrap gap-2" style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
-              <span style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>By: {proposal.technician}</span>
+              <span style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 10, display: 'inline-flex', gap: 6, padding: '4px 10px' }}>
+                <Avatar size={16} style={{ background: advisorPalette.ink, fontSize: 8 }}>{getUserInitials(proposal.technician)}</Avatar>
+                {proposal.technician}
+              </span>
               <span style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>+{proposal.estimateMinutes} min</span>
               <span style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 10, display: 'inline-flex', gap: 4, padding: '4px 10px' }}>
                 <PictureOutlined /> {proposal.evidenceCount} photo(s)

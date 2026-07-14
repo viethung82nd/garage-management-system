@@ -1,5 +1,5 @@
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
-import { Button, Card, Select, Table, Tag } from 'antd'
+import { Avatar, Button, Card, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useState } from 'react'
 import {
@@ -16,7 +16,7 @@ import {
   type ApiTransferRequest,
   type TransferRequestStatus,
 } from '../../shared/api/workshop'
-import { useAuth } from '../../shared/auth'
+import { getUserInitials, useAuth } from '../../shared/auth'
 import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -130,14 +130,24 @@ export function TransferRequestReviewPage() {
       ),
     },
     {
-      title: 'From',
-      dataIndex: 'fromTechnician',
       key: 'fromTechnician',
+      render: (_, request) => (
+        <div className="flex items-center gap-2">
+          <Avatar size={20} style={{ background: advisorPalette.ink, fontSize: 10 }}>{getUserInitials(request.fromTechnician)}</Avatar>
+          {request.fromTechnician}
+        </div>
+      ),
+      title: 'From',
     },
     {
-      title: 'To',
-      dataIndex: 'toTechnician',
       key: 'toTechnician',
+      render: (_, request) => (
+        <div className="flex items-center gap-2">
+          <Avatar size={20} style={{ background: advisorPalette.red, fontSize: 10 }}>{getUserInitials(request.toTechnician)}</Avatar>
+          {request.toTechnician}
+        </div>
+      ),
+      title: 'To',
     },
     {
       title: 'Reason',
