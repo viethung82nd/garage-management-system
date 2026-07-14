@@ -34,6 +34,17 @@ body {
   width: 100%;
 }
 
+/*
+ * Backstop for antd's own generated classes: ConfigProvider's
+ * token.fontFamily should already cover this, but antd's cssinjs
+ * output can carry higher specificity than plain element/class rules,
+ * so force it here too rather than relying on cascade order alone.
+ */
+[class^='ant-'],
+[class*=' ant-'] {
+  font-family: var(--font-body) !important;
+}
+
 .wp-theme-kapa .navbar-collapse.collapse {
   visibility: visible;
 }
