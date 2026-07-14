@@ -263,8 +263,10 @@ export function RepairProgressTimelinePage() {
           <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }}>
             <div className="flex flex-wrap items-center gap-4">
               <Select
+                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                 onChange={selectTimeline}
                 options={timelines.map((timeline) => ({ label: `${timeline.id} — ${timeline.vehicle} (${timeline.plate})`, value: timeline.id }))}
+                showSearch
                 style={{ minWidth: 320 }}
                 value={selectedTimeline.id}
               />
@@ -285,8 +287,21 @@ export function RepairProgressTimelinePage() {
                   current={selectedTimeline.stages.findIndex((stage) => stage.id === selectedStage.id)}
                   items={selectedTimeline.stages.map((stage) => ({
                     description: (
-                      <button className="text-left" onClick={() => setSelectedStageId(stage.id)} style={{ cursor: 'pointer' }} type="button">
-                        <div style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 600 }}>{stage.time} · {stage.description}</div>
+                      <button
+                        onClick={() => setSelectedStageId(stage.id)}
+                        style={{
+                          background: 'none',
+                          border: 'none',
+                          color: stage.id === selectedStage.id ? advisorPalette.ink : advisorPalette.textMuted,
+                          cursor: 'pointer',
+                          fontSize: 12,
+                          fontWeight: stage.id === selectedStage.id ? 700 : 600,
+                          padding: 0,
+                          textAlign: 'left',
+                        }}
+                        type="button"
+                      >
+                        {stage.time} · {stage.description}
                       </button>
                     ),
                     status: stepStatus[stage.status],
@@ -297,7 +312,7 @@ export function RepairProgressTimelinePage() {
               </Card>
 
               <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }}>
-                <div className="flex flex-wrap gap-x-8 gap-y-3">
+                <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 32, rowGap: 12 }}>
                   <div>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Advisor</p>
                     <p style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 4 }}>{selectedTimeline.advisor}</p>
