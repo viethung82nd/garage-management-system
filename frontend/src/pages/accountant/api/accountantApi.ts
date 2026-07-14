@@ -46,6 +46,7 @@ export type InvoiceApiRecord = {
   displayId: string
   status: string
   issuedAt: string
+  sentAt?: string | null
   subtotal: number
   discount: number
   total: number
@@ -174,5 +175,12 @@ export function recordInvoicePayment(token: string, invoiceId: string, method: s
       invoiceId,
       method,
     }),
+  })
+}
+
+export function sendInvoiceToCustomer(token: string, invoiceId: string) {
+  return apiRequest<InvoiceDetailResponse>(`/api/invoices/${invoiceId}/send`, {
+    method: 'PATCH',
+    token,
   })
 }
