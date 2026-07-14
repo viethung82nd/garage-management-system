@@ -4,6 +4,7 @@ import {
   CheckCircleOutlined,
   DashboardOutlined,
   FieldTimeOutlined,
+  FileSearchOutlined,
   FileTextOutlined,
   PlusCircleOutlined,
   ToolOutlined,
@@ -18,6 +19,7 @@ export { advisorPalette }
 function activeMenuKey(pathname: string) {
   if (pathname.startsWith('/advisor/bookings')) return 'bookings'
   if (pathname.startsWith('/advisor/reception')) return 'reception'
+  if (pathname.startsWith('/advisor/inspection')) return 'inspection'
   if (pathname.startsWith('/advisor/work-orders')) return 'work-orders'
   if (pathname.startsWith('/advisor/quotation')) return 'quotation'
   if (pathname.startsWith('/advisor/additional-services')) return 'additional-services'
@@ -52,6 +54,7 @@ export function ServiceAdvisorShell({ title, eyebrow = 'Service Advisor', childr
         { key: 'dashboard', icon: <DashboardOutlined />, label: <Link to="/advisor/dashboard">Overview</Link> },
         { key: 'bookings', icon: <CalendarOutlined />, label: <Link to="/advisor/bookings">Booking requests</Link> },
         { key: 'reception', icon: <CarOutlined />, label: <Link to="/advisor/reception">Vehicle reception</Link> },
+        { key: 'inspection', icon: <FileSearchOutlined />, label: <Link to="/advisor/inspection">Vehicle inspection</Link> },
         { key: 'work-orders', icon: <ToolOutlined />, label: <Link to="/advisor/work-orders">Work orders</Link> },
         { key: 'quotation', icon: <FileTextOutlined />, label: <Link to="/advisor/quotation">Quotations</Link> },
         { key: 'additional-services', icon: <PlusCircleOutlined />, label: <Link to="/advisor/additional-services">Additional services</Link> },

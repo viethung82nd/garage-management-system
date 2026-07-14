@@ -44,11 +44,8 @@ const QualityVerificationPage = lazy(() =>
 const RepairProgressTimelinePage = lazy(() =>
   import('../pages/advisor/RepairProgressTimelinePage').then((module) => ({ default: module.RepairProgressTimelinePage })),
 )
-const TechnicianInspectionPage = lazy(() =>
-  import('../pages/technician/TechnicianInspectionPage').then((module) => ({ default: module.TechnicianInspectionPage })),
-)
-const VehicleInspectionFormPage = lazy(() =>
-  import('../pages/technician/VehicleInspectionFormPage').then((module) => ({ default: module.VehicleInspectionFormPage })),
+const VehicleInspectionPage = lazy(() =>
+  import('../pages/advisor/VehicleInspectionPage').then((module) => ({ default: module.VehicleInspectionPage })),
 )
 const TechnicianWorkOrdersPage = lazy(() =>
   import('../pages/technician/TechnicianWorkOrdersPage').then((module) => ({ default: module.TechnicianWorkOrdersPage })),
@@ -337,31 +334,19 @@ export default function App() {
           </Suspense>
         }
       />
-      <Route path="/technician" element={<Navigate to="/technician/tasks" replace />} />
       <Route
-        path="/technician/tasks"
+        path="/advisor/inspection"
         element={
           <Suspense fallback={<RouteFallback />}>
             <RequireAuth>
-              <RequireRole roles={['technician']}>
-                <TechnicianInspectionPage />
+              <RequireRole roles={['serviceAdvisor']}>
+                <VehicleInspectionPage />
               </RequireRole>
             </RequireAuth>
           </Suspense>
         }
       />
-      <Route
-        path="/technician/inspection"
-        element={
-          <Suspense fallback={<RouteFallback />}>
-            <RequireAuth>
-              <RequireRole roles={['technician']}>
-                <VehicleInspectionFormPage />
-              </RequireRole>
-            </RequireAuth>
-          </Suspense>
-        }
-      />
+      <Route path="/technician" element={<Navigate to="/technician/work-orders" replace />} />
       <Route
         path="/technician/work-orders"
         element={

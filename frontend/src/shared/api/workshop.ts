@@ -225,15 +225,6 @@ export function createAdditionalServiceProposal(token: string, payload: CreateAd
   return apiRequest<ApiAdditionalServiceProposal>('/api/additional-service-proposals', { method: 'POST', token, body: JSON.stringify(payload) })
 }
 
-export function uploadInspectionPhotos(token: string, repairOrderId: string, formData: FormData) {
-  formData.append('repairOrderId', repairOrderId)
-  return apiRequest('/api/inspection-reports', { method: 'POST', token, body: formData })
-}
-
-export function saveInspectionNote(token: string, repairOrderId: string, content: string) {
-  return addWorkshopStepNote(token, repairOrderId, { content })
-}
-
 export type QualityCheckResult = 'pass' | 'fail' | 'na'
 
 export type ApiQualityCheckItem = {
@@ -268,27 +259,33 @@ export type ApiInspectionItem = {
   partsCost?: number
 }
 
-export type ApiInspectionResult = {
+export type CreateInspectionReportPayload = {
+  bookingId?: string
+  repairOrderId?: string
   odometer?: number
   fuelLevel?: string
-  overallNote?: string
+  findings?: string
   items?: ApiInspectionItem[]
   estimatedCost?: number
+  photos?: File[]
 }
 
-export function submitInspectionResult(token: string, repairOrderId: string, payload: ApiInspectionResult) {
-  return apiRequest('/api/inspection-reports', {
-    method: 'POST',
-    token,
-    body: JSON.stringify({
-      repairOrderId,
-      odometer: payload.odometer,
-      fuelLevel: payload.fuelLevel,
-      findings: payload.overallNote,
-      items: payload.items,
-      estimatedCost: payload.estimatedCost,
-    }),
-  })
+/**
+ * POST /api/inspection-reports — accepts either bookingId (SA inspection at
+ * intake, ahead of a quote) or repairOrderId (mid-repair). Sent as multipart
+ * so photos and the checklist/cost fields can go in the same request.
+ */
+export function createInspectionReport(token: string, payload: CreateInspectionReportPayload) {
+  const formData = new FormData()
+  if (payload.bookingId) formData.append('bookingId', payload.bookingId)
+  if (payload.repairOrderId) formData.append('repairOrderId', payload.repairOrderId)
+  if (payload.odometer != null) formData.append('odometer', String(payload.odometer))
+  if (payload.fuelLevel) formData.append('fuelLevel', payload.fuelLevel)
+  if (payload.findings) formData.append('findings', payload.findings)
+  if (payload.estimatedCost != null) formData.append('estimatedCost', String(payload.estimatedCost))
+  if (payload.items) formData.append('items', JSON.stringify(payload.items))
+  payload.photos?.forEach((file) => formData.append('photos', file))
+  return apiRequest('/api/inspection-reports', { method: 'POST', token, body: formData })
 }
 
 export function createQuotation(token: string, payload: ApiQuotation) {
