@@ -1,5 +1,5 @@
 import { DownloadOutlined } from '@ant-design/icons'
-import { Button, Card, DatePicker, Table } from 'antd'
+import { Button, Card, DatePicker, Divider, Table } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
 import { useEffect, useRef, useState } from 'react'
@@ -164,7 +164,7 @@ export default function AdminReportsPage() {
           bordered={false}
           className="rounded-[32px]"
           styles={{ body: { padding: 24 } }}
-          style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, marginBottom: 20 }}
+          style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow }}
         >
           <div style={{ color: adminPalette.textMuted, fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', marginBottom: 16, textTransform: 'uppercase' }}>
             Revenue by service
@@ -177,14 +177,9 @@ export default function AdminReportsPage() {
             pagination={false}
             rowKey="serviceId"
           />
-        </Card>
 
-        <Card
-          bordered={false}
-          className="rounded-[32px]"
-          styles={{ body: { padding: 24 } }}
-          style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, marginBottom: 20 }}
-        >
+          <Divider />
+
           <div style={{ color: adminPalette.textMuted, fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', marginBottom: 16, textTransform: 'uppercase' }}>
             Revenue by payment method
           </div>
@@ -196,14 +191,9 @@ export default function AdminReportsPage() {
             pagination={false}
             rowKey="method"
           />
-        </Card>
 
-        <Card
-          bordered={false}
-          className="rounded-[32px]"
-          styles={{ body: { padding: 24 } }}
-          style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow }}
-        >
+          <Divider />
+
           <div style={{ color: adminPalette.textMuted, fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', marginBottom: 16, textTransform: 'uppercase' }}>
             Technician performance
           </div>
