@@ -34,6 +34,37 @@ function parseJsonArrayField(value, fieldName) {
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const INSPECTION_ITEM_STATUSES = ["ok", "monitor", "repair"];
 
+/** GET /api/inspection-reports?vehicleId=&repairOrderId=&bookingId= */
+export async function listInspectionReports(req, res) {
+  const { vehicleId, repairOrderId, bookingId } = req.query;
+  const filter = {};
+
+  if (vehicleId) {
+    if (!OID_RE.test(vehicleId)) {
+      throw new HttpError(400, "Invalid vehicleId format");
+    }
+    filter.vehicleId = vehicleId;
+  }
+  if (repairOrderId) {
+    if (!OID_RE.test(repairOrderId)) {
+      throw new HttpError(400, "Invalid repairOrderId format");
+    }
+    filter.repairOrderId = repairOrderId;
+  }
+  if (bookingId) {
+    if (!OID_RE.test(bookingId)) {
+      throw new HttpError(400, "Invalid bookingId format");
+    }
+    filter.bookingId = bookingId;
+  }
+
+  const inspectionReports = await InspectionReportModel.find(filter).sort({
+    inspectedAt: -1,
+  });
+
+  res.json({ inspectionReports });
+}
+
 export async function createInspectionReport(req, res) {
   const {
     bookingId,

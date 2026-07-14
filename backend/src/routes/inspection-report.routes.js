@@ -2,7 +2,10 @@ import { Router } from "express";
 import multer from "multer";
 import { requireAuth, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/error.js";
-import { createInspectionReport } from "../controllers/inspection-report.controller.js";
+import {
+  listInspectionReports,
+  createInspectionReport,
+} from "../controllers/inspection-report.controller.js";
 
 function fileFilter(_req, file, cb) {
   if (!file.mimetype.startsWith("image/")) {
@@ -23,6 +26,13 @@ const upload = multer({
 });
 
 export const inspectionReportRouter = Router();
+
+inspectionReportRouter.get(
+  "",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  asyncHandler(listInspectionReports),
+);
 
 inspectionReportRouter.post(
   "",
