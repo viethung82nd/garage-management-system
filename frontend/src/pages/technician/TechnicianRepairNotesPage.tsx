@@ -1,5 +1,5 @@
 import { CheckOutlined, PlusCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Input, InputNumber, Select, Tag } from 'antd'
+import { Button, Card, Empty, Input, InputNumber, Select, Steps, Tag } from 'antd'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getUserInitials, useAuth } from '../../shared/auth'
@@ -77,52 +77,14 @@ const statusColors: Record<RepairStepStatus, string> = {
   waiting: 'default',
 }
 
-function nowTime() {
-  return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+const stepStatus: Record<RepairStepStatus, 'finish' | 'process' | 'wait'> = {
+  active: 'process',
+  completed: 'finish',
+  waiting: 'wait',
 }
 
-function StepButton({ active, onSelect, step }: { active: boolean; onSelect: () => void; step: RepairStep }) {
-  return (
-    <button
-      className="w-full rounded-[22px] p-5 text-left transition"
-      onClick={onSelect}
-      style={{
-        background: active ? technicianPalette.panelAlt : technicianPalette.panel,
-        border: active ? `2px solid ${technicianPalette.red}` : `1px solid ${technicianPalette.border}`,
-        boxShadow: technicianPalette.shadow,
-      }}
-      type="button"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div className="flex gap-3">
-          <span
-            style={{
-              alignItems: 'center',
-              background: step.status === 'completed' ? '#15803d' : step.status === 'active' ? technicianPalette.red : technicianPalette.panelAlt,
-              borderRadius: 999,
-              color: step.status === 'waiting' ? technicianPalette.textMuted : 'white',
-              display: 'flex',
-              fontWeight: 700,
-              height: 36,
-              justifyContent: 'center',
-              width: 36,
-            }}
-          >
-            {step.status === 'completed' ? <CheckOutlined /> : step.order}
-          </span>
-          <div>
-            <p style={{ color: technicianPalette.red, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Step {step.order} - {step.estimate}</p>
-            <h3 style={{ color: technicianPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 6 }}>{step.title}</h3>
-          </div>
-        </div>
-        <Tag color={statusColors[step.status]}>{statusLabels[step.status]}</Tag>
-      </div>
-      <p style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 10 }}>{step.summary}</p>
-      <div className="mt-3 flex flex-wrap gap-2" style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
-        {step.completedAt ? <span style={{ background: '#dcfce7', borderRadius: 10, color: '#15803d', padding: '4px 10px' }}>Done {step.completedAt}</span> : null}
-      </div>
-    </button>
-  )
+function nowTime() {
+  return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
 }
 
 export function TechnicianRepairNotesPage() {
@@ -307,9 +269,37 @@ export function TechnicianRepairNotesPage() {
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="flex flex-col gap-5">
           <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title={`${repairOrderLabel} — repair steps`}>
-            <div className="flex flex-col gap-4">
-              {steps.length ? steps.map((step) => <StepButton active={step.id === selectedStep.id} key={step.id} onSelect={() => setSelectedStepId(step.id)} step={step} />) : <Empty description="No repair steps from the API yet." />}
-            </div>
+            {steps.length ? (
+              <Steps
+                current={steps.findIndex((step) => step.id === selectedStep.id)}
+                items={steps.map((step) => ({
+                  description: (
+                    <button
+                      onClick={() => setSelectedStepId(step.id)}
+                      style={{
+                        background: 'none',
+                        border: 'none',
+                        color: step.id === selectedStep.id ? technicianPalette.ink : technicianPalette.textMuted,
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: step.id === selectedStep.id ? 700 : 600,
+                        padding: 0,
+                        textAlign: 'left',
+                      }}
+                      type="button"
+                    >
+                      {step.estimate} · {step.summary}
+                      {step.completedAt ? ` · Done ${step.completedAt}` : ''}
+                    </button>
+                  ),
+                  status: stepStatus[step.status],
+                  title: step.title,
+                }))}
+                onChange={(index) => setSelectedStepId(steps[index]?.id ?? selectedStepId)}
+              />
+            ) : (
+              <Empty description="No repair steps from the API yet." />
+            )}
           </Card>
 
           <Card
