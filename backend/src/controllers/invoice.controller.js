@@ -6,6 +6,8 @@ import {
   VehicleModel,
 } from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
+import { createNotification } from "../utils/notify.js";
+import { sendEmail } from "../utils/mailer.js";
 
 const invoicePopulate = [
   { path: "accountantId", select: "fullName email phone role" },
@@ -58,6 +60,7 @@ function serializeInvoice(invoice, latestPayment) {
     displayId: formatDisplayId("INV", invoice._id),
     status: invoice.status,
     issuedAt: invoice.issuedAt,
+    sentAt: invoice.sentAt || null,
     subtotal: invoice.subtotal,
     discount: invoice.discount,
     total: invoice.total,
@@ -288,4 +291,55 @@ export async function generateInvoiceFromRepairOrder(req, res) {
   res.status(201).json({
     invoice: serializeInvoice(invoice, null),
   });
+}
+
+/**
+ * PATCH /api/invoices/:id/send — email the invoice to the customer and
+ * record an in-app notification. Marks sentAt regardless of whether the
+ * email actually went out (SMTP may not be configured), since the
+ * notification itself is the primary "customer was informed" signal.
+ */
+export async function sendInvoiceToCustomer(req, res) {
+  const { id } = req.params;
+
+  if (!mongoose.isValidObjectId(id)) {
+    throw new HttpError(400, "invoice id is not a valid id");
+  }
+
+  const invoice = await InvoiceModel.findById(id).populate(invoicePopulate);
+  if (!invoice) {
+    throw new HttpError(404, "invoice not found");
+  }
+
+  const vehicle = invoice.repairOrderId?.vehicleId;
+  const customer = vehicle?.customerId;
+
+  if (customer) {
+    await createNotification({
+      userId: customer._id,
+      type: "invoiceSent",
+      title: "Invoice ready",
+      message: `Your invoice for ${vehicle.licensePlate || "your vehicle"} is ready — total ${invoice.total.toLocaleString("vi-VN")} ₫.`,
+      refId: invoice.repairOrderId._id,
+      refModel: "RepairOrder",
+    });
+
+    if (customer.email) {
+      await sendEmail({
+        to: customer.email,
+        subject: `Invoice ${formatDisplayId("INV", invoice._id)} — ${invoice.total.toLocaleString("vi-VN")} ₫`,
+        html: `<p>Hi ${customer.fullName || "there"},</p><p>Your invoice for <strong>${vehicle.brand || ""} ${vehicle.model || ""} (${vehicle.licensePlate || ""})</strong> is ready.</p><p>Total due: <strong>${invoice.total.toLocaleString("vi-VN")} ₫</strong></p><p>Please settle at the service desk or by bank transfer as agreed.</p>`,
+      });
+    }
+  }
+
+  invoice.sentAt = new Date();
+  await invoice.save();
+
+  const latestPayment = await PaymentModel.findOne({ invoiceId: invoice._id }).sort({
+    paidAt: -1,
+    _id: -1,
+  });
+
+  res.json({ invoice: serializeInvoice(invoice, latestPayment) });
 }

@@ -6,6 +6,7 @@ import {
   getInvoiceById,
   listInvoices,
   listMyInvoices,
+  sendInvoiceToCustomer,
 } from "../controllers/invoice.controller.js";
 
 export const invoiceRouter = Router();
@@ -37,4 +38,11 @@ invoiceRouter.post(
   requireAuth,
   requireRole("accountant", "admin"),
   asyncHandler(generateInvoiceFromRepairOrder),
+);
+
+invoiceRouter.patch(
+  "/:id/send",
+  requireAuth,
+  requireRole("accountant", "admin"),
+  asyncHandler(sendInvoiceToCustomer),
 );

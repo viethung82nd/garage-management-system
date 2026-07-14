@@ -61,6 +61,9 @@ const invoiceSchema = new Schema(
       type: Date,
       default: Date.now,
     },
+    sentAt: {
+      type: Date,
+    },
   },
   { timestamps: false }
 );
