@@ -1,6 +1,7 @@
-import { CheckOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Input, Select, Tag } from 'antd'
-import { useEffect, useState } from 'react'
+import { CheckOutlined, SearchOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Button, Card, Input, Select, Table, Tag } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
+import { useEffect, useMemo, useState } from 'react'
 import { useAuth } from '../../shared/auth'
 import {
   createTransferRequestApi,
@@ -97,43 +98,6 @@ function mapUiStatus(status: WorkOrderStatus) {
   return 'pending'
 }
 
-function WorkOrderCard({ active, onSelect, order }: { active: boolean; onSelect: () => void; order: WorkOrder }) {
-  return (
-    <button
-      className="w-full rounded-[22px] p-5 text-left transition"
-      onClick={onSelect}
-      style={{
-        background: active ? technicianPalette.panelAlt : technicianPalette.panel,
-        border: active ? `2px solid ${technicianPalette.red}` : `1px solid ${technicianPalette.border}`,
-        boxShadow: technicianPalette.shadow,
-      }}
-      type="button"
-    >
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
-            <Tag color={priorityColors[order.priority]}>{priorityLabels[order.priority]}</Tag>
-            <Tag color={statusColors[order.status]}>{statusLabels[order.status]}</Tag>
-          </div>
-          <h3 style={{ color: technicianPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 10 }}>{order.vehicle}</h3>
-          <p style={{ color: technicianPalette.red, fontSize: 12, fontWeight: 700, marginTop: 4 }}>{order.id} - {order.plate}</p>
-        </div>
-        <div className="text-right">
-          <p style={{ color: technicianPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Start</p>
-          <p style={{ color: technicianPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 6 }}>{order.start}</p>
-        </div>
-      </div>
-      <p style={{ color: technicianPalette.ink, fontSize: 13, fontWeight: 600, marginTop: 12 }}>{order.service}</p>
-      <p style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 6 }}>{order.note}</p>
-      <div className="mt-3 flex flex-wrap gap-2" style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
-        <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>Customer: {order.customer}</span>
-        <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>{order.duration} min</span>
-        <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>{order.bay}</span>
-      </div>
-    </button>
-  )
-}
-
 export function TechnicianWorkOrdersPage() {
   const { token, user } = useAuth()
   const [orders, setOrders] = useState<WorkOrder[]>([])
@@ -145,6 +109,7 @@ export function TechnicianWorkOrdersPage() {
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
   const [requestingTransfer, setRequestingTransfer] = useState(false)
+  const [query, setQuery] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -183,6 +148,12 @@ export function TechnicianWorkOrdersPage() {
   const totalMinutes = orders.reduce((sum, order) => sum + order.duration, 0)
   const completedCount = orders.filter((order) => order.status === 'completed').length
   const inProgressCount = orders.filter((order) => order.status === 'in-progress').length
+
+  const filteredOrders = useMemo(() => {
+    const normalizedQuery = query.trim().toLowerCase()
+    if (!normalizedQuery) return orders
+    return orders.filter((order) => `${order.id} ${order.vehicle} ${order.plate} ${order.customer} ${order.service}`.toLowerCase().includes(normalizedQuery))
+  }, [orders, query])
 
   function findSelectedApiOrder() {
     return apiOrders.find((order) => orderId(order) === selectedOrder.id)
@@ -228,6 +199,36 @@ export function TechnicianWorkOrdersPage() {
       setRequestingTransfer(false)
     }
   }
+
+  const orderColumns: ColumnsType<WorkOrder> = [
+    {
+      key: 'order',
+      render: (_, order) => (
+        <div>
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="flex flex-wrap items-center gap-2">
+                <Tag color={priorityColors[order.priority]}>{priorityLabels[order.priority]}</Tag>
+                <Tag color={statusColors[order.status]}>{statusLabels[order.status]}</Tag>
+              </div>
+              <h3 style={{ color: technicianPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 8 }}>{order.vehicle}</h3>
+              <p style={{ color: technicianPalette.red, fontSize: 12, fontWeight: 700, marginTop: 4 }}>{order.id} - {order.plate}</p>
+            </div>
+            <div className="text-right">
+              <p style={{ color: technicianPalette.textMuted, fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Start</p>
+              <p style={{ color: technicianPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 6 }}>{order.start}</p>
+            </div>
+          </div>
+          <p style={{ color: technicianPalette.ink, fontSize: 13, fontWeight: 600, marginTop: 10 }}>{order.service}</p>
+          <div className="mt-2 flex flex-wrap gap-2" style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
+            <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>Customer: {order.customer}</span>
+            <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>{order.duration} min</span>
+            <span style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '4px 10px' }}>{order.bay}</span>
+          </div>
+        </div>
+      ),
+    },
+  ]
 
   return (
     <TechnicianShell eyebrow="Technician Workspace" title="My work orders">
@@ -275,13 +276,26 @@ export function TechnicianWorkOrdersPage() {
           </Card>
 
           <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Assigned orders">
-            <div className="flex flex-col gap-4">
-              {orders.length ? (
-                orders.map((order) => <WorkOrderCard active={order.id === selectedOrder.id} key={order.id} onSelect={() => setSelectedOrderId(order.id)} order={order} />)
-              ) : (
-                <Empty description="No orders assigned from the API yet." />
-              )}
-            </div>
+            <Input
+              allowClear
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="Search order, vehicle, plate, or customer..."
+              prefix={<SearchOutlined />}
+              style={{ marginBottom: 16 }}
+              value={query}
+            />
+            <Table
+              columns={orderColumns}
+              dataSource={filteredOrders}
+              locale={{ emptyText: 'No orders assigned from the API yet.' }}
+              onRow={(record) => ({
+                onClick: () => setSelectedOrderId(record.id),
+                style: { background: record.id === selectedOrder.id ? technicianPalette.panelAlt : undefined, cursor: 'pointer' },
+              })}
+              pagination={false}
+              rowKey="id"
+              showHeader={false}
+            />
           </Card>
         </div>
 
@@ -320,9 +334,11 @@ export function TechnicianWorkOrdersPage() {
           <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Request transfer">
             <div className="flex flex-col gap-3">
               <Select
+                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                 onChange={setTransferTechnicianId}
                 options={technicians.map((technician) => ({ label: technician.fullName || technician.email, value: technician._id || technician.id }))}
                 placeholder="Transfer to technician..."
+                showSearch
                 value={transferTechnicianId || undefined}
               />
               <Input onChange={(event) => setTransferReason(event.target.value)} placeholder="Reason (optional)" value={transferReason} />
