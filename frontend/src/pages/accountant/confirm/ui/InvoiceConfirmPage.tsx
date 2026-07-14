@@ -356,24 +356,26 @@ export default function InvoiceConfirmPage() {
                   </Tag>
                 </div>
 
-                <div className="mt-6 grid gap-4 md:grid-cols-2">
-                  {[
-                    { label: 'Customer', value: detailMeta.customer },
-                    { label: 'Contact', value: detailMeta.contact },
-                    { label: 'Vehicle', value: detailMeta.vehicle },
-                    { label: 'Payment method', value: detailMeta.paymentMethod },
-                    { label: 'Service advisor', value: detailMeta.serviceAdvisor },
-                    { label: 'Technician', value: detailMeta.technician },
-                  ].map((item) => (
-                    <div key={item.label} className="rounded-[22px] border px-4 py-4" style={{ borderColor: accountantPalette.border, background: 'rgba(255,255,255,0.7)' }}>
-                      <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
-                        {item.label}
+                <div className="mt-6 rounded-[22px] border px-5 py-5" style={{ borderColor: accountantPalette.border, background: 'rgba(255,255,255,0.7)' }}>
+                  <div className="grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+                    {[
+                      { label: 'Customer', value: detailMeta.customer },
+                      { label: 'Contact', value: detailMeta.contact },
+                      { label: 'Vehicle', value: detailMeta.vehicle },
+                      { label: 'Payment method', value: detailMeta.paymentMethod },
+                      { label: 'Service advisor', value: detailMeta.serviceAdvisor },
+                      { label: 'Technician', value: detailMeta.technician },
+                    ].map((item) => (
+                      <div key={item.label}>
+                        <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
+                          {item.label}
+                        </div>
+                        <div className="mt-1 text-sm font-semibold" style={{ color: accountantPalette.inkSoft }}>
+                          {item.value}
+                        </div>
                       </div>
-                      <div className="mt-2 text-sm font-semibold" style={{ color: accountantPalette.inkSoft }}>
-                        {item.value}
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
 
                 <Divider />
