@@ -380,7 +380,13 @@ export function TechnicianRepairNotesPage() {
               {selectedStep.checklist.map((item) => {
                 const checked = checkedItems.includes(item)
                 return (
-                  <button className="flex w-full items-start gap-3 text-left" key={item} onClick={() => toggleChecklist(item)} type="button">
+                  <button
+                    className="flex w-full items-start gap-3 text-left"
+                    key={item}
+                    onClick={() => toggleChecklist(item)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
+                    type="button"
+                  >
                     <span
                       style={{
                         alignItems: 'center',
