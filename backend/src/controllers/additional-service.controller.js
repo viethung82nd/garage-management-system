@@ -1,6 +1,8 @@
-import { ServiceRequestModel } from "../models/index.js";
+import { RepairOrderModel, ServiceRequestModel, VehicleModel } from "../models/index.js";
 import { SERVICE_REQUEST_STATUSES } from "../models/ServiceRequest.js";
 import { HttpError } from "../middleware/error.js";
+import { createNotification } from "../utils/notify.js";
+import { sendEmail } from "../utils/mailer.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const FE_STATUSES = ["pending", "sent", "approved", "rejected"];
@@ -94,6 +96,36 @@ export async function updateAdditionalServiceProposal(req, res) {
   }
   await proposal.save();
   await proposal.populate("technicianId", "fullName email phone role");
+
+  if (status === "sent") {
+    const order = await RepairOrderModel.findById(proposal.repairOrderId);
+    const vehicle = order?.vehicleId
+      ? await VehicleModel.findById(order.vehicleId).populate(
+          "customerId",
+          "fullName email"
+        )
+      : null;
+    const customer = vehicle?.customerId;
+
+    if (customer) {
+      await createNotification({
+        userId: customer._id,
+        type: "additionalServiceSent",
+        title: "Additional service recommended",
+        message: `Your service advisor sent a quote for an additional service: ${proposal.serviceName}.`,
+        refId: proposal.repairOrderId,
+        refModel: "RepairOrder",
+      });
+
+      if (customer.email) {
+        await sendEmail({
+          to: customer.email,
+          subject: `Additional service recommended: ${proposal.serviceName}`,
+          html: `<p>Hi ${customer.fullName || "there"},</p><p>While working on your vehicle, our technician recommended an additional service:</p><p><strong>${proposal.serviceName}</strong></p><p>${proposal.reason || ""}</p><p>Estimated cost: <strong>${((proposal.laborCost || 0) + (proposal.partsCost || 0)).toLocaleString("vi-VN")} ₫</strong>.</p><p>Please log in to your account to approve or decline it.</p>`,
+        });
+      }
+    }
+  }
 
   res.json(proposal);
 }
