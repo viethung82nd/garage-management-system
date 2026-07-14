@@ -1,30 +1,31 @@
-﻿import { useEffect, useMemo, useState } from 'react'
+import { CheckOutlined, PlusCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Input, InputNumber, Select, Tag } from 'antd'
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { getUserInitials, useAuth } from '../../shared/auth'
-import { addWorkshopStepNote, fetchWorkshopRepairOrders, orderId, unwrapArray, updateWorkshopRepairProgress, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
-import { TechnicianShell } from '../../widgets/technician-shell'
-import { Icon, type IconName } from '../../shared/ui/base'
+import {
+  addWorkshopStepNote,
+  createAdditionalServiceProposal,
+  fetchWorkshopRepairOrders,
+  orderId,
+  unwrapArray,
+  updateWorkshopRepairProgress,
+  vehicleName,
+  vehiclePlate,
+  type ApiRepairOrder,
+} from '../../shared/api/workshop'
+import { TechnicianShell, technicianPalette } from '../../widgets/technician-shell'
+
+const { TextArea } = Input
 
 type RepairStepStatus = 'completed' | 'active' | 'waiting'
-
-type StepMetric = {
-  label: string
-  status?: 'normal' | 'warning'
-  unit: string
-  value: string
-}
 
 type RepairStep = {
   checklist: string[]
   completedAt?: string
   estimate: string
-  evidences: Array<{ label: string; note: string }>
   id: string
-  materials: Array<{ name: string; qty: string }>
-  metrics: StepMetric[]
   order: number
-  owner: string
-  startedAt?: string
   status: RepairStepStatus
   summary: string
   title: string
@@ -32,20 +33,16 @@ type RepairStep = {
 
 const emptyStep: RepairStep = {
   checklist: [],
-  estimate: '0 phút',
-  evidences: [],
+  estimate: '0 min',
   id: '',
-  materials: [],
-  metrics: [],
   order: 0,
-  owner: 'Kỹ thuật viên',
   status: 'waiting',
-  summary: 'Chưa có bước sửa chữa từ API.',
-  title: 'Chưa có dữ liệu',
+  summary: 'No repair step from the API yet.',
+  title: 'No data',
 }
 
 function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
-  const services = order.services?.length ? order.services : [{ name: 'Kiểm tra và sửa chữa', quantity: 1 }]
+  const services = order.services?.length ? order.services : [{ name: 'Inspect and repair', quantity: 1 }]
   const notes = order.stepNotes || []
 
   return services.map((service, index) => {
@@ -55,180 +52,81 @@ function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
     const active = !completed && (order.status === 'inProgress' || order.status === 'in-progress') && index === 0
 
     return {
-      checklist: ['Xác nhận đúng hạng mục', 'Thực hiện theo quy trình kỹ thuật', 'Ghi nhận kết quả và bằng chứng'],
-      completedAt: completed ? order.completedAt ? new Date(order.completedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : 'Đã xong' : undefined,
-      estimate: String(apiService?.estimatedDuration || 45) + ' phút',
-      evidences: [{ label: 'Ảnh kỹ thuật', note: 'Tải ảnh từ phiếu kiểm tra của lệnh sửa chữa.' }],
+      checklist: ['Confirm the right item', 'Follow the technical procedure', 'Record the result and evidence'],
+      completedAt: completed ? (order.completedAt ? new Date(order.completedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Done') : undefined,
+      estimate: `${apiService?.estimatedDuration || 45} min`,
       id: (typeof service.serviceId === 'string' ? service.serviceId : apiService?._id || apiService?.id) || 'service-' + index,
-      materials: [],
-      metrics: [],
       order: index + 1,
-      owner: 'Kỹ thuật viên',
-      startedAt: active && order.startedAt ? new Date(order.startedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) : undefined,
       status: completed ? 'completed' : active ? 'active' : 'waiting',
-      summary: note?.content || 'Chưa có ghi chú cho hạng mục này.',
-      title: apiService?.name || service.name || 'Hạng mục sửa chữa',
+      summary: note?.content || 'No note for this item yet.',
+      title: apiService?.name || service.name || 'Repair item',
     }
   })
 }
 
 const statusLabels: Record<RepairStepStatus, string> = {
-  active: 'Đang thực hiện',
-  completed: 'Hoàn thành',
-  waiting: 'Chờ thực hiện',
+  active: 'In progress',
+  completed: 'Completed',
+  waiting: 'Waiting',
 }
 
-function statusClass(status: RepairStepStatus) {
-  return {
-    active: 'border-[#ba0013] bg-[#fff1f1] text-[#ba0013]',
-    completed: 'border-green-200 bg-green-50 text-green-700',
-    waiting: 'border-[#d8d5d5] bg-[#fbf9f8] text-[#6a6767]',
-  }[status]
+const statusColors: Record<RepairStepStatus, string> = {
+  active: 'red',
+  completed: 'green',
+  waiting: 'default',
 }
 
 function nowTime() {
-  return new Intl.DateTimeFormat('vi-VN', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+  return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
 }
 
-function SummaryCard({ icon, label, value }: { icon: IconName; label: string; value: string }) {
-  return (
-    <section className="border border-[#efeded] bg-white p-6 shadow-[0_18px_40px_rgba(27,28,28,0.04)]">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-xs font-black uppercase tracking-[0.14em] text-[#6a6767]">{label}</p>
-          <p className="mt-3 text-3xl font-black text-[#171717]">{value}</p>
-        </div>
-        <span className="flex h-12 w-12 items-center justify-center bg-[#fff1f1] text-[#ba0013]">
-          <Icon name={icon} />
-        </span>
-      </div>
-    </section>
-  )
-}
-
-function StepButton({ active, onSelect, ownerName, step }: { active: boolean; onSelect: () => void; ownerName: string; step: RepairStep }) {
+function StepButton({ active, onSelect, step }: { active: boolean; onSelect: () => void; step: RepairStep }) {
   return (
     <button
-      className={active ? 'w-full border-l-4 border-[#ba0013] bg-[#fffafa] p-5 text-left shadow-[0_10px_30px_rgba(27,28,28,0.05)]' : 'w-full border border-[#efeded] bg-white p-5 text-left transition hover:border-[#ba0013] hover:bg-[#fffafa]'}
+      className="w-full rounded-[22px] p-5 text-left transition"
       onClick={onSelect}
+      style={{
+        background: active ? technicianPalette.panelAlt : technicianPalette.panel,
+        border: active ? `2px solid ${technicianPalette.red}` : `1px solid ${technicianPalette.border}`,
+        boxShadow: technicianPalette.shadow,
+      }}
       type="button"
     >
       <div className="flex items-start justify-between gap-4">
-        <div className="flex gap-4">
-          <span className={step.status === 'completed' ? 'flex h-10 w-10 items-center justify-center bg-green-600 text-white' : step.status === 'active' ? 'flex h-10 w-10 items-center justify-center bg-[#ba0013] text-white' : 'flex h-10 w-10 items-center justify-center bg-[#e4e2e2] text-[#555151]'}>
-            {step.status === 'completed' ? <Icon name="check" /> : <span className="font-black">{step.order}</span>}
+        <div className="flex gap-3">
+          <span
+            style={{
+              alignItems: 'center',
+              background: step.status === 'completed' ? '#15803d' : step.status === 'active' ? technicianPalette.red : technicianPalette.panelAlt,
+              borderRadius: 999,
+              color: step.status === 'waiting' ? technicianPalette.textMuted : 'white',
+              display: 'flex',
+              fontWeight: 700,
+              height: 36,
+              justifyContent: 'center',
+              width: 36,
+            }}
+          >
+            {step.status === 'completed' ? <CheckOutlined /> : step.order}
           </span>
           <div>
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#ba0013]">Bước {step.order} - {step.estimate}</p>
-            <h3 className="mt-2 text-lg font-black text-[#171717]">{step.title}</h3>
+            <p style={{ color: technicianPalette.red, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Step {step.order} - {step.estimate}</p>
+            <h3 style={{ color: technicianPalette.ink, fontSize: 16, fontWeight: 700, marginTop: 6 }}>{step.title}</h3>
           </div>
         </div>
-        <span className={`w-fit border px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${statusClass(step.status)}`}>{statusLabels[step.status]}</span>
+        <Tag color={statusColors[step.status]}>{statusLabels[step.status]}</Tag>
       </div>
-      <p className="mt-4 text-sm font-semibold leading-6 text-[#6a6767]">{step.summary}</p>
-      <div className="mt-4 flex flex-wrap gap-2 text-xs font-bold text-[#6a6767]">
-        {step.startedAt ? <span className="bg-[#fbf9f8] px-3 py-2">Bắt đầu {step.startedAt}</span> : null}
-        {step.completedAt ? <span className="bg-green-50 px-3 py-2 text-green-700">Xong {step.completedAt}</span> : null}
-        <span className="bg-[#fbf9f8] px-3 py-2">Phụ trách: {ownerName}</span>
+      <p style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 10 }}>{step.summary}</p>
+      <div className="mt-3 flex flex-wrap gap-2" style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>
+        {step.completedAt ? <span style={{ background: '#dcfce7', borderRadius: 10, color: '#15803d', padding: '4px 10px' }}>Done {step.completedAt}</span> : null}
       </div>
     </button>
-  )
-}
-
-function StepDetail({
-  checkedItems,
-  disabled,
-  note,
-  onComplete,
-  onNoteChange,
-  onSave,
-  onStart,
-  onToggleChecklist,
-  step,
-  technicianInitials,
-}: {
-  checkedItems: string[]
-  disabled: boolean
-  note: string
-  onComplete: () => void
-  onNoteChange: (value: string) => void
-  onSave: () => void
-  onStart: () => void
-  onToggleChecklist: (item: string) => void
-  step: RepairStep
-  technicianInitials: string
-}) {
-  return (
-    <aside className="sticky top-28 space-y-7">
-      <section className="bg-[#1b1c1c] p-6 text-white shadow-[0_18px_45px_rgba(15,14,14,0.18)]">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <p className="font-mono text-xs font-black uppercase tracking-[0.18em] text-[#ffb4ab]">Bước đang chọn</p>
-            <h3 className="mt-3 text-2xl font-black">{step.title}</h3>
-          </div>
-          <span className={`border px-3 py-1 text-[10px] font-black uppercase tracking-[0.12em] ${statusClass(step.status)}`}>{statusLabels[step.status]}</span>
-        </div>
-        <p className="mt-4 text-sm leading-6 text-white/70">{step.summary}</p>
-        <div className="mt-6 grid grid-cols-2 gap-3">
-          <div className="bg-white/10 p-4">
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-white/55">Dự kiến</p>
-            <p className="mt-2 text-xl font-black">{step.estimate}</p>
-          </div>
-          <div className="bg-white/10 p-4">
-            <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-white/55">Kỹ thuật viên</p>
-            <p className="mt-2 text-xl font-black">{technicianInitials}</p>
-          </div>
-        </div>
-      </section>
-
-      <section className="border border-[#efeded] bg-white p-6 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
-        <h3 className="text-lg font-black text-[#171717]">Checklist thực hiện</h3>
-        <div className="mt-4 space-y-3">
-          {step.checklist.map((item) => {
-            const checked = checkedItems.includes(item)
-
-            return (
-              <button className="flex w-full items-start gap-3 text-left" key={item} onClick={() => onToggleChecklist(item)} type="button">
-                <span className={checked ? 'mt-0.5 flex h-6 w-6 items-center justify-center bg-[#ba0013] text-white' : 'mt-0.5 flex h-6 w-6 items-center justify-center border border-[#d8d5d5] bg-white text-transparent'}>
-                  <Icon className="h-4 w-4" name="check" />
-                </span>
-                <span className={checked ? 'text-sm font-bold leading-6 text-[#171717]' : 'text-sm font-semibold leading-6 text-[#6a6767]'}>{item}</span>
-              </button>
-            )
-          })}
-        </div>
-      </section>
-
-      <section className="border border-[#efeded] bg-white p-6 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
-        <h3 className="text-lg font-black text-[#171717]">Ghi chú chi tiết</h3>
-        <textarea
-          className="mt-4 min-h-44 w-full border border-[#d8d5d5] bg-[#fbf9f8] p-4 text-sm leading-6 outline-none focus:border-[#ba0013] focus:ring-4 focus:ring-[#ba0013]/10"
-          onChange={(event) => onNoteChange(event.target.value)}
-          value={note}
-        />
-        <div className="mt-4 grid gap-3 sm:grid-cols-3 xl:grid-cols-1 2xl:grid-cols-3">
-          <button className="flex min-h-12 items-center justify-center gap-3 border border-[#d8d5d5] px-4 text-sm font-black uppercase text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" onClick={onStart} type="button">
-            <Icon name="bolt" />
-            Bắt đầu
-          </button>
-          <button className="flex min-h-12 items-center justify-center gap-3 bg-[#ba0013] px-4 text-sm font-black uppercase text-white transition hover:bg-[#94000f] disabled:opacity-60" disabled={disabled} onClick={onSave} type="button">
-            <Icon name="clipboard" />
-            Lưu ghi chú
-          </button>
-          <button className="flex min-h-12 items-center justify-center gap-3 border border-green-600 px-4 text-sm font-black uppercase text-green-700 transition hover:bg-green-50" onClick={onComplete} type="button">
-            <Icon name="check" />
-            Hoàn thành
-          </button>
-        </div>
-      </section>
-    </aside>
   )
 }
 
 export function TechnicianRepairNotesPage() {
   const { token, user } = useAuth()
   const technicianInitials = getUserInitials(user)
-  const technicianName = user?.fullName || user?.email || 'Kỹ thuật viên'
   const [repairOrder, setRepairOrder] = useState<ApiRepairOrder>()
   const [steps, setSteps] = useState<RepairStep[]>([])
   const [selectedStepId, setSelectedStepId] = useState('')
@@ -236,6 +134,17 @@ export function TechnicianRepairNotesPage() {
   const [checkedByStep, setCheckedByStep] = useState<Record<string, string[]>>({})
   const [apiMessage, setApiMessage] = useState<string>()
   const [saving, setSaving] = useState(false)
+
+  const [proposalOpen, setProposalOpen] = useState(false)
+  const [proposalServiceName, setProposalServiceName] = useState('')
+  const [proposalAffectedPart, setProposalAffectedPart] = useState('')
+  const [proposalReason, setProposalReason] = useState('')
+  const [proposalCustomerImpact, setProposalCustomerImpact] = useState('')
+  const [proposalLaborCost, setProposalLaborCost] = useState(0)
+  const [proposalPartsCost, setProposalPartsCost] = useState(0)
+  const [proposalEstimateMinutes, setProposalEstimateMinutes] = useState(30)
+  const [proposalPriority, setProposalPriority] = useState<'high' | 'medium' | 'low'>('medium')
+  const [submittingProposal, setSubmittingProposal] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -254,10 +163,10 @@ export function TechnicianRepairNotesPage() {
           setRepairOrder(order)
           setSteps(nextSteps)
           setSelectedStepId(nextSteps.find((step) => step.status === 'active')?.id || nextSteps[0]?.id || '')
-          setNotes(Object.fromEntries(nextSteps.map((step) => [step.id, step.summary === 'Chưa có ghi chú cho hạng mục này.' ? '' : step.summary])))
+          setNotes(Object.fromEntries(nextSteps.map((step) => [step.id, step.summary === 'No note for this item yet.' ? '' : step.summary])))
         }
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Không tải được ghi chú sửa chữa từ API')
+        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load repair progress from the API')
       }
     }
 
@@ -275,26 +184,16 @@ export function TechnicianRepairNotesPage() {
   const note = notes[selectedStep.id] ?? ''
   const progress = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
   const currentVehicle = repairOrder?.vehicleId || repairOrder?.vehicle
-  const repairOrderLabel = repairOrder ? orderId(repairOrder) : 'Chưa có lệnh'
-  const repairVehicleLabel = repairOrder ? vehicleName(currentVehicle) + ' - ' + vehiclePlate(currentVehicle) : 'Chưa có xe được giao'
-
-  const totalEvidence = useMemo(() => steps.reduce((sum, step) => sum + step.evidences.length, 0), [steps])
+  const repairOrderLabel = repairOrder ? orderId(repairOrder) : 'No order'
+  const repairVehicleLabel = repairOrder ? `${vehicleName(currentVehicle)} - ${vehiclePlate(currentVehicle)}` : 'No vehicle assigned'
 
   function updateStepStatus(status: RepairStepStatus) {
     const stamp = nowTime()
 
     setSteps((current) =>
       current.map((step) => {
-        if (step.id !== selectedStep.id) {
-          return step
-        }
-
-        return {
-          ...step,
-          completedAt: status === 'completed' ? stamp : step.completedAt,
-          startedAt: status === 'active' && !step.startedAt ? stamp : step.startedAt,
-          status,
-        }
+        if (step.id !== selectedStep.id) return step
+        return { ...step, completedAt: status === 'completed' ? stamp : step.completedAt, status }
       }),
     )
   }
@@ -309,7 +208,7 @@ export function TechnicianRepairNotesPage() {
       await updateWorkshopRepairProgress(token, repairOrderId, { status: status === 'active' ? 'inProgress' : status === 'completed' ? 'completed' : 'pending', stepId: selectedStep.id })
       updateStepStatus(status)
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Không cập nhật được tiến độ bước sửa chữa')
+      setApiMessage(err instanceof Error ? err.message : 'Unable to update the step progress')
     } finally {
       setSaving(false)
     }
@@ -320,7 +219,7 @@ export function TechnicianRepairNotesPage() {
     setSteps((current) =>
       current.map((step) => {
         const nextWaiting = step.order === selectedStep.order + 1 && step.status === 'waiting'
-        return nextWaiting ? { ...step, startedAt: nowTime(), status: 'active' } : step
+        return nextWaiting ? { ...step, status: 'active' } : step
       }),
     )
   }
@@ -333,9 +232,9 @@ export function TechnicianRepairNotesPage() {
     setApiMessage(undefined)
     try {
       await addWorkshopStepNote(token, repairOrderId, { checklist: checkedItems, content: note, stepId: selectedStep.id })
-      setApiMessage('Đã lưu ghi chú bước sửa chữa qua API.')
+      setApiMessage('Repair note saved.')
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Không lưu được ghi chú sửa chữa')
+      setApiMessage(err instanceof Error ? err.message : 'Unable to save the repair note')
     } finally {
       setSaving(false)
     }
@@ -345,129 +244,189 @@ export function TechnicianRepairNotesPage() {
     setCheckedByStep((current) => {
       const items = current[selectedStep.id] ?? []
       const nextItems = items.includes(item) ? items.filter((value) => value !== item) : [...items, item]
-
       return { ...current, [selectedStep.id]: nextItems }
     })
   }
 
+  async function submitProposal() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !token || !proposalServiceName.trim()) {
+      setApiMessage('Enter a service name before submitting the proposal.')
+      return
+    }
+
+    setSubmittingProposal(true)
+    setApiMessage(undefined)
+    try {
+      await createAdditionalServiceProposal(token, {
+        affectedPart: proposalAffectedPart || undefined,
+        customerImpact: proposalCustomerImpact || undefined,
+        estimateMinutes: proposalEstimateMinutes,
+        laborCost: proposalLaborCost,
+        partsCost: proposalPartsCost,
+        priority: proposalPriority,
+        reason: proposalReason || undefined,
+        repairOrderId,
+        serviceName: proposalServiceName.trim(),
+      })
+      setApiMessage('Additional service proposal sent to the service advisor.')
+      setProposalOpen(false)
+      setProposalServiceName('')
+      setProposalAffectedPart('')
+      setProposalReason('')
+      setProposalCustomerImpact('')
+      setProposalLaborCost(0)
+      setProposalPartsCost(0)
+      setProposalEstimateMinutes(30)
+      setProposalPriority('medium')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Unable to submit the additional service proposal')
+    } finally {
+      setSubmittingProposal(false)
+    }
+  }
+
   return (
-    <TechnicianShell active="repair-notes" eyebrow="Technician Repair Notes" notificationCount={2} title="Ghi chú sửa chữa từng bước">
-      <div className="space-y-7">
-        {apiMessage ? <div className="border border-[#e7bdb8] bg-[#fffafa] px-5 py-4 text-sm font-bold text-[#ba0013]">{apiMessage}</div> : null}
-        <section className="relative overflow-hidden border-l-8 border-[#ba0013] bg-white p-8 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
-          <div className="grid gap-6 xl:grid-cols-[1fr_340px] xl:items-center">
-            <div>
-              <p className="font-mono text-xs font-black uppercase tracking-[0.22em] text-[#ba0013]">{repairOrderLabel}</p>
-              <h2 className="mt-3 text-4xl font-black leading-tight text-[#171717] md:text-5xl">Ghi chú sửa chữa {repairVehicleLabel}</h2>
-              <p className="mt-4 max-w-3xl text-base leading-7 text-[#6a6767]">
-                Kỹ thuật viên cập nhật từng bước thực hiện, chỉ số đo, vật tư đã dùng và bằng chứng trước khi cố vấn dịch vụ gửi kết quả cho khách hàng.
-              </p>
+    <TechnicianShell eyebrow="Technician Repair Progress" title={repairVehicleLabel}>
+      {apiMessage ? (
+        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
+          {apiMessage}
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-4">
+        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
+          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Steps done</p>
+          <p style={{ color: technicianPalette.ink, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{completedCount}/{steps.length}</p>
+        </Card>
+        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
+          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>In progress</p>
+          <p style={{ color: technicianPalette.ink, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{String(activeCount).padStart(2, '0')}</p>
+        </Card>
+        <Card bordered={false} className="rounded-[24px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, width: 220 }}>
+          <p style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Order progress</p>
+          <p style={{ color: technicianPalette.red, fontSize: 26, fontWeight: 700, marginTop: 8 }}>{progress}%</p>
+        </Card>
+        <Link to="/technician/work-orders" style={{ color: technicianPalette.textMuted, fontSize: 13, fontWeight: 700 }}>
+          ← Back to work orders
+        </Link>
+      </div>
+
+      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+        <div className="flex flex-col gap-5">
+          <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title={`${repairOrderLabel} — repair steps`}>
+            <div className="flex flex-col gap-4">
+              {steps.length ? steps.map((step) => <StepButton active={step.id === selectedStep.id} key={step.id} onSelect={() => setSelectedStepId(step.id)} step={step} />) : <Empty description="No repair steps from the API yet." />}
             </div>
-            <div className="border border-[#efeded] bg-[#fbf9f8] p-5">
-              <p className="font-mono text-[10px] font-black uppercase tracking-[0.14em] text-[#6a6767]">Tiến độ lệnh</p>
-              <p className="mt-2 text-5xl font-black text-[#ba0013]">{progress}%</p>
-              <div className="mt-4 h-3 bg-[#e4e2e2]">
-                <div className="h-full bg-[#ba0013]" style={{ width: `${progress}%` }} />
+          </Card>
+
+          <Card
+            bordered={false}
+            className="rounded-[28px]"
+            extra={
+              <Button icon={<PlusCircleOutlined />} onClick={() => setProposalOpen((current) => !current)} type={proposalOpen ? 'default' : 'primary'}>
+                Submit additional service
+              </Button>
+            }
+            style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }}
+            title="Additional service request"
+          >
+            {proposalOpen ? (
+              <div className="flex flex-col gap-3">
+                <Input onChange={(event) => setProposalServiceName(event.target.value)} placeholder="Service name" value={proposalServiceName} />
+                <Input onChange={(event) => setProposalAffectedPart(event.target.value)} placeholder="Affected part" value={proposalAffectedPart} />
+                <Input onChange={(event) => setProposalReason(event.target.value)} placeholder="Reason" value={proposalReason} />
+                <TextArea onChange={(event) => setProposalCustomerImpact(event.target.value)} placeholder="Customer impact" rows={2} value={proposalCustomerImpact} />
+                <div className="grid grid-cols-3 gap-3">
+                  <InputNumber addonBefore="Labor" min={0} onChange={(value) => setProposalLaborCost(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={proposalLaborCost} />
+                  <InputNumber addonBefore="Parts" min={0} onChange={(value) => setProposalPartsCost(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={proposalPartsCost} />
+                  <InputNumber addonBefore="Min" min={0} onChange={(value) => setProposalEstimateMinutes(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={proposalEstimateMinutes} />
+                </div>
+                <Select
+                  onChange={setProposalPriority}
+                  options={[
+                    { label: 'High priority', value: 'high' },
+                    { label: 'Recommended', value: 'medium' },
+                    { label: 'Monitor', value: 'low' },
+                  ]}
+                  value={proposalPriority}
+                />
+                <Button block icon={<PlusCircleOutlined />} loading={submittingProposal} onClick={submitProposal} type="primary">
+                  Send to service advisor
+                </Button>
               </div>
-              <p className="mt-3 text-sm font-semibold text-[#6a6767]">{completedCount}/{steps.length} bước đã hoàn thành</p>
+            ) : (
+              <p style={{ color: technicianPalette.textMuted, fontSize: 13 }}>Found extra work while repairing this order? Submit a proposal for the service advisor to review.</p>
+            )}
+          </Card>
+        </div>
+
+        <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
+          <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.ink, boxShadow: technicianPalette.shadow }}>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p style={{ color: '#ffb4ab', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Selected step</p>
+                <h3 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginTop: 10 }}>{selectedStep.title}</h3>
+              </div>
+              <Tag color={statusColors[selectedStep.status]}>{statusLabels[selectedStep.status]}</Tag>
             </div>
-          </div>
-        </section>
-
-        <section className="grid gap-4 md:grid-cols-4">
-          <SummaryCard icon="check" label="Bước đã xong" value={`${completedCount}/${steps.length}`} />
-          <SummaryCard icon="bolt" label="Đang thực hiện" value={String(activeCount).padStart(2, '0')} />
-          <SummaryCard icon="clipboard" label="Bằng chứng cần lưu" value={String(totalEvidence).padStart(2, '0')} />
-          <SummaryCard icon="calendar" label="Dự kiến còn lại" value="2h 10m" />
-        </section>
-
-        <div className="grid items-start gap-7 xl:grid-cols-[minmax(0,1fr)_430px]">
-          <div className="space-y-7">
-            <section className="border border-[#efeded] bg-white p-6 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
-              <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <p className="font-mono text-[11px] font-black uppercase tracking-[0.18em] text-[#ba0013]">Quy trình sửa chữa</p>
-                  <h3 className="mt-2 text-2xl font-black text-[#171717]">Theo dõi từng bước thực hiện</h3>
-                  <p className="mt-2 max-w-2xl text-sm font-semibold leading-6 text-[#6a6767]">Chọn một bước để nhập ghi chú, tick checklist, xem chỉ số đo và cập nhật trạng thái.</p>
-                </div>
-                <Link className="inline-flex min-h-12 items-center justify-center gap-3 border border-[#d8d5d5] px-5 text-sm font-black uppercase text-[#1b1c1c] transition hover:border-[#ba0013] hover:text-[#ba0013]" to="/technician/work-orders">
-                  <Icon name="chevron-left" />
-                  Về lệnh được giao
-                </Link>
+            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 12 }}>{selectedStep.summary}</p>
+            <div className="mt-5 grid grid-cols-2 gap-3">
+              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14 }}>
+                <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Estimate</p>
+                <p style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 6 }}>{selectedStep.estimate}</p>
               </div>
-            </section>
-
-            <section className="grid gap-4">
-              {steps.map((step) => (
-                <StepButton active={step.id === selectedStep.id} key={step.id} onSelect={() => setSelectedStepId(step.id)} ownerName={technicianName} step={step} />
-              ))}
-            </section>
-
-            <section className="grid gap-7 lg:grid-cols-2">
-              <div className="border border-[#efeded] bg-white p-6 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
-                <h3 className="text-lg font-black text-[#171717]">Chỉ số kỹ thuật</h3>
-                <div className="mt-5 grid gap-3">
-                  {selectedStep.metrics.map((metric) => (
-                    <div className={metric.status === 'warning' ? 'border-l-4 border-[#ba0013] bg-[#fffafa] p-4' : 'border border-[#efeded] bg-[#fbf9f8] p-4'} key={`${selectedStep.id}-${metric.label}`}>
-                      <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#6a6767]">{metric.label}</p>
-                      <p className={metric.status === 'warning' ? 'mt-2 text-2xl font-black text-[#ba0013]' : 'mt-2 text-2xl font-black text-[#171717]'}>{metric.value} <span className="text-sm font-bold text-[#6a6767]">{metric.unit}</span></p>
-                    </div>
-                  ))}
-                </div>
+              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14 }}>
+                <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Technician</p>
+                <p style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 6 }}>{technicianInitials}</p>
               </div>
+            </div>
+          </Card>
 
-              <div className="border border-[#efeded] bg-white p-6 shadow-[0_10px_30px_rgba(27,28,28,0.05)]">
-                <h3 className="text-lg font-black text-[#171717]">Vật tư và bằng chứng</h3>
-                <div className="mt-5 space-y-4">
-                  <div>
-                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#6a6767]">Vật tư sử dụng</p>
-                    <div className="mt-3 space-y-2">
-                      {selectedStep.materials.length ? selectedStep.materials.map((material) => (
-                        <div className="flex items-center justify-between gap-3 bg-[#fbf9f8] px-4 py-3" key={material.name}>
-                          <span className="text-sm font-bold text-[#171717]">{material.name}</span>
-                          <span className="text-sm font-black text-[#ba0013]">{material.qty}</span>
-                        </div>
-                      )) : <p className="bg-[#fbf9f8] px-4 py-3 text-sm font-semibold text-[#6a6767]">Bước này chưa dùng vật tư.</p>}
-                    </div>
-                  </div>
+          <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Checklist">
+            <div className="flex flex-col gap-2">
+              {selectedStep.checklist.map((item) => {
+                const checked = checkedItems.includes(item)
+                return (
+                  <button className="flex w-full items-start gap-3 text-left" key={item} onClick={() => toggleChecklist(item)} type="button">
+                    <span
+                      style={{
+                        alignItems: 'center',
+                        background: checked ? technicianPalette.red : 'transparent',
+                        border: checked ? 'none' : `1px solid ${technicianPalette.border}`,
+                        borderRadius: 6,
+                        color: 'white',
+                        display: 'flex',
+                        flexShrink: 0,
+                        height: 22,
+                        justifyContent: 'center',
+                        marginTop: 2,
+                        width: 22,
+                      }}
+                    >
+                      {checked ? <CheckOutlined style={{ fontSize: 12 }} /> : null}
+                    </span>
+                    <span style={{ color: checked ? technicianPalette.ink : technicianPalette.textMuted, fontSize: 13, fontWeight: checked ? 700 : 600 }}>{item}</span>
+                  </button>
+                )
+              })}
+            </div>
+          </Card>
 
-                  <div>
-                    <p className="font-mono text-[10px] font-black uppercase tracking-[0.12em] text-[#6a6767]">Bằng chứng cần lưu</p>
-                    <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                      {selectedStep.evidences.map((evidence) => (
-                        <article className="border border-dashed border-[#e7bdb8] bg-[#fffafa] p-4" key={evidence.label}>
-                          <span className="flex h-10 w-10 items-center justify-center bg-[#ba0013] text-white">
-                            <Icon name="plus" />
-                          </span>
-                          <p className="mt-3 font-black text-[#171717]">{evidence.label}</p>
-                          <p className="mt-1 text-sm leading-5 text-[#6a6767]">{evidence.note}</p>
-                        </article>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </section>
-          </div>
-
-          <StepDetail
-            checkedItems={checkedItems}
-            disabled={saving}
-            note={note}
-            onComplete={() => { void completeSelectedStep() }}
-            onNoteChange={(value) => setNotes((current) => ({ ...current, [selectedStep.id]: value }))}
-            onSave={() => { void saveSelectedNote() }}
-            onStart={() => { void persistStepStatus('active') }}
-            onToggleChecklist={toggleChecklist}
-            step={selectedStep}
-            technicianInitials={technicianInitials}
-          />
+          <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Step notes">
+            <TextArea onChange={(event) => setNotes((current) => ({ ...current, [selectedStep.id]: event.target.value }))} rows={5} value={note} />
+            <div className="mt-4 grid grid-cols-3 gap-3">
+              <Button icon={<ThunderboltOutlined />} onClick={() => persistStepStatus('active')}>
+                Start
+              </Button>
+              <Button disabled={saving} icon={<CheckOutlined />} onClick={() => saveSelectedNote()} type="primary">
+                Save
+              </Button>
+              <Button onClick={() => completeSelectedStep()}>Complete</Button>
+            </div>
+          </Card>
         </div>
       </div>
     </TechnicianShell>
   )
 }
-
-
-
-
