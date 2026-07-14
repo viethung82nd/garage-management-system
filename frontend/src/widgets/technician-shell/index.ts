@@ -1,1 +1,1 @@
-export { TechnicianShell } from './ui/TechnicianShell'
+export { TechnicianShell, technicianPalette } from './ui/TechnicianShell'
