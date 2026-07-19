@@ -6,6 +6,9 @@ import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
+import { logAudit } from "../utils/audit.js";
+
+const INVOICE_TERM_DAYS = 15;
 
 const invoicePopulate = [
   { path: "accountantId", select: "fullName email phone role" },
@@ -42,6 +45,7 @@ function serializePayment(payment) {
     status: payment.status,
     paidAt: payment.paidAt,
     gatewayRef: payment.gatewayRef || null,
+    reference: payment.reference || null,
   };
 }
 
@@ -55,16 +59,24 @@ function serializeInvoice(invoice, latestPayment) {
     displayId: formatDisplayId("INV", invoice._id),
     status: invoice.status,
     issuedAt: invoice.issuedAt,
+    dueAt: invoice.dueAt || null,
     sentAt: invoice.sentAt || null,
     subtotal: invoice.subtotal,
     discount: invoice.discount,
+    taxAmount: invoice.taxAmount || 0,
     total: invoice.total,
+    amountPaid: invoice.amountPaid || 0,
+    balanceDue: invoice.total - (invoice.amountPaid || 0),
+    quoteId: invoice.quoteId ? String(invoice.quoteId) : null,
+    quotedTotal: invoice.quotedTotal ?? null,
     lineItems: invoice.lineItems.map((item, index) => ({
       id: `${invoice._id}-${index}`,
       description: item.description,
       quantity: item.quantity,
       unitPrice: item.unitPrice,
       lineTotal: item.quantity * item.unitPrice,
+      kind: item.kind || "service",
+      source: item.source || "quote",
     })),
     accountant: invoice.accountantId
       ? {
@@ -238,11 +250,17 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     description: s.name,
     quantity: s.quantity,
     unitPrice: s.priceAtTime,
+    kind: s.kind || "service",
+    source: s.source || "quote",
   }));
 
   const subtotal = lineItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
 
-  const appliedDiscount = discount ?? 0;
+  // Default to the discount the SA already quoted the customer, so the
+  // invoice matches the quote unless the accountant deliberately overrides
+  // it. Orders with no linked quote fall back to 0 (today's behavior).
+  const defaultDiscount = Math.round((subtotal * (order.quotedDiscountPercent || 0)) / 100);
+  const appliedDiscount = discount ?? defaultDiscount;
   if (
     typeof appliedDiscount !== "number" ||
     Number.isNaN(appliedDiscount) ||
@@ -252,7 +270,10 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     throw new ApiError(400, "discount must be a number between 0 and the subtotal");
   }
 
-  const total = subtotal - appliedDiscount;
+  const taxAmount = Math.round(((subtotal - appliedDiscount) * (order.quotedTaxPercent || 0)) / 100);
+  const total = subtotal - appliedDiscount + taxAmount;
+  const issuedAt = new Date();
+  const dueAt = new Date(issuedAt.getTime() + INVOICE_TERM_DAYS * 24 * 60 * 60 * 1000);
 
   const invoice = await invoiceRepository.create({
     repairOrderId,
@@ -260,11 +281,24 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     lineItems,
     subtotal,
     discount: appliedDiscount,
+    taxAmount,
     total,
     status: "unpaid",
+    issuedAt,
+    dueAt,
+    quoteId: order.quoteId || undefined,
+    quotedTotal: order.quotedTotal ?? undefined,
   });
 
   await invoice.populate(invoicePopulate);
+
+  await logAudit({
+    action: "invoiceGenerated",
+    actorId: accountantId,
+    invoiceId: invoice._id,
+    repairOrderId,
+    details: `${formatDisplayId("INV", invoice._id)} generated for ${total.toLocaleString("vi-VN")} ₫`,
+  });
 
   return { invoice: serializeInvoice(invoice, null) };
 }
@@ -275,7 +309,7 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
  * configured), since the notification itself is the primary "customer was
  * informed" signal.
  */
-export async function sendInvoiceToCustomer(id) {
+export async function sendInvoiceToCustomer(id, actorId) {
   if (!mongoose.isValidObjectId(id)) {
     throw new ApiError(400, "invoice id is not a valid id");
   }
@@ -309,6 +343,14 @@ export async function sendInvoiceToCustomer(id) {
 
   invoice.sentAt = new Date();
   await invoice.save();
+
+  await logAudit({
+    action: "invoiceSent",
+    actorId,
+    invoiceId: invoice._id,
+    repairOrderId: invoice.repairOrderId?._id,
+    details: `${formatDisplayId("INV", invoice._id)} sent to ${customer?.fullName || "customer"}`,
+  });
 
   const latestPayment = await paymentRepository.model
     .findOne({ invoiceId: invoice._id })

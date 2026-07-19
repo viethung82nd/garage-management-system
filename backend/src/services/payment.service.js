@@ -4,6 +4,7 @@ import { paymentRepository } from "../repositories/payment.repository.js";
 import { PAYMENT_METHODS } from "../models/payment.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { charge } from "../utils/paymentGateway.js";
+import { logAudit } from "../utils/audit.js";
 
 /** Throws a 400 unless `id` is a well-formed Mongo ObjectId. */
 function assertObjectId(id, label) {
@@ -26,10 +27,12 @@ async function resolveInvoiceCustomer(invoiceId) {
  *
  * Creates a pending payment, runs it through the gateway, then settles both the
  * payment status (succeeded/failed, with `paidAt`) and — on success — the
- * invoice status (→ paid). The charged amount always comes from the invoice
- * total, never the client, so a request can't under/over-pay.
+ * invoice's running `amountPaid`/status. `amount` may be less than the
+ * remaining balance (a partial payment, e.g. a deposit); omitting it pays the
+ * full remaining balance in one shot, same as before. It can never exceed the
+ * remaining balance — the client can under-pay, never over-pay.
  */
-export async function recordPayment({ invoiceId, method, simulate }) {
+export async function recordPayment({ invoiceId, method, amount, reference, simulate }, actorId) {
   assertObjectId(invoiceId, "invoiceId");
   if (!PAYMENT_METHODS.includes(method)) {
     throw new ApiError(400, `method must be one of: ${PAYMENT_METHODS.join(", ")}`);
@@ -46,21 +49,30 @@ export async function recordPayment({ invoiceId, method, simulate }) {
     throw new ApiError(409, "invoice is cancelled");
   }
 
+  const balanceDue = invoice.total - (invoice.amountPaid || 0);
+  const chargeAmount = amount ?? balanceDue;
+  if (typeof chargeAmount !== "number" || Number.isNaN(chargeAmount) || chargeAmount <= 0 || chargeAmount > balanceDue) {
+    throw new ApiError(400, `amount must be a number between 0 and the remaining balance (${balanceDue})`);
+  }
+
   const customerId = invoice.repairOrderId?.vehicleId?.customerId;
   if (!customerId) {
     throw new ApiError(422, "invoice has no associated customer");
   }
 
+  const trimmedReference = typeof reference === "string" ? reference.trim() : "";
+
   // Record the attempt up front so a gateway failure still leaves an audit trail.
   const payment = await paymentRepository.create({
     invoiceId: invoice._id,
     customerId,
-    amount: invoice.total,
+    amount: chargeAmount,
     method,
+    reference: trimmedReference || undefined,
     status: "pending",
   });
 
-  const result = await charge({ amount: invoice.total, method, simulate });
+  const result = await charge({ amount: chargeAmount, method, simulate });
 
   payment.status = result.status;
   payment.gatewayRef = result.gatewayRef;
@@ -72,11 +84,36 @@ export async function recordPayment({ invoiceId, method, simulate }) {
 
   // Only a successful charge settles the invoice.
   if (result.status === "succeeded") {
-    invoice.status = "paid";
+    invoice.amountPaid = (invoice.amountPaid || 0) + chargeAmount;
+    const remaining = invoice.total - invoice.amountPaid;
+    invoice.status = remaining <= 0 ? "paid" : "partiallyPaid";
     await invoice.save();
+
+    const refSuffix = trimmedReference ? ` (ref ${trimmedReference})` : "";
+    await logAudit({
+      action: "paymentRecorded",
+      actorId,
+      invoiceId: invoice._id,
+      repairOrderId: invoice.repairOrderId?._id,
+      details:
+        remaining <= 0
+          ? `${chargeAmount.toLocaleString("vi-VN")} ₫ via ${method} — paid in full${refSuffix}`
+          : `${chargeAmount.toLocaleString("vi-VN")} ₫ via ${method} — ${remaining.toLocaleString("vi-VN")} ₫ remaining${refSuffix}`,
+    });
   }
 
   return { payment, invoiceStatus: invoice.status };
+}
+
+/** List every payment attempt, newest first — the accountant's payments ledger. */
+export async function listPayments() {
+  const payments = await paymentRepository.model
+    .find()
+    .populate({ path: "invoiceId", select: "total status issuedAt" })
+    .populate({ path: "customerId", select: "fullName phone" })
+    .sort({ paidAt: -1, _id: -1 });
+
+  return { payments };
 }
 
 /** Fetch a single payment with its invoice summary. */

@@ -194,14 +194,38 @@ export async function confirmQuotation(id, approved) {
           name: name || "Line item",
           priceAtTime,
           quantity,
+          kind: line.kind || "service",
+          source: "quote",
         });
         totalCost += priceAtTime * quantity;
       }
 
       order.services = processedServices;
       order.totalCost = totalCost;
+      // Snapshot the quote's discount/tax/total — these live only on the
+      // ServiceQuote and would otherwise be lost the moment it's approved,
+      // leaving the eventual invoice with no way to match what was quoted.
+      order.quoteId = quote._id;
+      order.quotedDiscountPercent = quote.discountPercent;
+      order.quotedTaxPercent = quote.taxPercent;
+      order.quotedTotal = quote.totalEstimate;
       await order.save();
     }
+  }
+
+  return quote;
+}
+
+/** Fetch a single quotation — read access extended to the accountant role so
+ *  they can cross-check an invoice against what was originally quoted. */
+export async function getQuotationById(id) {
+  if (!OID_RE.test(id)) {
+    throw new ApiError(400, "Invalid quotation ID format");
+  }
+
+  const quote = await serviceQuoteRepository.findById(id);
+  if (!quote) {
+    throw new ApiError(404, "Quotation not found");
   }
 
   return quote;

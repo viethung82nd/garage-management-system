@@ -28,6 +28,6 @@ export async function generateInvoiceFromRepairOrder(req, res) {
  * record an in-app notification.
  */
 export async function sendInvoiceToCustomer(req, res) {
-  const result = await invoiceService.sendInvoiceToCustomer(req.params.id);
+  const result = await invoiceService.sendInvoiceToCustomer(req.params.id, req.user.sub);
   res.json(result);
 }

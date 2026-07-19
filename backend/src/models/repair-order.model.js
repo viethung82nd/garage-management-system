@@ -36,6 +36,22 @@ const orderServiceSchema = new Schema(
       default: 1,
       min: 1,
     },
+    // Mirrors ServiceQuote's own line kind — lets the accountant's invoice
+    // distinguish labor from parts instead of one flat "service" list.
+    kind: {
+      type: String,
+      enum: ["service", "part", "labor"],
+      default: "service",
+    },
+    // Where this line came from: the SA's originally-confirmed quotation, or
+    // a technician's additional-service request approved mid-repair. Lets the
+    // invoice explain a total that grew past what was originally quoted
+    // instead of it looking like an unexplained mismatch.
+    source: {
+      type: String,
+      enum: ["quote", "additionalService"],
+      default: "quote",
+    },
     // Lets a technician work through a multi-line order one item at a time
     // (PATCH /:id/progress with a stepIndex) without every "complete this
     // line" action marking the whole order — and therefore the whole job —
@@ -105,6 +121,24 @@ const repairOrderSchema = new Schema(
     services: {
       type: [orderServiceSchema],
       default: [],
+    },
+    // Snapshot of the confirmed ServiceQuote that produced services[] — lets
+    // the accountant's invoice reconstruct the originally-quoted discount/tax
+    // (which are otherwise nowhere on the order) and cross-reference the quote.
+    quoteId: {
+      type: Schema.Types.ObjectId,
+      ref: "ServiceQuote",
+    },
+    quotedDiscountPercent: {
+      type: Number,
+      default: 0,
+    },
+    quotedTaxPercent: {
+      type: Number,
+      default: 0,
+    },
+    quotedTotal: {
+      type: Number,
     },
     stepNotes: {
       type: [stepNoteSchema],

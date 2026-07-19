@@ -6,6 +6,8 @@ export type RepairOrderApiRecord = {
   totalCost?: number
   startedAt?: string | null
   completedAt?: string | null
+  quoteId?: string | null
+  quotedTotal?: number | null
   vehicleId?: {
     _id: string
     licensePlate: string
@@ -34,6 +36,8 @@ export type RepairOrderApiRecord = {
     name: string
     quantity: number
     priceAtTime: number
+    kind?: 'service' | 'part' | 'labor'
+    source?: 'quote' | 'additionalService'
     serviceId?: {
       _id?: string
       category?: string
@@ -46,16 +50,24 @@ export type InvoiceApiRecord = {
   displayId: string
   status: string
   issuedAt: string
+  dueAt?: string | null
   sentAt?: string | null
   subtotal: number
   discount: number
+  taxAmount: number
   total: number
+  amountPaid: number
+  balanceDue: number
+  quoteId?: string | null
+  quotedTotal?: number | null
   lineItems: Array<{
     id: string
     description: string
     quantity: number
     unitPrice: number
     lineTotal: number
+    kind: 'service' | 'part' | 'labor'
+    source: 'quote' | 'additionalService'
   }>
   repairOrder: {
     id: string
@@ -104,6 +116,7 @@ export type InvoiceApiRecord = {
     status: string
     paidAt?: string | null
     gatewayRef?: string | null
+    reference?: string | null
   } | null
 }
 
@@ -156,24 +169,29 @@ export function fetchRepairOrderDetail(token: string, repairOrderId: string) {
   })
 }
 
-export function generateInvoice(token: string, repairOrderId: string, discount = 0) {
+export function generateInvoice(token: string, repairOrderId: string, discount?: number) {
   return apiRequest<InvoiceDetailResponse>('/api/invoices', {
     method: 'POST',
     token,
     body: JSON.stringify({
       repairOrderId,
-      discount,
+      // Omitted (not 0) unless the caller explicitly overrides — lets the
+      // backend default to the order's quoted discount instead of always
+      // being told "0".
+      ...(discount !== undefined ? { discount } : {}),
     }),
   })
 }
 
-export function recordInvoicePayment(token: string, invoiceId: string, method: string) {
+export function recordInvoicePayment(token: string, invoiceId: string, method: string, amount?: number, reference?: string) {
   return apiRequest<PaymentResultResponse>('/api/payments', {
     method: 'POST',
     token,
     body: JSON.stringify({
       invoiceId,
       method,
+      ...(amount !== undefined ? { amount } : {}),
+      ...(reference ? { reference } : {}),
     }),
   })
 }
@@ -181,6 +199,77 @@ export function recordInvoicePayment(token: string, invoiceId: string, method: s
 export function sendInvoiceToCustomer(token: string, invoiceId: string) {
   return apiRequest<InvoiceDetailResponse>(`/api/invoices/${invoiceId}/send`, {
     method: 'PATCH',
+    token,
+  })
+}
+
+export type PaymentApiRecord = {
+  _id: string
+  amount: number
+  method: string
+  status: string
+  paidAt?: string | null
+  gatewayRef?: string | null
+  reference?: string | null
+  invoiceId: {
+    _id: string
+    total: number
+    status: string
+    issuedAt: string
+  } | null
+  customerId: {
+    _id: string
+    fullName: string
+    phone?: string
+  } | null
+}
+
+export type AuditLogEntry = {
+  id: string
+  action: 'invoiceGenerated' | 'invoiceSent' | 'paymentRecorded'
+  actorName: string
+  invoiceId: string | null
+  invoiceDisplayId: string | null
+  details: string
+  createdAt: string
+}
+
+export function fetchPayments(token: string) {
+  return apiRequest<{ payments: PaymentApiRecord[] }>('/api/payments', {
+    method: 'GET',
+    token,
+  })
+}
+
+export function fetchAuditLogs(token: string) {
+  return apiRequest<{ entries: AuditLogEntry[] }>('/api/audit-logs', {
+    method: 'GET',
+    token,
+  })
+}
+
+export type QuoteApiRecord = {
+  _id: string
+  code?: string
+  customerName?: string
+  vehicleName?: string
+  vehiclePlate?: string
+  lines: Array<{
+    description?: string
+    kind: 'service' | 'part' | 'labor'
+    quantity: number
+    unitPrice: number
+  }>
+  discountPercent: number
+  taxPercent: number
+  totalEstimate: number
+  status: string
+  note?: string
+}
+
+export function fetchQuotationById(token: string, quoteId: string) {
+  return apiRequest<QuoteApiRecord>(`/api/quotations/${quoteId}`, {
+    method: 'GET',
     token,
   })
 }

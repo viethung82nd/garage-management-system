@@ -1,10 +1,12 @@
-import { DollarOutlined, FileDoneOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Card, Input, Progress, Space, Table, Tag, Typography } from 'antd'
+import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, DollarOutlined, FileTextOutlined, SearchOutlined, WalletOutlined, WarningOutlined } from '@ant-design/icons'
+import { Card, Empty, Input, Progress, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../../../../shared/auth'
+import { InlineBanner, StatCard } from '../../../../widgets/backoffice-shell'
 import { fetchAdminSummary } from '../../../admin/dashboard/api/dashboardApi'
+import { fetchRevenueReport } from '../../../admin/reports/api/reportsApi'
 import {
   fetchAccountantInvoices,
   fetchCompletedRepairOrders,
@@ -13,9 +15,7 @@ import {
 } from '../../api/accountantApi'
 import { AccountantShell, accountantPalette } from '../../ui/AccountantShell'
 
-const { Text } = Typography
-
-type QueueStatus = 'Ready to bill' | 'Awaiting payment' | 'Paid' | 'Cancelled'
+type QueueStatus = 'Ready to bill' | 'Awaiting payment' | 'Overdue' | 'Partially paid' | 'Paid' | 'Cancelled'
 
 type InvoiceWorkItem = {
   key: string
@@ -24,26 +24,35 @@ type InvoiceWorkItem = {
   displayId: string
   repairOrderDisplayId: string
   customer: string
+  contact: string
   vehicle: string
   advisor: string
   technician: string
   status: QueueStatus
   paymentMethod: string
   issuedAt: string
-  dueAt: string
+  dueAt: string | null
+  queueNote: string
   total: number
+  balanceDue: number
   sortValue: string
   searchText: string
 }
 
+// Same semantic status palette as the invoice document (InvoiceConfirmPage) — one
+// consistent meaning for "paid"/"awaiting"/"overdue"/"ready"/"cancelled" across both pages.
 function toneByStatus(status: QueueStatus) {
   switch (status) {
     case 'Ready to bill':
-      return { bg: '#dbeafe', color: '#1d4ed8' }
+      return { bg: '#dbeafe', color: '#1e3a5f' }
     case 'Awaiting payment':
       return { bg: '#fef3c7', color: '#92400e' }
+    case 'Overdue':
+      return { bg: '#fee2e2', color: '#dc2626' }
+    case 'Partially paid':
+      return { bg: '#ede9fe', color: '#6d28d9' }
     case 'Paid':
-      return { bg: '#dcfce7', color: '#166534' }
+      return { bg: '#d1fae5', color: '#047857' }
     case 'Cancelled':
       return { bg: '#f3f4f6', color: '#6b7280' }
   }
@@ -57,22 +66,6 @@ function formatMoney(value: number, currency = 'VND') {
   return new Intl.NumberFormat('en-US', {
     style: 'currency',
     currency,
-  }).format(value)
-}
-
-function formatCompactMoney(value: number, currency = 'VND') {
-  if (currency === 'VND') {
-    return `${new Intl.NumberFormat('vi-VN', {
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(value)} ₫`
-  }
-
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    notation: 'compact',
-    maximumFractionDigits: 1,
   }).format(value)
 }
 
@@ -118,9 +111,30 @@ function toPaymentLabel(method?: string | null) {
   }
 }
 
+function daysBetween(from: Date, to: Date) {
+  return Math.round((to.getTime() - from.getTime()) / (24 * 60 * 60 * 1000))
+}
+
+function formatShortDate(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return value
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short' }).format(date)
+}
+
 function mapInvoiceToQueueItem(invoice: InvoiceApiRecord): InvoiceWorkItem {
+  const isOpen = invoice.status !== 'paid' && invoice.status !== 'cancelled'
+  const isPastDue = isOpen && !!invoice.dueAt && new Date(invoice.dueAt).getTime() < Date.now()
+
   const status: QueueStatus =
-    invoice.status === 'paid' ? 'Paid' : invoice.status === 'cancelled' ? 'Cancelled' : 'Awaiting payment'
+    invoice.status === 'paid'
+      ? 'Paid'
+      : invoice.status === 'cancelled'
+        ? 'Cancelled'
+        : isPastDue
+          ? 'Overdue'
+          : invoice.status === 'partiallyPaid'
+            ? 'Partially paid'
+            : 'Awaiting payment'
 
   const customer = invoice.customer?.fullName || 'Customer updating'
   const vehicle = formatVehicle({
@@ -130,6 +144,19 @@ function mapInvoiceToQueueItem(invoice: InvoiceApiRecord): InvoiceWorkItem {
     licensePlate: invoice.vehicle?.licensePlate,
   })
 
+  let queueNote = 'Awaiting counter confirmation'
+  if (status === 'Paid') {
+    queueNote = 'Settled'
+  } else if (status === 'Cancelled') {
+    queueNote = 'Cancelled'
+  } else if (status === 'Overdue' && invoice.dueAt) {
+    queueNote = `Overdue by ${daysBetween(new Date(invoice.dueAt), new Date())}d`
+  } else if (status === 'Partially paid') {
+    queueNote = `${formatMoney(invoice.balanceDue)} remaining`
+  } else if (invoice.dueAt) {
+    queueNote = `Due ${formatShortDate(invoice.dueAt)}`
+  }
+
   return {
     key: invoice.id,
     kind: 'invoice',
@@ -137,14 +164,17 @@ function mapInvoiceToQueueItem(invoice: InvoiceApiRecord): InvoiceWorkItem {
     displayId: invoice.displayId,
     repairOrderDisplayId: invoice.repairOrder?.displayId || 'Repair order pending',
     customer,
+    contact: invoice.customer?.phone || '',
     vehicle,
     advisor: invoice.serviceAdvisor?.fullName || 'Service advisor updating',
     technician: invoice.technician?.fullName || 'Technician updating',
     status,
     paymentMethod: toPaymentLabel(invoice.latestPayment?.method),
     issuedAt: formatDateTime(invoice.issuedAt),
-    dueAt: status === 'Paid' ? 'Settled' : 'Awaiting counter confirmation',
+    dueAt: invoice.dueAt || null,
+    queueNote,
     total: invoice.total,
+    balanceDue: invoice.balanceDue,
     sortValue: invoice.issuedAt,
     searchText: [invoice.displayId, invoice.repairOrder?.displayId, customer, vehicle, invoice.vehicle?.licensePlate].filter(Boolean).join(' ').toLowerCase(),
   }
@@ -167,123 +197,63 @@ function mapRepairOrderToQueueItem(order: RepairOrderApiRecord): InvoiceWorkItem
     displayId,
     repairOrderDisplayId: displayId,
     customer,
+    contact: order.vehicleId?.customerId?.phone || '',
     vehicle,
     advisor: order.advisorId?.fullName || 'Service advisor updating',
     technician: order.technicianId?.fullName || 'Technician updating',
     status: 'Ready to bill',
     paymentMethod: 'Direct at desk',
     issuedAt: formatDateTime(order.completedAt),
-    dueAt: 'Invoice not issued',
+    dueAt: null,
+    queueNote: 'Invoice not issued',
     total: order.totalCost || 0,
+    balanceDue: order.totalCost || 0,
     sortValue: order.completedAt || '',
     searchText: [displayId, customer, vehicle, order.vehicleId?.licensePlate].filter(Boolean).join(' ').toLowerCase(),
   }
 }
 
-function MetricCard({
-  label,
-  value,
-  delta,
-  tone,
-}: {
-  label: string
-  value: string | number
-  delta: string
-  tone: 'emerald' | 'blue' | 'amber' | 'violet'
-}) {
-  const toneMap = {
-    emerald: { accent: accountantPalette.green, soft: 'rgba(47, 143, 99, 0.14)' },
-    blue: { accent: accountantPalette.navy, soft: 'rgba(31, 54, 92, 0.14)' },
-    amber: { accent: '#c67a00', soft: 'rgba(255, 179, 71, 0.18)' },
-    violet: { accent: accountantPalette.violet, soft: 'rgba(138, 63, 252, 0.14)' },
-  } as const
-
-  const currentTone = toneMap[tone]
-
-  return (
-    <Card bordered={false} styles={{ body: { padding: 0 } }} className="overflow-hidden rounded-[28px]" style={{ background: `linear-gradient(135deg, ${accountantPalette.panel} 0%, ${accountantPalette.panelAlt} 100%)`, boxShadow: accountantPalette.shadow }}>
-      <div className="relative overflow-hidden p-5">
-        <div className="absolute right-[-32px] top-[-32px] h-28 w-28 rounded-full" style={{ background: currentTone.soft }} />
-        <div className="relative flex items-start justify-between gap-3">
-          <div>
-            <Text className="!text-[11px] !font-semibold !uppercase !tracking-[0.18em]" style={{ color: accountantPalette.textMuted }}>
-              {label}
-            </Text>
-            <div className="mt-2 font-['Oswald'] text-[34px] leading-none md:text-[38px]" style={{ color: accountantPalette.ink }}>
-              {value}
-            </div>
-          </div>
-          <div className="rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]" style={{ background: currentTone.soft, color: currentTone.accent }}>
-            {delta}
-          </div>
-        </div>
-      </div>
-    </Card>
-  )
-}
-
+/** Horizontal breakdown bars — same visual language as RevenueBars below, so the
+ * page reads as one consistent chart system instead of mixing a donut in. */
 function PaymentMixChart({
   items,
 }: {
   items: Array<{ label: string; value: number; color: string }>
 }) {
-  const total = Math.max(items.reduce((sum, item) => sum + item.value, 0), 1)
-  let currentOffset = 0
+  const total = items.reduce((sum, item) => sum + item.value, 0)
+
+  if (total <= 0) {
+    return <Empty description="No settled or awaiting payments yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center">
-      <div className="relative mx-auto h-[180px] w-[180px]">
-        <svg viewBox="0 0 220 220" className="h-full w-full -rotate-90">
-          <circle cx="110" cy="110" r="72" fill="none" stroke="rgba(15,14,14,0.08)" strokeWidth="24" />
-          {items.map((item) => {
-            const dash = (item.value / total) * 452.39
-            const circle = (
-              <circle
-                key={item.label}
-                cx="110"
-                cy="110"
-                r="72"
-                fill="none"
-                stroke={item.color}
-                strokeWidth="24"
-                strokeDasharray={`${dash} 452.39`}
-                strokeDashoffset={-currentOffset}
-                strokeLinecap="round"
-              />
-            )
-            currentOffset += dash
-            return circle
-          })}
-        </svg>
-        <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <div className="font-['Oswald'] text-[34px] leading-none" style={{ color: accountantPalette.ink }}>
-            {total}
-          </div>
-          <div className="mt-2 text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: accountantPalette.textMuted }}>
-            Payment records
-          </div>
-        </div>
-      </div>
-
-      <div className="space-y-3">
-        {items.map((item) => (
-          <div key={item.label} className="flex items-center justify-between gap-4 rounded-2xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.7)' }}>
-            <div className="flex items-center gap-3">
-              <span className="h-3 w-3 rounded-full" style={{ background: item.color }} />
-              <span className="text-sm font-semibold" style={{ color: accountantPalette.inkSoft }}>
+    <div className="flex flex-col gap-4">
+      {items.map((item) => (
+        <div key={item.label}>
+          <div className="mb-2 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2.5">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: item.color }} />
+              <span className="text-sm font-medium" style={{ color: accountantPalette.inkSoft }}>
                 {item.label}
               </span>
             </div>
-            <span className="font-['Oswald'] text-[28px] leading-none" style={{ color: accountantPalette.ink }}>
+            <span className="shrink-0 text-[16px] leading-none font-semibold" style={{ color: accountantPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
               {item.value}
             </span>
           </div>
-        ))}
-      </div>
+          <div className="h-2.5 overflow-hidden rounded-full" style={{ background: '#eef1f5' }}>
+            <div
+              className="h-full rounded-full transition-all duration-700 ease-out"
+              style={{ width: `${(item.value / total) * 100}%`, background: item.color }}
+            />
+          </div>
+        </div>
+      ))}
     </div>
   )
 }
 
+/** Same visual formula as the horizontal bar chart on the admin dashboard. */
 function RevenueBars({
   items,
   currency,
@@ -294,24 +264,23 @@ function RevenueBars({
   const max = Math.max(...items.map((item) => item.value), 1)
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {items.map((item) => (
         <div key={item.label}>
           <div className="mb-2 flex items-center justify-between gap-4">
-            <span className="text-sm font-semibold" style={{ color: accountantPalette.inkSoft }}>
+            <span className="truncate text-sm font-medium" style={{ color: accountantPalette.inkSoft }} title={item.label}>
               {item.label}
             </span>
-            <span className="font-['Oswald'] text-[24px] leading-none" style={{ color: accountantPalette.ink }}>
-              {formatCompactMoney(item.value, currency)}
+            <span className="shrink-0 text-[16px] leading-none font-semibold" style={{ color: accountantPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
+              {formatMoney(item.value, currency)}
             </span>
           </div>
-          <div className="h-4 overflow-hidden rounded-full" style={{ background: 'rgba(15,14,14,0.12)', boxShadow: 'inset 0 1px 2px rgba(15,14,14,0.08)' }}>
+          <div className="h-2.5 overflow-hidden rounded-full" style={{ background: '#eef1f5' }}>
             <div
-              className="h-full rounded-full transition-all duration-500"
+              className="h-full rounded-full transition-all duration-700 ease-out"
               style={{
                 width: `${(item.value / max) * 100}%`,
-                background: `linear-gradient(90deg, ${item.color} 0%, ${accountantPalette.ink} 100%)`,
-                boxShadow: `0 8px 18px ${item.color}45`,
+                background: item.color,
               }}
             />
           </div>
@@ -328,6 +297,8 @@ export default function InvoiceManagementPage() {
   const [currency, setCurrency] = useState('VND')
   const [collectedRevenue, setCollectedRevenue] = useState(0)
   const [outstandingRevenue, setOutstandingRevenue] = useState(0)
+  const [collectedToday, setCollectedToday] = useState(0)
+  const [collectedThisMonth, setCollectedThisMonth] = useState(0)
   const [search, setSearch] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [requestError, setRequestError] = useState('')
@@ -344,10 +315,17 @@ export default function InvoiceManagementPage() {
       setRequestError('')
 
       try {
-        const [summaryResponse, invoiceResponse, repairOrders] = await Promise.all([
+        const now = new Date()
+        const isoDate = (date: Date) => date.toISOString().slice(0, 10)
+        const today = isoDate(now)
+        const firstOfMonth = isoDate(new Date(now.getFullYear(), now.getMonth(), 1))
+
+        const [summaryResponse, invoiceResponse, repairOrders, todayReport, monthReport] = await Promise.all([
           fetchAdminSummary(token),
           fetchAccountantInvoices(token),
           fetchCompletedRepairOrders(token),
+          fetchRevenueReport(token, today, today),
+          fetchRevenueReport(token, firstOfMonth, today),
         ])
 
         if (cancelled) {
@@ -371,6 +349,8 @@ export default function InvoiceManagementPage() {
         setCurrency(summaryResponse.revenue.currency)
         setCollectedRevenue(summaryResponse.revenue.collected)
         setOutstandingRevenue(summaryResponse.revenue.outstanding)
+        setCollectedToday(todayReport.report.totalRevenue)
+        setCollectedThisMonth(monthReport.report.totalRevenue)
       } catch (error) {
         if (!cancelled) {
           setRequestError(error instanceof Error ? error.message : 'Unable to load invoice queue.')
@@ -398,18 +378,24 @@ export default function InvoiceManagementPage() {
     return items.filter((item) => item.searchText.includes(keyword))
   }, [items, search])
 
+  const filteredTotal = useMemo(() => filteredItems.reduce((sum, item) => sum + item.total, 0), [filteredItems])
+
   const overviewCards = useMemo(() => {
     const readyToBill = items.filter((item) => item.status === 'Ready to bill')
     const awaitingPayment = items.filter((item) => item.status === 'Awaiting payment')
+    const overdue = items.filter((item) => item.status === 'Overdue')
+    const overdueTotal = overdue.reduce((sum, item) => sum + item.total, 0)
     const paid = items.filter((item) => item.status === 'Paid')
 
     return [
-      { label: 'Invoices pending issue', value: readyToBill.length, delta: `${readyToBill.length} completed orders`, tone: 'amber' as const },
-      { label: 'Awaiting payment', value: awaitingPayment.length, delta: formatCompactMoney(outstandingRevenue, currency), tone: 'blue' as const },
-      { label: 'Paid records', value: paid.length, delta: formatCompactMoney(collectedRevenue, currency), tone: 'emerald' as const },
-      { label: 'Billing queue', value: items.length, delta: `${filteredItems.length} visible`, tone: 'violet' as const },
+      { label: 'Invoices pending issue', value: readyToBill.length, note: `${readyToBill.length} completed orders`, tone: 'amber' as const, icon: <FileTextOutlined /> },
+      { label: 'Awaiting payment', value: awaitingPayment.length, note: formatMoney(outstandingRevenue, currency), tone: 'blue' as const, icon: <ClockCircleOutlined /> },
+      { label: 'Overdue', value: overdue.length, note: overdue.length > 0 ? formatMoney(overdueTotal, currency) : 'Nothing past due', tone: 'red' as const, icon: <WarningOutlined /> },
+      { label: 'Paid records', value: paid.length, note: formatMoney(collectedRevenue, currency), tone: 'emerald' as const, icon: <CheckCircleOutlined /> },
+      { label: 'Collected today', value: formatMoney(collectedToday, currency), note: 'Settled today', tone: 'violet' as const, icon: <CalendarOutlined /> },
+      { label: 'Collected this month', value: formatMoney(collectedThisMonth, currency), note: 'Month to date', tone: 'blue' as const, icon: <DollarOutlined /> },
     ]
-  }, [collectedRevenue, currency, filteredItems.length, items, outstandingRevenue])
+  }, [collectedRevenue, collectedThisMonth, collectedToday, currency, items, outstandingRevenue])
 
   const paymentMix = useMemo(() => {
     const counts = {
@@ -420,7 +406,7 @@ export default function InvoiceManagementPage() {
     }
 
     for (const item of items) {
-      if (item.status !== 'Paid' && item.status !== 'Awaiting payment') {
+      if (item.status !== 'Paid' && item.status !== 'Awaiting payment' && item.status !== 'Partially paid') {
         continue
       }
 
@@ -443,21 +429,23 @@ export default function InvoiceManagementPage() {
     }
 
     return [
-      { label: 'Cash', value: counts.Cash, color: '#ffb347' },
-      { label: 'Card', value: counts.Card, color: '#f51304' },
-      { label: 'Bank transfer', value: counts['Bank transfer'], color: '#1f365c' },
-      { label: 'E-wallet', value: counts['E-wallet'], color: '#197b74' },
-    ]
+      { label: 'Cash', value: counts.Cash, color: accountantPalette.amber },
+      { label: 'Card', value: counts.Card, color: accountantPalette.red },
+      { label: 'Bank transfer', value: counts['Bank transfer'], color: accountantPalette.navy },
+      { label: 'E-wallet', value: counts['E-wallet'], color: accountantPalette.teal },
+    ].filter((item) => item.value > 0)
   }, [items])
 
   const serviceRevenue = useMemo(() => {
     const groups = new Map<string, number>()
 
-    const palette = ['#f51304', '#1f365c', '#ffb347', '#197b74']
+    const palette = [accountantPalette.red, accountantPalette.navy, accountantPalette.amber, accountantPalette.teal]
 
     for (const invoice of invoicesData) {
       for (const service of invoice.repairOrder?.services || []) {
-        const label = service.category || service.name
+        // Group by category only — a custom/quote-typed line with no catalog
+        // category must not leak its full item name in as its own "group".
+        const label = service.category || 'Other'
         const current = groups.get(label) || 0
         groups.set(label, current + service.priceAtTime * service.quantity)
       }
@@ -482,12 +470,22 @@ export default function InvoiceManagementPage() {
       {
         label: 'Awaiting payment',
         value: Math.round((items.filter((item) => item.status === 'Awaiting payment').length / total) * 100),
-        color: accountantPalette.red,
+        color: accountantPalette.amber,
+      },
+      {
+        label: 'Overdue',
+        value: Math.round((items.filter((item) => item.status === 'Overdue').length / total) * 100),
+        color: '#dc2626',
+      },
+      {
+        label: 'Partially paid',
+        value: Math.round((items.filter((item) => item.status === 'Partially paid').length / total) * 100),
+        color: '#6d28d9',
       },
       {
         label: 'Paid records',
         value: Math.round((items.filter((item) => item.status === 'Paid').length / total) * 100),
-        color: accountantPalette.amber,
+        color: accountantPalette.green,
       },
     ]
   }, [items])
@@ -501,7 +499,9 @@ export default function InvoiceManagementPage() {
         render: (value: string, record) => (
           <div className="space-y-1">
             <div className="font-semibold" style={{ color: accountantPalette.ink }}>{value}</div>
-            <div className="text-xs" style={{ color: accountantPalette.textMuted }}>{record.repairOrderDisplayId}</div>
+            {record.repairOrderDisplayId !== value ? (
+              <div className="text-xs" style={{ color: accountantPalette.textMuted }}>{record.repairOrderDisplayId}</div>
+            ) : null}
           </div>
         ),
       },
@@ -512,16 +512,9 @@ export default function InvoiceManagementPage() {
           <div className="space-y-1">
             <div className="font-medium" style={{ color: accountantPalette.inkSoft }}>{record.customer}</div>
             <div className="text-xs" style={{ color: accountantPalette.textMuted }}>{record.vehicle}</div>
-          </div>
-        ),
-      },
-      {
-        title: 'Ops owner',
-        key: 'owner',
-        render: (_, record) => (
-          <div className="space-y-1">
-            <div className="text-sm font-medium" style={{ color: accountantPalette.inkSoft }}>{record.advisor}</div>
-            <div className="text-xs" style={{ color: accountantPalette.textMuted }}>{record.technician}</div>
+            {record.contact ? (
+              <div className="text-xs" style={{ color: accountantPalette.textMuted }}>{record.contact}</div>
+            ) : null}
           </div>
         ),
       },
@@ -531,7 +524,7 @@ export default function InvoiceManagementPage() {
         render: (_, record) => (
           <div className="space-y-1">
             <div className="font-medium" style={{ color: accountantPalette.inkSoft }}>{record.issuedAt}</div>
-            <div className="text-xs" style={{ color: accountantPalette.textMuted }}>{record.dueAt}</div>
+            <div className="text-xs" style={{ color: record.status === 'Overdue' ? '#dc2626' : accountantPalette.textMuted, fontWeight: record.status === 'Overdue' ? 600 : 400 }}>{record.queueNote}</div>
           </div>
         ),
       },
@@ -564,9 +557,9 @@ export default function InvoiceManagementPage() {
         key: 'action',
         render: (_, record) => (
           <Link to={`/accountant/invoices/confirm?kind=${record.kind}&id=${record.id}`}>
-            <Button type="primary" size="small" style={{ background: accountantPalette.red, borderColor: accountantPalette.red }}>
+            <span className="font-semibold" style={{ color: accountantPalette.red }}>
               {record.kind === 'repairOrder' ? 'Generate' : record.status === 'Paid' ? 'View' : 'Settle'}
-            </Button>
+            </span>
           </Link>
         ),
       },
@@ -576,96 +569,116 @@ export default function InvoiceManagementPage() {
 
   return (
     <AccountantShell eyebrow="Accountant dashboard" title="Invoice management">
-      <div
-        className="gap-4"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-        }}
-      >
-        {overviewCards.map((item) => (
-          <MetricCard key={item.label} label={item.label} value={item.value} delta={item.delta} tone={item.tone} />
+      <div className="gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+        {overviewCards.map((item, index) => (
+          <StatCard
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            note={item.note}
+            icon={item.icon}
+            palette={accountantPalette}
+            tone={item.tone}
+            enterDelay={index + 1}
+          />
         ))}
       </div>
 
-      {requestError ? (
-        <div
-          className="rounded-[22px] border px-5 py-4 text-sm font-medium"
-          style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}
-        >
-          {requestError}
-        </div>
-      ) : null}
+      {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
 
-      <div
-        className="gap-5"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1.55fr) minmax(320px, 0.95fr)',
-        }}
-      >
+      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card
           bordered={false}
-          className="rounded-[32px]"
-          styles={{ body: { padding: 20 } }}
-          style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow }}
+          className="bo-card-hover bo-enter rounded-2xl"
+          styles={{ body: { padding: '4px 20px 20px' } }}
+          style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow, border: `1px solid ${accountantPalette.border}` }}
           title={
-            <div>
-              <div className="text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: accountantPalette.textMuted }}>
+            <div className="py-1">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
                 Billing queue
               </div>
-              <div className="mt-2 font-['Oswald'] text-[30px] leading-none" style={{ color: accountantPalette.ink }}>
-                Invoice issuance & settlement
+              <div className="mt-1.5 text-[19px] leading-none font-semibold" style={{ color: accountantPalette.ink }}>
+                Invoice issuance &amp; settlement
               </div>
             </div>
           }
           extra={
-            <Space>
-              <Input
-                prefix={<SearchOutlined />}
-                placeholder="Search invoice, repair order, or plate"
-                className="!rounded-full"
-                value={search}
-                onChange={(event) => setSearch(event.target.value)}
-              />
-              <Button type="primary" icon={<FileDoneOutlined />} style={{ background: accountantPalette.red, borderColor: accountantPalette.red }}>
-                Review queue
-              </Button>
-            </Space>
+            <Input
+              prefix={<SearchOutlined />}
+              placeholder="Search invoice, repair order, or plate"
+              className="!rounded-full"
+              value={search}
+              onChange={(event) => setSearch(event.target.value)}
+            />
           }
         >
-          <Table rowKey="key" columns={columns} dataSource={filteredItems} pagination={false} loading={isLoading} scroll={{ x: 1120 }} className="bo-table" />
+          <Table
+            rowKey="key"
+            columns={columns}
+            dataSource={filteredItems}
+            pagination={{ pageSize: 8, size: 'small' }}
+            loading={isLoading}
+            scroll={{ x: 1120 }}
+            className="bo-table"
+            summary={() =>
+              filteredItems.length > 0 ? (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0} colSpan={5}>
+                    <span className="text-xs font-semibold uppercase tracking-[0.1em]" style={{ color: accountantPalette.textMuted }}>
+                      Total · {filteredItems.length} item{filteredItems.length === 1 ? '' : 's'}
+                    </span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1}>
+                    <span className="font-bold" style={{ color: accountantPalette.ink }}>{formatMoney(filteredTotal, currency)}</span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2} />
+                </Table.Summary.Row>
+              ) : null
+            }
+          />
         </Card>
 
-        <div className="grid gap-5">
-          <Card bordered={false} className="rounded-[32px]" styles={{ body: { padding: 20 } }} style={{ background: `linear-gradient(180deg, #1a1919 0%, #173a39 100%)`, boxShadow: '0 26px 65px rgba(15, 14, 14, 0.18)' }}>
+        <div className="flex h-full flex-col gap-5">
+          <Card
+            bordered={false}
+            className="bo-card-hover bo-enter bo-enter-2 flex flex-1 flex-col rounded-2xl"
+            styles={{ body: { display: 'flex', flex: 1, flexDirection: 'column', padding: 20 } }}
+            style={{ background: `linear-gradient(160deg, #1a1919 0%, #173a39 100%)`, boxShadow: '0 10px 32px rgba(15, 14, 14, 0.18)' }}
+          >
             <div className="flex items-start justify-between gap-4">
               <div>
-                <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white/60">Settlement health</div>
-                <div className="mt-2 font-['Oswald'] text-[28px] leading-none text-white">Collection progress</div>
+                <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">Settlement health</div>
+                <div className="mt-1.5 text-[19px] leading-none font-semibold text-white">Collection progress</div>
               </div>
-              <DollarOutlined className="text-xl text-[#ffb347]" />
+              <WalletOutlined className="text-lg text-white/70" />
             </div>
 
-            <div className="mt-5 space-y-4">
+            <div className="mt-5 flex flex-1 flex-col justify-center gap-4">
               {settlementProgress.map((item) => (
                 <div key={item.label}>
-                  <div className="mb-2 flex items-center justify-between text-sm">
-                    <span className="font-semibold text-white/88">{item.label}</span>
-                    <span className="font-['Oswald'] text-[22px] leading-none text-white">{item.value}%</span>
+                  <div className="mb-1.5 flex items-center justify-between text-sm">
+                    <span className="font-medium text-white/80">{item.label}</span>
+                    <span className="text-[16px] leading-none font-semibold text-white" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                      {item.value}%
+                    </span>
                   </div>
-                  <Progress percent={Number(item.value)} strokeColor={item.color} trailColor="rgba(255,255,255,0.1)" showInfo={false} />
+                  <Progress percent={item.value} strokeColor={item.color} trailColor="rgba(255,255,255,0.12)" showInfo={false} size="small" />
                 </div>
               ))}
             </div>
           </Card>
 
-          <Card bordered={false} className="rounded-[32px]" styles={{ body: { padding: 20 } }} style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow }}>
-            <div className="mb-5">
-              <div className="text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: accountantPalette.textMuted }}>
+          <Card
+            bordered={false}
+            className="bo-card-hover bo-enter bo-enter-3 rounded-2xl"
+            styles={{ body: { padding: 20 } }}
+            style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow, border: `1px solid ${accountantPalette.border}` }}
+          >
+            <div className="mb-4">
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
                 Payment channels
               </div>
-              <div className="mt-2 font-['Oswald'] text-[28px] leading-none" style={{ color: accountantPalette.ink }}>
+              <div className="mt-1.5 text-[19px] leading-none font-semibold" style={{ color: accountantPalette.ink }}>
                 Method distribution
               </div>
             </div>
@@ -674,23 +687,25 @@ export default function InvoiceManagementPage() {
         </div>
       </div>
 
-      <Card bordered={false} className="rounded-[32px]" styles={{ body: { padding: 20 } }} style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow }}>
-        <div className="mb-5">
-          <div className="text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: accountantPalette.textMuted }}>
+      <Card
+        bordered={false}
+        className="bo-card-hover bo-enter bo-enter-4 rounded-2xl"
+        styles={{ body: { padding: 20 } }}
+        style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow, border: `1px solid ${accountantPalette.border}` }}
+      >
+        <div className="mb-4">
+          <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
             Financial performance
           </div>
-          <div className="mt-2 font-['Oswald'] text-[28px] leading-none" style={{ color: accountantPalette.ink }}>
+          <div className="mt-1.5 text-[19px] leading-none font-semibold" style={{ color: accountantPalette.ink }}>
             Revenue by service group
           </div>
         </div>
-        <RevenueBars
-          items={
-            serviceRevenue.length > 0
-              ? serviceRevenue
-              : [{ label: 'Awaiting invoice activity', value: 0, color: '#f51304' }]
-          }
-          currency={currency}
-        />
+        {serviceRevenue.length > 0 ? (
+          <RevenueBars items={serviceRevenue} currency={currency} />
+        ) : (
+          <Empty description="No invoiced services yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        )}
       </Card>
     </AccountantShell>
   )

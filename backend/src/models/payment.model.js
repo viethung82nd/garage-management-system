@@ -28,6 +28,14 @@ const paymentSchema = new Schema(
     gatewayRef: {
       type: String,
     },
+    // Optional, accountant-entered — a bank transfer/e-wallet transaction
+    // code the customer gives at the desk. Distinct from gatewayRef (the
+    // internal mock-gateway id): this is what the accountant reconciles
+    // against a bank statement, never required.
+    reference: {
+      type: String,
+      trim: true,
+    },
     gatewayPayload: {
       type: Schema.Types.Mixed,
     },

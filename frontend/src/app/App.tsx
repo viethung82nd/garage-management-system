@@ -11,6 +11,9 @@ import { theme } from '../shared/config/theme'
 const AdminDashboardPage = lazy(() => import('../pages/admin/dashboard').then((module) => ({ default: module.AdminDashboardPage })))
 const InvoiceManagementPage = lazy(() => import('../pages/accountant/invoices').then((module) => ({ default: module.InvoiceManagementPage })))
 const InvoiceConfirmPage = lazy(() => import('../pages/accountant/confirm').then((module) => ({ default: module.InvoiceConfirmPage })))
+const AccountantProfilePage = lazy(() => import('../pages/accountant/profile').then((module) => ({ default: module.AccountantProfilePage })))
+const PaymentsPage = lazy(() => import('../pages/accountant/payments').then((module) => ({ default: module.PaymentsPage })))
+const AuditTrailPage = lazy(() => import('../pages/accountant/audit').then((module) => ({ default: module.AuditTrailPage })))
 const CustomerProfilePage = lazy(() => import('../pages/customer/profile').then((module) => ({ default: module.CustomerProfilePage })))
 const CustomerBookingsPage = lazy(() => import('../pages/customer/bookings').then((module) => ({ default: module.CustomerBookingsPage })))
 const CustomerInvoicesPage = lazy(() => import('../pages/customer/invoices').then((module) => ({ default: module.CustomerInvoicesPage })))
@@ -251,6 +254,42 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['accountant']}>
                 <InvoiceConfirmPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/accountant/profile"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['accountant']}>
+                <AccountantProfilePage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/accountant/payments"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['accountant']}>
+                <PaymentsPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/accountant/audit"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['accountant']}>
+                <AuditTrailPage />
               </RequireRole>
             </RequireAuth>
           </Suspense>

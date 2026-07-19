@@ -11,6 +11,7 @@ export * from "./service-request.model.js";
 export * from "./transfer-request.model.js";
 export * from "./invoice.model.js";
 export * from "./payment.model.js";
+export * from "./audit-log.model.js";
 export * from "./notification.model.js";
 export * from "./review.model.js";
 export * from "./otp.model.js";

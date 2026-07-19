@@ -37,3 +37,9 @@ export async function listQuotations(req, res) {
   const result = await quotationService.listQuotations(req.query ?? {});
   res.json(result);
 }
+
+/** GET /api/quotations/:id — fetch a single quotation. */
+export async function getQuotationById(req, res) {
+  const quote = await quotationService.getQuotationById(req.params.id);
+  res.json(quote);
+}

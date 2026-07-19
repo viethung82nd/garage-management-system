@@ -7,6 +7,7 @@ import {
   sendQuotation,
   confirmQuotation,
   listQuotations,
+  getQuotationById,
 } from "../controllers/quotation.controller.js";
 
 export const quotationRouter = Router();
@@ -16,6 +17,15 @@ quotationRouter.get(
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
   catchAsync(listQuotations),
+);
+
+// Read-only lookup, also open to accountants so they can cross-check an
+// invoice against the quote it came from.
+quotationRouter.get(
+  "/:id",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin", "accountant"),
+  catchAsync(getQuotationById),
 );
 
 quotationRouter.post(

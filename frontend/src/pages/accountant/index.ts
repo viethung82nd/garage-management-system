@@ -1,2 +1,5 @@
 export { InvoiceManagementPage } from './invoices'
 export { InvoiceConfirmPage } from './confirm'
+export { AccountantProfilePage } from './profile'
+export { PaymentsPage } from './payments'
+export { AuditTrailPage } from './audit'

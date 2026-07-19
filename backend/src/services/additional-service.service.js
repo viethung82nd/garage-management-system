@@ -128,6 +128,8 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy) {
         name: proposal.serviceName,
         priceAtTime: (proposal.laborCost || 0) + (proposal.partsCost || 0),
         quantity: 1,
+        kind: "service",
+        source: "additionalService",
       });
       order.totalCost = order.services.reduce(
         (sum, service) => sum + service.priceAtTime * (service.quantity || 1),
