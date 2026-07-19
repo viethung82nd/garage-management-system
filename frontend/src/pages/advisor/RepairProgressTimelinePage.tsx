@@ -1,9 +1,10 @@
 import { CheckCircleFilled } from '@ant-design/icons'
 import { Avatar, Card, Empty, Progress, Select, Steps, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { fetchWorkshopRepairOrders, formatApiDate, orderId, personName, unwrapArray, vehicleName, vehiclePlate, type ApiRepairOrder } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
-import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
+import { InlineBanner, StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 type TimelineStatus = 'done' | 'active' | 'blocked' | 'upcoming'
@@ -22,6 +23,7 @@ type TimelineStage = {
 
 type RepairTimeline = {
   advisor: string
+  code: string
   customer: string
   id: string
   plate: string
@@ -111,8 +113,9 @@ function mapRepairTimeline(order: ApiRepairOrder, index: number): RepairTimeline
 
   return {
     advisor: personName(order.advisorId || order.advisor, 'Service Advisor'),
+    code: orderId(order),
     customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer'),
-    id: orderId(order),
+    id: order._id || order.id || crypto.randomUUID(),
     plate: vehiclePlate(vehicle),
     priority: index === 0 ? 'high' : 'medium',
     progress: Math.round((doneCount / stages.length) * 100),
@@ -139,7 +142,7 @@ const priorityColors: Record<Priority, string> = {
 function StageDetail({ stage, timeline }: { stage: TimelineStage; timeline: RepairTimeline }) {
   return (
     <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
-      <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
+      <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <p style={{ color: '#ffb4ab', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Selected step</p>
@@ -160,7 +163,7 @@ function StageDetail({ stage, timeline }: { stage: TimelineStage; timeline: Repa
         </div>
       </Card>
 
-      <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Things to watch">
+      <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Things to watch">
         <div className="flex flex-col gap-3">
           <div style={{ alignItems: 'center', background: advisorPalette.panelAlt, borderRadius: 14, display: 'flex', gap: 10, justifyContent: 'space-between', padding: 12 }}>
             <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Customer</span>
@@ -185,6 +188,8 @@ function StageDetail({ stage, timeline }: { stage: TimelineStage; timeline: Repa
 
 export function RepairProgressTimelinePage() {
   const { token } = useAuth()
+  const [searchParams] = useSearchParams()
+  const orderIdParam = searchParams.get('orderId') ?? ''
   const [timelines, setTimelines] = useState<RepairTimeline[]>([])
   const [selectedTimelineId, setSelectedTimelineId] = useState('')
   const [selectedStageId, setSelectedStageId] = useState('')
@@ -203,9 +208,9 @@ export function RepairProgressTimelinePage() {
         const nextTimelines = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders']).map(mapRepairTimeline)
         if (!cancelled) {
           setTimelines(nextTimelines)
-          const first = nextTimelines[0]
-          setSelectedTimelineId((current) => current || first?.id || '')
-          setSelectedStageId((current) => current || first?.stages.find((stage) => stage.status === 'active')?.id || first?.stages[0]?.id || '')
+          const preselected = orderIdParam ? nextTimelines.find((timeline) => timeline.id === orderIdParam) : undefined
+          setSelectedTimelineId((current) => current || preselected?.id || '')
+          setSelectedStageId((current) => current || preselected?.stages.find((stage) => stage.status === 'active')?.id || preselected?.stages[0]?.id || '')
         }
       } catch (err) {
         if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load repair timelines from the API')
@@ -219,7 +224,7 @@ export function RepairProgressTimelinePage() {
     }
   }, [token])
 
-  const selectedTimeline = timelines.find((timeline) => timeline.id === selectedTimelineId) ?? timelines[0]
+  const selectedTimeline = timelines.find((timeline) => timeline.id === selectedTimelineId)
   const selectedStage = selectedTimeline?.stages.find((stage) => stage.id === selectedStageId) ?? selectedTimeline?.stages[0]
   const activeOrders = timelines.filter((timeline) => timeline.stages.some((stage) => stage.status === 'active')).length
   const blockedOrders = timelines.filter((timeline) => timeline.stages.some((stage) => stage.status === 'blocked')).length
@@ -241,15 +246,25 @@ export function RepairProgressTimelinePage() {
 
   return (
     <ServiceAdvisorShell title="Repair progress timeline">
-      {apiMessage ? (
-        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
-          {apiMessage}
-        </div>
-      ) : null}
+      {apiMessage ? <InlineBanner tone="error">{apiMessage}</InlineBanner> : null}
 
       {!selectedTimeline || !selectedStage ? (
-        <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
-          <Empty description="No repair orders from the API to show a timeline for." />
+        <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
+          {timelines.length ? (
+            <>
+              <Select
+                filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                onChange={selectTimeline}
+                options={timelines.map((timeline) => ({ label: `${timeline.code} — ${timeline.vehicle} (${timeline.plate})`, value: timeline.id }))}
+                placeholder="Select a repair order to view its timeline"
+                showSearch
+                style={{ width: '100%', maxWidth: 420 }}
+              />
+              <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 12 }}>Select an order above to see its progress timeline.</p>
+            </>
+          ) : (
+            <Empty description="No repair orders from the API to show a timeline for." />
+          )}
         </Card>
       ) : (
         <>
@@ -260,12 +275,12 @@ export function RepairProgressTimelinePage() {
             <StatCard label="Steps visible to customer" palette={advisorPalette} value={`${customerVisibleStages}/${selectedTimeline.stages.length}`} />
           </div>
 
-          <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }}>
+          <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} styles={{ body: { padding: 18 } }}>
             <div className="flex flex-wrap items-center gap-4">
               <Select
                 filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                 onChange={selectTimeline}
-                options={timelines.map((timeline) => ({ label: `${timeline.id} — ${timeline.vehicle} (${timeline.plate})`, value: timeline.id }))}
+                options={timelines.map((timeline) => ({ label: `${timeline.code} — ${timeline.vehicle} (${timeline.plate})`, value: timeline.id }))}
                 showSearch
                 style={{ minWidth: 320 }}
                 value={selectedTimeline.id}
@@ -282,7 +297,7 @@ export function RepairProgressTimelinePage() {
 
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_380px]">
             <div className="flex flex-col gap-5">
-              <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title={`${selectedTimeline.id} — progress steps`}>
+              <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title={`${selectedTimeline.code} — progress steps`}>
                 <Steps
                   current={selectedTimeline.stages.findIndex((stage) => stage.id === selectedStage.id)}
                   items={selectedTimeline.stages.map((stage) => ({
@@ -311,7 +326,7 @@ export function RepairProgressTimelinePage() {
                 />
               </Card>
 
-              <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }}>
+              <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} styles={{ body: { padding: 18 } }}>
                 <div style={{ display: 'flex', flexWrap: 'wrap', columnGap: 32, rowGap: 12 }}>
                   <div>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Advisor</p>

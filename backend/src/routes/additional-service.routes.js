@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   listAdditionalServiceProposals,
   createAdditionalServiceProposal,
@@ -13,19 +13,19 @@ additionalServiceRouter.get(
   "",
   requireAuth,
   requireRole("serviceAdvisor", "technician", "admin"),
-  asyncHandler(listAdditionalServiceProposals),
+  catchAsync(listAdditionalServiceProposals),
 );
 
 additionalServiceRouter.post(
   "",
   requireAuth,
   requireRole("technician", "admin"),
-  asyncHandler(createAdditionalServiceProposal),
+  catchAsync(createAdditionalServiceProposal),
 );
 
 additionalServiceRouter.patch(
   "/:id",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(updateAdditionalServiceProposal),
+  catchAsync(updateAdditionalServiceProposal),
 );

@@ -1,5 +1,5 @@
 import mongoose, { Schema } from "mongoose";
-import { ACTIVE_BOOKING_STATUSES } from "../config/slots.js";
+import { ACTIVE_BOOKING_STATUSES } from "../config/constants.js";
 
 export const BOOKING_SOURCES = ["online", "walkIn"];
 export const BOOKING_STATUSES = [

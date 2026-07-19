@@ -17,20 +17,20 @@ export type BackOfficePalette = {
 } 
 
 export const adminPalette: BackOfficePalette = {
-  ink: '#0f0e0e',
-  inkSoft: '#2a2727',
-  textMuted: '#6b6262',
-  canvas: '#f7f2ec',
-  panel: '#fffdfa',
-  panelAlt: '#f4eee8',
-  border: 'rgba(15, 14, 14, 0.08)',
+  ink: '#0f172a',
+  inkSoft: '#334155',
+  textMuted: '#64748b',
+  canvas: '#f5f6f8',
+  panel: '#ffffff',
+  panelAlt: '#f1f3f6',
+  border: '#e2e8f0',
   red: '#f51304',
-  redDeep: '#cf1a10',
-  amber: '#ffb347',
-  teal: '#197b74',
-  navy: '#1f365c',
-  green: '#2f8f63',
-  shadow: '0 24px 70px rgba(15, 14, 14, 0.08)',
+  redDeep: '#c81003',
+  amber: '#d97706',
+  teal: '#0f766e',
+  navy: '#1e3a5f',
+  green: '#16a34a',
+  shadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px rgba(15, 23, 42, 0.07)',
 }
 
 export const accountantPalette: BackOfficePalette = {
@@ -52,20 +52,20 @@ export const accountantPalette: BackOfficePalette = {
 }
 
 export const advisorPalette: BackOfficePalette = {
-  ink: '#0f0e0e',
-  inkSoft: '#2a2727',
-  textMuted: '#6b6262',
-  canvas: '#f7f2ec',
-  panel: '#fffdfa',
-  panelAlt: '#f4eee8',
-  border: 'rgba(15, 14, 14, 0.08)',
+  ink: '#0f172a',
+  inkSoft: '#334155',
+  textMuted: '#64748b',
+  canvas: '#f5f6f8',
+  panel: '#ffffff',
+  panelAlt: '#f1f3f6',
+  border: '#e2e8f0',
   red: '#f51304',
-  redDeep: '#cf1a10',
-  amber: '#ffb347',
-  teal: '#197b74',
-  navy: '#1f365c',
-  green: '#2f8f63',
-  shadow: '0 24px 70px rgba(15, 14, 14, 0.08)',
+  redDeep: '#c81003',
+  amber: '#d97706',
+  teal: '#0f766e',
+  navy: '#1e3a5f',
+  green: '#16a34a',
+  shadow: '0 1px 2px rgba(15, 23, 42, 0.04), 0 10px 28px rgba(15, 23, 42, 0.07)',
 }
 
 export const technicianPalette: BackOfficePalette = {

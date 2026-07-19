@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   getSlots,
   createBooking,
@@ -16,39 +16,39 @@ import {
 export const bookingRouter = Router();
 
 // Public: customers browse availability and book without an account.
-bookingRouter.get("/slots", asyncHandler(getSlots));
-bookingRouter.post("/", asyncHandler(createBooking));
+bookingRouter.get("/slots", catchAsync(getSlots));
+bookingRouter.post("/", catchAsync(createBooking));
 
 // Authenticated customer: view own bookings.
-bookingRouter.get("/mine", requireAuth, asyncHandler(myBookings));
+bookingRouter.get("/mine", requireAuth, catchAsync(myBookings));
 
 // Staff: list/filter all bookings and confirm pending ones.
 bookingRouter.get(
   "/",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(listBookings)
+  catchAsync(listBookings)
 );
 bookingRouter.get(
   "/:id",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(getBookingById)
+  catchAsync(getBookingById)
 );
 bookingRouter.patch(
   "/:id/confirm",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(confirmBooking)
+  catchAsync(confirmBooking)
 );
 // Generic status update across the lifecycle (validated transitions).
 bookingRouter.patch(
   "/:id/status",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(updateBookingStatus)
+  catchAsync(updateBookingStatus)
 );
 
 // Owner customer or staff: cancel / reschedule (ownership enforced in controller).
-bookingRouter.patch("/:id/cancel", requireAuth, asyncHandler(cancelBooking));
-bookingRouter.patch("/:id/reschedule", requireAuth, asyncHandler(rescheduleBooking));
+bookingRouter.patch("/:id/cancel", requireAuth, catchAsync(cancelBooking));
+bookingRouter.patch("/:id/reschedule", requireAuth, catchAsync(rescheduleBooking));

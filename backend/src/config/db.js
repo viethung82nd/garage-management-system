@@ -1,5 +1,5 @@
 import mongoose from "mongoose";
-import { env } from "../config/env.js";
+import { env } from "./env.js";
 
 /**
  * Establishes the Mongoose connection. Called once at startup before the

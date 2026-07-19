@@ -56,12 +56,15 @@ export type ApiRepairOrder = {
   advisor?: AuthUser
   technicianId?: AuthUser
   technician?: AuthUser
-  services?: Array<{ serviceId?: ApiService | string; name?: string; quantity?: number; priceAtTime?: number }>
-  stepNotes?: Array<{ content?: string; technicianId?: AuthUser | string; createdAt?: string }>
+  inspectionId?: string
+  issueDescription?: string
+  services?: Array<{ serviceId?: ApiService | string; name?: string; quantity?: number; priceAtTime?: number; status?: 'pending' | 'inProgress' | 'completed' }>
+  stepNotes?: Array<{ content?: string; technicianId?: AuthUser | string; stepIndex?: number; createdAt?: string }>
   status?: string
   totalCost?: number
   startedAt?: string
   completedAt?: string
+  forwardedToAccountantAt?: string
   promisedAt?: string
   updatedAt?: string
   createdAt?: string
@@ -95,6 +98,7 @@ export type QuotationLineKind = 'service' | 'part' | 'labor'
 
 export type ApiQuotationLine = {
   id?: string
+  serviceId?: string
   description?: string
   kind?: QuotationLineKind
   quantity?: number
@@ -106,6 +110,7 @@ export type ApiQuotation = {
   id?: string
   code?: string
   repairOrderId?: string
+  vehicleId?: string
   customerName?: string
   customerPhone?: string
   vehiclePlate?: string
@@ -113,6 +118,7 @@ export type ApiQuotation = {
   lines?: ApiQuotationLine[]
   discountPercent?: number
   taxPercent?: number
+  totalEstimate?: number
   note?: string
   validUntil?: string
   status?: 'draft' | 'sent' | 'approved' | 'rejected'
@@ -132,7 +138,26 @@ export type ApiDashboardSummary = {
   }>
 }
 
-export type ReceptionPayload = Record<string, string>
+export type ReceptionPayload = {
+  bookingId?: string
+  customerName: string
+  phone: string
+  customerEmail?: string
+  plate: string
+  model?: string
+  vin?: string
+  engineNo?: string
+  mileage?: string
+  issueDescription?: string
+  promisedAt?: string
+}
+
+export type ReceptionResponse = {
+  customer: AuthUser
+  vehicle: ApiVehicle
+  repairOrder: ApiRepairOrder
+  booking: ApiBooking | null
+}
 
 export function fetchAdvisorDashboard(token: string) {
   return apiRequest<ApiDashboardSummary>('/api/advisor/dashboard', { token })
@@ -140,6 +165,10 @@ export function fetchAdvisorDashboard(token: string) {
 
 export function fetchWorkshopBookings(token: string, query = '') {
   return apiRequest<{ bookings?: ApiBooking[] } | ApiBooking[]>(`/api/bookings${query}`, { token })
+}
+
+export function fetchWorkshopBookingById(token: string, id: string) {
+  return apiRequest<{ booking?: ApiBooking } | ApiBooking>(`/api/bookings/${id}`, { token })
 }
 
 export function confirmWorkshopBooking(token: string, id: string) {
@@ -156,11 +185,22 @@ export function fetchVehicleHistory(token: string, plate?: string) {
 }
 
 export function createVehicleReception(token: string, payload: ReceptionPayload) {
-  return apiRequest('/api/receptions', { method: 'POST', token, body: JSON.stringify(payload) })
+  return apiRequest<ReceptionResponse>('/api/receptions', { method: 'POST', token, body: JSON.stringify(payload) })
 }
 
 export function fetchWorkshopRepairOrders(token: string, query = '') {
   return apiRequest<{ repairOrders?: ApiRepairOrder[]; orders?: ApiRepairOrder[] } | ApiRepairOrder[]>(`/api/repair-orders${query}`, { token })
+}
+
+export function fetchWorkshopRepairOrderById(token: string, id: string) {
+  return apiRequest<ApiRepairOrder>(`/api/repair-orders/${id}`, { token })
+}
+
+export function forwardRepairOrderToAccountant(token: string, id: string) {
+  return apiRequest<{ message?: string; order?: ApiRepairOrder }>(`/api/repair-orders/${id}/forward-to-accountant`, {
+    method: 'POST',
+    token,
+  })
 }
 
 export function createWorkshopRepairOrder(token: string, payload: unknown) {
@@ -176,7 +216,7 @@ export function updateWorkshopRepairProgress(token: string, id: string, payload:
 }
 
 export function addWorkshopStepNote(token: string, id: string, payload: unknown) {
-  return apiRequest<{ stepNotes?: unknown[] }>(`/api/repair-orders/${id}/step-notes`, { method: 'POST', token, body: JSON.stringify(payload) })
+  return apiRequest<{ message?: string; stepNotes?: ApiRepairOrder['stepNotes'] }>(`/api/repair-orders/${id}/step-notes`, { method: 'POST', token, body: JSON.stringify(payload) })
 }
 
 export function fetchWorkshopServices(token: string) {
@@ -266,6 +306,7 @@ export type CreateInspectionReportPayload = {
   fuelLevel?: string
   findings?: string
   items?: ApiInspectionItem[]
+  recommendedServices?: { serviceId?: string; name: string; price?: number; isRequired?: boolean }[]
   estimatedCost?: number
   photos?: File[]
 }
@@ -284,8 +325,16 @@ export function createInspectionReport(token: string, payload: CreateInspectionR
   if (payload.findings) formData.append('findings', payload.findings)
   if (payload.estimatedCost != null) formData.append('estimatedCost', String(payload.estimatedCost))
   if (payload.items) formData.append('items', JSON.stringify(payload.items))
+  if (payload.recommendedServices?.length) formData.append('recommendedServices', JSON.stringify(payload.recommendedServices))
   payload.photos?.forEach((file) => formData.append('photos', file))
   return apiRequest('/api/inspection-reports', { method: 'POST', token, body: formData })
+}
+
+export type ApiRecommendedService = {
+  serviceId?: ApiService | string
+  name?: string
+  price?: number
+  isRequired?: boolean
 }
 
 export type ApiInspectionReport = {
@@ -299,6 +348,7 @@ export type ApiInspectionReport = {
   odometer?: number
   fuelLevel?: string
   items?: ApiInspectionItem[]
+  recommendedServices?: ApiRecommendedService[]
   photos?: string[]
   status?: 'pending' | 'completed'
   inspectedAt?: string
@@ -328,12 +378,33 @@ export function createQuotation(token: string, payload: ApiQuotation) {
   })
 }
 
+export function updateQuotation(token: string, id: string, payload: Partial<ApiQuotation>) {
+  return apiRequest<{ quotation?: ApiQuotation } | ApiQuotation>(`/api/quotations/${id}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify(payload),
+  })
+}
+
 export function sendQuotation(token: string, id: string) {
   return apiRequest<{ quotation?: ApiQuotation } | ApiQuotation>(`/api/quotations/${id}/send`, {
     method: 'PATCH',
     token,
     body: JSON.stringify({}),
   })
+}
+
+/** Records the SA's log of what the customer decided — approving syncs the quotation's lines into the linked RepairOrder. */
+export function confirmQuotation(token: string, id: string, approved: boolean) {
+  return apiRequest<ApiQuotation>(`/api/quotations/${id}/confirm`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ approved }),
+  })
+}
+
+export function fetchQuotations(token: string, query = '') {
+  return apiRequest<{ quotations?: ApiQuotation[] } | ApiQuotation[]>(`/api/quotations${query}`, { token })
 }
 
 export type TransferRequestStatus = 'pending' | 'approved' | 'rejected'
@@ -390,13 +461,25 @@ export function vehicleName(vehicle?: ApiVehicle | null) {
 
 /**
  * RepairOrder has no human-friendly code in the backend (raw Mongo _id
- * only), so this derives a short, stable display code instead of
- * surfacing the full 24-char ObjectId.
+ * only). A bare hex suffix ("RO-B8B84F") reads as noise in a dropdown, so
+ * this decodes the ObjectId's embedded creation timestamp (its first 4
+ * bytes) into a date prefix instead — "RO-260718-B84F" at least tells the
+ * advisor when the job was opened, and stays stable/unique either way.
  */
 export function orderId(order: Pick<ApiRepairOrder, '_id' | 'id' | 'code'>) {
   if (order.code) return order.code
   const rawId = order.id || order._id
-  return rawId ? `RO-${rawId.slice(-6).toUpperCase()}` : 'RO-N/A'
+  if (!rawId || rawId.length < 24) return 'RO-N/A'
+
+  const seconds = Number.parseInt(rawId.slice(0, 8), 16)
+  const suffix = rawId.slice(-4).toUpperCase()
+  if (!Number.isFinite(seconds)) return `RO-${suffix}`
+
+  const createdAt = new Date(seconds * 1000)
+  const yy = String(createdAt.getFullYear()).slice(2)
+  const mm = String(createdAt.getMonth() + 1).padStart(2, '0')
+  const dd = String(createdAt.getDate()).padStart(2, '0')
+  return `RO-${yy}${mm}${dd}-${suffix}`
 }
 
 export function formatApiDate(value?: string) {

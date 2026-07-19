@@ -634,7 +634,7 @@ export default function InvoiceManagementPage() {
             </Space>
           }
         >
-          <Table rowKey="key" columns={columns} dataSource={filteredItems} pagination={false} loading={isLoading} scroll={{ x: 1120 }} className="admin-dashboard-table" />
+          <Table rowKey="key" columns={columns} dataSource={filteredItems} pagination={false} loading={isLoading} scroll={{ x: 1120 }} className="bo-table" />
         </Card>
 
         <div className="grid gap-5">

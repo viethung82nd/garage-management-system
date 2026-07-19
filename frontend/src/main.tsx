@@ -1,4 +1,4 @@
-import { ConfigProvider } from 'antd'
+import { App as AntApp, ConfigProvider } from 'antd'
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
@@ -10,12 +10,17 @@ import './styles.css'
 ReactDOM.createRoot(document.getElementById('root') as HTMLElement).render(
   <StrictMode>
     <ConfigProvider theme={{ token: { fontFamily: 'var(--font-body)' } }}>
-      <AuthProvider>
-        <BrowserRouter>
-          <NotificationCenter />
-          <App />
-        </BrowserRouter>
-      </AuthProvider>
+      {/* antd's static notification/message/Modal APIs can't consume
+          ConfigProvider's context on their own — wrapping in App gives
+          NotificationCenter a themed, context-aware instance via App.useApp(). */}
+      <AntApp>
+        <AuthProvider>
+          <BrowserRouter>
+            <NotificationCenter />
+            <App />
+          </BrowserRouter>
+        </AuthProvider>
+      </AntApp>
     </ConfigProvider>
   </StrictMode>,
 )

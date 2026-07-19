@@ -6,6 +6,7 @@ import { useAuth } from '../../../../shared/auth'
 import { ApiClientError } from '../../../../shared/lib/api-client'
 import { createStaffAccount, deactivateUser, fetchAdminUsers, type AdminUserRecord, type CreateStaffPayload } from '../api/usersApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
+import { InlineBanner } from '../../../../widgets/backoffice-shell'
 
 const STAFF_ROLE_OPTIONS: Array<{ value: CreateStaffPayload['role']; label: string }> = [
   { value: 'serviceAdvisor', label: 'Service advisor' },
@@ -146,11 +147,16 @@ export default function AdminUsersPage() {
 
   return (
     <AdminShell eyebrow="Admin" title="User management">
-      <Card bordered={false} className="rounded-[32px]" styles={{ body: { padding: 24 } }} style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow }}>
+      <Card
+        bordered={false}
+        className="bo-enter rounded-2xl"
+        styles={{ body: { padding: 24 } }}
+        style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, border: `1px solid ${adminPalette.border}` }}
+      >
         <div className="flex flex-wrap items-center justify-between gap-4" style={{ marginBottom: 20 }}>
           <Input
             allowClear
-            prefix={<SearchOutlined />}
+            prefix={<SearchOutlined style={{ color: adminPalette.textMuted }} />}
             placeholder="Search by name or email"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -169,19 +175,16 @@ export default function AdminUsersPage() {
           </Button>
         </div>
 
-        {requestError ? (
-          <div className="mb-4 rounded-[18px] border px-4 py-3 text-sm font-medium" style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}>
-            {requestError}
-          </div>
-        ) : null}
+        {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
 
         <Table
           rowKey="_id"
           columns={columns}
           dataSource={filteredUsers}
           loading={isLoading}
-          pagination={false}
+          pagination={{ pageSize: 8, showTotal: (total) => `${total} accounts` }}
           locale={{ emptyText: 'No staff accounts yet.' }}
+          className="bo-table"
         />
       </Card>
 
@@ -196,11 +199,7 @@ export default function AdminUsersPage() {
         confirmLoading={creating}
         okText="Create account"
       >
-        {createError ? (
-          <div className="mb-4 rounded-[18px] border px-4 py-3 text-sm font-medium" style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}>
-            {createError}
-          </div>
-        ) : null}
+        {createError ? <InlineBanner tone="error">{createError}</InlineBanner> : null}
         <Form form={createForm} layout="vertical" onFinish={handleCreateStaff}>
           <Form.Item name="fullName" label="Full name" rules={[{ required: true, message: 'Full name is required' }]}>
             <Input />

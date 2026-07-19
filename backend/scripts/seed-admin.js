@@ -2,7 +2,7 @@
  * Creates the first admin account so staff accounts can be created via the API.
  * Usage: node scripts/seed-admin.js <email> <password> [fullName]
  */
-import { connectDb } from "../src/db/connect.js";
+import { connectDb } from "../src/config/db.js";
 import { UserModel } from "../src/models/index.js";
 import { hashPassword } from "../src/utils/password.js";
 import mongoose from "mongoose";

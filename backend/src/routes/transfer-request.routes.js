@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   listTransferRequests,
   createTransferRequest,
@@ -14,26 +14,26 @@ transferRequestRouter.get(
   "",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(listTransferRequests),
+  catchAsync(listTransferRequests),
 );
 
 transferRequestRouter.post(
   "",
   requireAuth,
   requireRole("technician"),
-  asyncHandler(createTransferRequest),
+  catchAsync(createTransferRequest),
 );
 
 transferRequestRouter.patch(
   "/:id/approve",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(approveTransferRequest),
+  catchAsync(approveTransferRequest),
 );
 
 transferRequestRouter.patch(
   "/:id/reject",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(rejectTransferRequest),
+  catchAsync(rejectTransferRequest),
 );

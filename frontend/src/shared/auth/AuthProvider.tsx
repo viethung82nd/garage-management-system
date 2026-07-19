@@ -1,5 +1,5 @@
 import { createContext, useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { loginRequest, meRequest, registerRequest } from './api'
+import { loginRequest, meRequest, registerRequest, updateMeRequest, type UpdateMePayload } from './api'
 import { getPostLoginPath, isSupportedFrontendRole } from './routes'
 import { clearStoredToken, loadStoredToken, storeToken } from './storage'
 import type { AuthSession, AuthStatus, AuthUser, LoginPayload, RegisterPayload } from './types'
@@ -14,6 +14,7 @@ type AuthContextValue = {
   register: (payload: RegisterPayload, remember: boolean) => Promise<AuthSession>
   logout: () => void
   refreshProfile: () => Promise<AuthUser | null>
+  updateProfile: (payload: UpdateMePayload) => Promise<AuthUser>
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null)
@@ -87,6 +88,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
   }, [logout])
 
+  const updateProfile = useCallback(
+    async (payload: UpdateMePayload) => {
+      if (!token) throw new Error('Not authenticated')
+      const updatedUser = await updateMeRequest(token, payload)
+      setUser(updatedUser)
+      return updatedUser
+    },
+    [token],
+  )
+
   const login = useCallback(
     async (payload: LoginPayload, remember: boolean) => {
       const session = await loginRequest(payload)
@@ -116,8 +127,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register,
       logout,
       refreshProfile,
+      updateProfile,
     }),
-    [login, logout, refreshProfile, register, status, token, user],
+    [login, logout, refreshProfile, register, status, token, updateProfile, user],
   )
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>

@@ -1,6 +1,6 @@
 import { v2 as cloudinary } from "cloudinary";
 import { env } from "../config/env.js";
-import { HttpError } from "../middleware/error.js";
+import { ApiError } from "./apiError.js";
 
 const isConfigured = Boolean(
   env.cloudinary.cloudName && env.cloudinary.apiKey && env.cloudinary.apiSecret,
@@ -22,7 +22,7 @@ if (isConfigured) {
  */
 export function uploadBufferToCloudinary(buffer, folder) {
   if (!isConfigured) {
-    throw new HttpError(
+    throw new ApiError(
       500,
       "Photo upload is not configured: set CLOUDINARY_CLOUD_NAME, CLOUDINARY_API_KEY, and CLOUDINARY_API_SECRET",
     );

@@ -1,5 +1,5 @@
 import { env } from "./config/env.js";
-import { connectDb } from "./db/connect.js";
+import { connectDb } from "./config/db.js";
 import { createApp } from "./app.js";
 
 /** Connects the database first, then starts the HTTP server. */

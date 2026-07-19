@@ -1,10 +1,12 @@
-import { CheckOutlined, ToolOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Input, Select, Table, Tag } from 'antd'
+import { CheckOutlined, SendOutlined, ToolOutlined } from '@ant-design/icons'
+import { Avatar, Button, Card, Image, Input, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import {
   fetchInspectionReports,
   fetchWorkshopRepairOrders,
+  forwardRepairOrderToAccountant,
   formatApiDate,
   orderId,
   personName,
@@ -18,7 +20,7 @@ import {
 } from '../../shared/api/workshop'
 import { resolveApiAssetUrl } from '../../shared/lib/api-client'
 import { getUserInitials, useAuth } from '../../shared/auth'
-import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
+import { InlineBanner, StatCard, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 const { TextArea } = Input
@@ -38,6 +40,7 @@ type OrderView = {
   technician: string
   customer: string
   completedAt: string
+  forwardedToAccountantAt?: string
 }
 
 const checklistSeed = [
@@ -72,7 +75,8 @@ function mapOrder(order: ApiRepairOrder): OrderView {
   return {
     code: orderId(order),
     completedAt: formatApiDate(order.completedAt || order.updatedAt),
-    customer: personName(order.customer, 'No customer on file'),
+    customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'No customer on file'),
+    forwardedToAccountantAt: order.forwardedToAccountantAt,
     id: order._id || order.id || crypto.randomUUID(),
     plate: vehiclePlate(vehicle),
     technician: personName(order.technicianId || order.technician, 'Unassigned'),
@@ -82,12 +86,14 @@ function mapOrder(order: ApiRepairOrder): OrderView {
 
 export function QualityVerificationPage() {
   const { token } = useAuth()
+  const [searchParams] = useSearchParams()
+  const orderIdParam = searchParams.get('orderId') ?? ''
   const [orders, setOrders] = useState<OrderView[]>([])
   const [selectedId, setSelectedId] = useState('')
   const [checklistByOrder, setChecklistByOrder] = useState<Record<string, CheckItem[]>>({})
   const [reworkNote, setReworkNote] = useState('')
   const [verdictByOrder, setVerdictByOrder] = useState<Record<string, 'passed' | 'rework'>>({})
-  const [apiMessage, setApiMessage] = useState<string>()
+  const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
   const [evidenceReports, setEvidenceReports] = useState<ApiInspectionReport[]>([])
 
@@ -97,13 +103,17 @@ export function QualityVerificationPage() {
     let cancelled = false
 
     async function loadOrders() {
-      setApiMessage(undefined)
+      clearApiMessage()
       try {
         const response = await fetchWorkshopRepairOrders(authToken, '?status=completed')
         const list = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders']).map(mapOrder)
         if (cancelled) return
         setOrders(list)
-        setSelectedId((current) => current || list[0]?.id || '')
+        setSelectedId((current) => {
+          if (current) return current
+          if (orderIdParam && list.some((order) => order.id === orderIdParam)) return orderIdParam
+          return ''
+        })
         setChecklistByOrder((current) => {
           const next = { ...current }
           list.forEach((order) => {
@@ -112,7 +122,7 @@ export function QualityVerificationPage() {
           return next
         })
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load completed work orders from the API')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load completed work orders from the API')
       }
     }
 
@@ -122,7 +132,7 @@ export function QualityVerificationPage() {
     }
   }, [token])
 
-  const selectedOrder = orders.find((order) => order.id === selectedId) ?? orders[0]
+  const selectedOrder = orders.find((order) => order.id === selectedId)
 
   useEffect(() => {
     if (!token || !selectedOrder?.id) {
@@ -174,9 +184,13 @@ export function QualityVerificationPage() {
 
   async function submitVerdict(passed: boolean) {
     if (!selectedOrder || !token) return
+    if (!passed && !reworkNote.trim() && !checklist.some((item) => item.result === 'fail' && item.note.trim())) {
+      showError('Add a note explaining what needs rework before sending it back to the technician.')
+      return
+    }
 
     setSaving(true)
-    setApiMessage(undefined)
+    clearApiMessage()
     try {
       await submitQualityCheck(token, selectedOrder.id, {
         items: checklist.map((item) => ({ label: item.label, note: item.note, result: item.result })),
@@ -185,9 +199,26 @@ export function QualityVerificationPage() {
         reworkReason: passed ? undefined : reworkNote,
       })
       setVerdictByOrder((current) => ({ ...current, [selectedOrder.id]: passed ? 'passed' : 'rework' }))
-      setApiMessage(passed ? 'Passed and moved to handover.' : 'Sent back to the technician for rework.')
+      showSuccess(passed ? 'Passed and moved to handover.' : 'Sent back to the technician for rework.')
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Unable to save the quality check. Check the API connection.')
+      showError(err instanceof Error ? err.message : 'Unable to save the quality check. Check the API connection.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function forwardToAccountant() {
+    if (!selectedOrder || !token) return
+
+    setSaving(true)
+    clearApiMessage()
+    try {
+      await forwardRepairOrderToAccountant(token, selectedOrder.id)
+      const forwardedAt = new Date().toISOString()
+      setOrders((current) => current.map((order) => (order.id === selectedOrder.id ? { ...order, forwardedToAccountantAt: forwardedAt } : order)))
+      showSuccess('Repair order forwarded to accounting for invoicing.')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to forward the repair order to accounting.')
     } finally {
       setSaving(false)
     }
@@ -227,11 +258,7 @@ export function QualityVerificationPage() {
 
   return (
     <ServiceAdvisorShell title="Quality verification">
-      {apiMessage ? (
-        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
-          {apiMessage}
-        </div>
-      ) : null}
+      {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
       <div className="flex flex-wrap gap-4">
         <StatCard label="Awaiting verification" palette={advisorPalette} value={awaitingCount} />
@@ -239,13 +266,14 @@ export function QualityVerificationPage() {
         <StatCard label="Failed items" palette={advisorPalette} value={failCount} />
       </div>
 
-      <Card bordered={false} className="rounded-[24px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} styles={{ body: { padding: 18 } }}>
+      <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} styles={{ body: { padding: 18 } }}>
         {orders.length ? (
           <>
             <Select
               filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
               onChange={setSelectedId}
               options={orders.map((order) => ({ label: `${order.code} — ${order.vehicle} (${order.plate})`, value: order.id }))}
+              placeholder="Select a completed work order to verify"
               showSearch
               style={{ width: '100%' }}
               value={selectedOrder?.id}
@@ -272,7 +300,7 @@ export function QualityVerificationPage() {
       {selectedOrder ? (
           <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-5">
-              <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
+              <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                   <div>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Order</p>
@@ -298,32 +326,36 @@ export function QualityVerificationPage() {
 
               <Card
                 bordered={false}
-                className="rounded-[28px]"
+                className="bo-card-hover bo-enter rounded-2xl"
                 extra={<Tag color="red">{passCount}/{checklist.length} passed</Tag>}
-                style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}
+                style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}
                 title="Verification checklist"
               >
-                <Table columns={checklistColumns} dataSource={checklist} pagination={false} rowKey="id" size="small" />
+                <Table columns={checklistColumns} dataSource={checklist} pagination={false} rowKey="id" size="small" className="bo-table" />
               </Card>
 
               {evidencePhotos.length ? (
-                <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Evidence photos">
-                  <div className="flex flex-wrap gap-3">
-                    {evidencePhotos.map((photo, index) => (
-                      <img
-                        alt={`Evidence photo ${index + 1}`}
-                        key={photo}
-                        src={resolveApiAssetUrl(photo)}
-                        style={{ borderRadius: 12, height: 84, objectFit: 'cover', width: 84 }}
-                      />
-                    ))}
-                  </div>
+                <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Evidence photos">
+                  <Image.PreviewGroup>
+                    <div className="flex flex-wrap gap-3">
+                      {evidencePhotos.map((photo, index) => (
+                        <Image
+                          alt={`Evidence photo ${index + 1}`}
+                          key={photo}
+                          src={resolveApiAssetUrl(photo)}
+                          style={{ borderRadius: 12, objectFit: 'cover' }}
+                          height={84}
+                          width={84}
+                        />
+                      ))}
+                    </div>
+                  </Image.PreviewGroup>
                 </Card>
               ) : null}
             </div>
 
             <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
-              <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
+              <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
                 <p style={{ color: '#ffb4ab', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Verification result</p>
                 <div className="mt-4 flex flex-col gap-3" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
                   <div className="flex items-center justify-between">
@@ -343,7 +375,7 @@ export function QualityVerificationPage() {
                 </div>
               </Card>
 
-              <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }} title="Verification notes">
+              <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Verification notes">
                 <TextArea onChange={(event) => setReworkNote(event.target.value)} placeholder="Result notes or reason for returning to the technician..." rows={4} value={reworkNote} />
                 <div className="mt-4 flex flex-col gap-3">
                   <Button block disabled={saving || !allDecided} icon={<CheckOutlined />} onClick={() => submitVerdict(true)} type="primary">
@@ -357,10 +389,25 @@ export function QualityVerificationPage() {
                   ) : null}
                 </div>
               </Card>
+
+              <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Handover">
+                {selectedOrder.forwardedToAccountantAt ? (
+                  <Tag color="green">Forwarded to accounting</Tag>
+                ) : (
+                  <>
+                    <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginBottom: 12 }}>
+                      Once verification is complete, forward this order to accounting so they can invoice the customer.
+                    </p>
+                    <Button block disabled={saving} icon={<SendOutlined />} onClick={forwardToAccountant} type="primary">
+                      Forward to accountant
+                    </Button>
+                  </>
+                )}
+              </Card>
             </div>
           </div>
         ) : (
-          <Card bordered={false} className="rounded-[28px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
+          <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
             Select a work order to verify.
           </Card>
         )}

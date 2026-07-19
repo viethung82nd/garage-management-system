@@ -1,39 +1,31 @@
-import { CheckCircleOutlined } from '@ant-design/icons'
-import { Button, Card, Progress, Table, Tag, Typography } from 'antd'
+import { CalendarOutlined, CheckCircleOutlined, ClockCircleOutlined, WalletOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Progress, Table, Tag, Typography } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useAuth } from '../../../../shared/auth'
-import { fetchAdminBookings, fetchAdminSummary, type AdminSummaryResponse } from '../api/dashboardApi'
-import { bookingOverview, bookingRecords, weeklyStatus, type BookingRecord } from '../model/mock'
+import { InlineBanner, useCountUp } from '../../../../widgets/backoffice-shell'
+import { fetchAdminBookings, fetchAdminDailyIntake, fetchAdminSummary, type AdminSummaryResponse } from '../api/dashboardApi'
+import { fetchRevenueReport, type RevenueReport } from '../../reports/api/reportsApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
 
 const { Text } = Typography
 const dashboardPalette = adminPalette
 
-const serviceMix = [
-  { label: 'Diagnostics', value: 36, color: dashboardPalette.red },
-  { label: 'Maintenance', value: 24, color: dashboardPalette.navy },
-  { label: 'Brake & suspension', value: 18, color: dashboardPalette.amber },
-  { label: 'AC & electrical', value: 14, color: dashboardPalette.teal },
-  { label: 'Tire & alignment', value: 8, color: dashboardPalette.green },
-]
+type BookingStatus = 'Pending' | 'Confirmed' | 'In Service' | 'Completed' | 'Cancelled'
 
-const dailyTraffic = [
-  { label: 'Mon', value: 18 },
-  { label: 'Tue', value: 24 },
-  { label: 'Wed', value: 20 },
-  { label: 'Thu', value: 28 },
-  { label: 'Fri', value: 32 },
-  { label: 'Sat', value: 26 },
-  { label: 'Sun', value: 14 },
-]
+type BookingRecord = {
+  key: string
+  customer: string
+  vehicle: string
+  service: string
+  date: string
+  time: string
+  status: BookingStatus
+  channel: 'Guest' | 'Customer' | 'Walk-in'
+  amount: number
+}
 
-const technicianLoad = [
-  { label: 'Tech An', value: 82, color: dashboardPalette.red },
-  { label: 'Tech Mai', value: 68, color: dashboardPalette.navy },
-  { label: 'Tech Huy', value: 57, color: dashboardPalette.teal },
-  { label: 'Tech Duc', value: 91, color: dashboardPalette.amber },
-]
+const CHART_COLOR_CYCLE = [dashboardPalette.red, dashboardPalette.navy, dashboardPalette.amber, dashboardPalette.teal, dashboardPalette.green]
 
 function statusTagColor(status: BookingRecord['status']) {
   switch (status) {
@@ -158,79 +150,87 @@ function DashboardMetricCard({
   value,
   delta,
   tone,
+  icon,
+  enterDelay,
 }: {
   label: string
   value: string | number
   delta: string
   tone: 'emerald' | 'blue' | 'amber' | 'violet'
+  icon: ReactNode
+  enterDelay: number
 }) {
   const toneMap = {
-    emerald: {
-      accent: dashboardPalette.green,
-      soft: 'rgba(47, 143, 99, 0.14)',
-    },
-    blue: {
-      accent: dashboardPalette.navy,
-      soft: 'rgba(31, 54, 92, 0.14)',
-    },
-    amber: {
-      accent: '#c67a00',
-      soft: 'rgba(255, 179, 71, 0.18)',
-    },
-    violet: {
-      accent: '#8a3ffc',
-      soft: 'rgba(138, 63, 252, 0.14)',
-    },
+    emerald: dashboardPalette.green,
+    blue: dashboardPalette.navy,
+    amber: dashboardPalette.amber,
+    violet: '#7c3aed',
   } as const
 
-  const currentTone = toneMap[tone]
+  const accent = toneMap[tone]
+  const displayValue = useCountUp(value)
 
   return (
     <Card
       bordered={false}
-      styles={{ body: { padding: 0 } }}
-      className="overflow-hidden rounded-[28px] admin-dashboard-metric-card"
+      styles={{ body: { padding: 20 } }}
+      className={`bo-card-hover bo-enter bo-enter-${enterDelay} overflow-hidden rounded-2xl`}
       style={{
-        background: `linear-gradient(135deg, ${dashboardPalette.panel} 0%, ${dashboardPalette.panelAlt} 100%)`,
+        background: dashboardPalette.panel,
         boxShadow: dashboardPalette.shadow,
+        border: `1px solid ${dashboardPalette.border}`,
       }}
     >
-      <div className="relative overflow-hidden p-5">
-        <div
-          className="absolute right-[-32px] top-[-32px] h-28 w-28 rounded-full"
-          style={{ background: currentTone.soft }}
-        />
-        <div className="relative flex items-start justify-between gap-3">
-          <div>
-            <Text className="!text-[11px] !font-semibold !uppercase !tracking-[0.18em]" style={{ color: dashboardPalette.textMuted }}>
-              {label}
-            </Text>
-            <div className="mt-2 font-['Oswald'] text-[34px] leading-none md:text-[38px]" style={{ color: dashboardPalette.ink }}>
-              {value}
-            </div>
-          </div>
+      <div className="flex items-center justify-between gap-3">
+        <div className="min-w-0">
           <div
-            className="rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.18em]"
-            style={{ background: currentTone.soft, color: currentTone.accent }}
+            className="text-[28px] leading-none font-bold md:text-[30px]"
+            style={{ color: accent, fontVariantNumeric: 'tabular-nums', whiteSpace: 'nowrap' }}
           >
+            {displayValue}
+          </div>
+          <Text
+            className="!mt-2 !block !text-[13px] !leading-[1.3] !font-medium"
+            style={{ color: dashboardPalette.textMuted }}
+          >
+            {label}
+          </Text>
+          <div className="mt-1 text-xs" style={{ color: dashboardPalette.textMuted }}>
             {delta}
           </div>
         </div>
+        <span className="shrink-0 text-[42px] leading-none" style={{ color: accent }}>
+          {icon}
+        </span>
       </div>
     </Card>
   )
 }
 
-function DonutChart() {
-  const total = serviceMix.reduce((sum, item) => sum + item.value, 0)
+type ChartSlice = { label: string; value: number; color: string }
+
+function DonutChart({
+  data,
+  centerLabel,
+  formatValue = (value: number) => String(value),
+}: {
+  data: ChartSlice[]
+  centerLabel: string
+  formatValue?: (value: number) => string
+}) {
+  const total = data.reduce((sum, item) => sum + item.value, 0)
   let currentOffset = 0
+
+  if (!data.length || total <= 0) {
+    return <Empty description="No completed orders in this period yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  }
 
   return (
     <div className="grid gap-5 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center">
       <div className="relative mx-auto h-[180px] w-[180px]">
         <svg viewBox="0 0 220 220" className="h-full w-full -rotate-90">
-          <circle cx="110" cy="110" r="72" fill="none" stroke="rgba(15,14,14,0.08)" strokeWidth="24" />
-          {serviceMix.map((item) => {
+          <circle cx="110" cy="110" r="72" fill="none" stroke="#eef1f5" strokeWidth="22" />
+          {data.map((item) => {
             const dash = (item.value / total) * 452.39
             const circle = (
               <circle
@@ -240,10 +240,11 @@ function DonutChart() {
                 r="72"
                 fill="none"
                 stroke={item.color}
-                strokeWidth="24"
+                strokeWidth="22"
                 strokeDasharray={`${dash} 452.39`}
                 strokeDashoffset={-currentOffset}
                 strokeLinecap="round"
+                style={{ transition: 'stroke-dashoffset 0.6s ease' }}
               />
             )
             currentOffset += dash
@@ -251,26 +252,29 @@ function DonutChart() {
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <div className="font-['Oswald'] text-[34px] leading-none" style={{ color: dashboardPalette.ink }}>
-            {total}
+          <div className="text-[22px] leading-none font-semibold" style={{ color: dashboardPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
+            {formatValue(total)}
           </div>
-          <div className="mt-2 text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: dashboardPalette.textMuted }}>
-            Revenue mix
+          <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: dashboardPalette.textMuted }}>
+            {centerLabel}
           </div>
         </div>
       </div>
 
-      <div className="space-y-3">
-        {serviceMix.map((item) => (
-          <div key={item.label} className="flex items-center justify-between gap-4 rounded-2xl px-4 py-3" style={{ background: 'rgba(255,255,255,0.7)' }}>
+      <div className="space-y-2">
+        {data.map((item) => (
+          <div
+            key={item.label}
+            className="flex items-center justify-between gap-4 rounded-xl px-4 py-2.5 transition-colors duration-150 hover:bg-black/3"
+          >
             <div className="flex items-center gap-3">
-              <span className="h-3 w-3 rounded-full" style={{ background: item.color }} />
-              <span className="text-sm font-semibold" style={{ color: dashboardPalette.inkSoft }}>
+              <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+              <span className="truncate text-sm font-medium" style={{ color: dashboardPalette.inkSoft }} title={item.label}>
                 {item.label}
               </span>
             </div>
-            <span className="font-['Oswald'] text-[28px] leading-none" style={{ color: dashboardPalette.ink }}>
-              {item.value}
+            <span className="shrink-0 text-[16px] leading-none font-semibold" style={{ color: dashboardPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
+              {formatValue(item.value)}
             </span>
           </div>
         ))}
@@ -279,41 +283,43 @@ function DonutChart() {
   )
 }
 
-function VerticalBarChart() {
-  const max = Math.max(...dailyTraffic.map((item) => item.value))
+function VerticalBarChart({ data }: { data: { label: string; value: number }[] }) {
+  const max = Math.max(1, ...data.map((item) => item.value))
+  const peakValue = Math.max(...data.map((item) => item.value))
 
   return (
-    <div className="rounded-[28px] border px-4 pb-3 pt-4" style={{ borderColor: dashboardPalette.border, background: 'rgba(255,255,255,0.7)' }}>
+    <div className="rounded-xl border px-4 pb-3 pt-4" style={{ borderColor: dashboardPalette.border, background: '#fafbfc' }}>
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(7, minmax(0, 1fr))',
+          gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))`,
           alignItems: 'end',
           gap: '12px',
           height: '220px',
         }}
       >
-        {dailyTraffic.map((item, index) => {
+        {data.map((item) => {
           const height = `${(item.value / max) * 100}%`
-          const accent = index === 4 ? dashboardPalette.red : index % 2 === 0 ? dashboardPalette.navy : dashboardPalette.amber
+          const isPeak = item.value > 0 && item.value === peakValue
+          const accent = isPeak ? dashboardPalette.red : dashboardPalette.navy
 
           return (
             <div key={item.label} className="flex h-full flex-col justify-end">
-              <div className="mb-2 text-center font-['Oswald'] text-[18px] leading-none" style={{ color: dashboardPalette.ink }}>
+              <div className="mb-2 text-center text-[14px] leading-none font-semibold" style={{ color: dashboardPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
                 {item.value}
               </div>
               <div className="flex h-[150px] items-end">
                 <div
-                  className="w-full rounded-t-[18px] transition-transform duration-300 hover:-translate-y-1"
+                  className="w-full rounded-t-[10px] transition-transform duration-300 ease-out hover:-translate-y-1"
                   style={{
-                    minHeight: '20px',
+                    minHeight: item.value > 0 ? '20px' : '2px',
                     height,
-                    background: `linear-gradient(180deg, ${accent} 0%, rgba(15,14,14,0.82) 100%)`,
-                    boxShadow: `0 12px 24px ${accent}30`,
+                    background: accent,
+                    opacity: isPeak ? 1 : 0.82,
                   }}
                 />
               </div>
-              <div className="mt-3 text-center text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: dashboardPalette.textMuted }}>
+              <div className="mt-3 text-center text-[11px] font-semibold uppercase tracking-[0.1em]" style={{ color: dashboardPalette.textMuted }}>
                 {item.label}
               </div>
             </div>
@@ -324,26 +330,29 @@ function VerticalBarChart() {
   )
 }
 
-function HorizontalBarChart() {
+function HorizontalBarChart({ data }: { data: ChartSlice[] }) {
+  if (!data.length) {
+    return <Empty description="No completed orders in this period yet" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+  }
+
   return (
-    <div className="space-y-5">
-      {technicianLoad.map((item) => (
+    <div className="space-y-4">
+      {data.map((item) => (
         <div key={item.label}>
           <div className="mb-2 flex items-center justify-between gap-4">
-            <span className="text-sm font-semibold" style={{ color: dashboardPalette.inkSoft }}>
+            <span className="truncate text-sm font-medium" style={{ color: dashboardPalette.inkSoft }} title={item.label}>
               {item.label}
             </span>
-            <span className="font-['Oswald'] text-[24px] leading-none" style={{ color: dashboardPalette.ink }}>
+            <span className="shrink-0 text-[16px] leading-none font-semibold" style={{ color: dashboardPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
               {item.value}%
             </span>
           </div>
-          <div className="h-4 overflow-hidden rounded-full" style={{ background: 'rgba(15,14,14,0.12)', boxShadow: 'inset 0 1px 2px rgba(15,14,14,0.08)' }}>
+          <div className="h-2.5 overflow-hidden rounded-full" style={{ background: '#eef1f5' }}>
             <div
-              className="h-full rounded-full transition-all duration-500"
+              className="h-full rounded-full transition-all duration-700 ease-out"
               style={{
                 width: `${item.value}%`,
-                background: `linear-gradient(90deg, ${item.color} 0%, ${dashboardPalette.ink} 100%)`,
-                boxShadow: `0 8px 18px ${item.color}45`,
+                background: item.color,
               }}
             />
           </div>
@@ -353,10 +362,19 @@ function HorizontalBarChart() {
   )
 }
 
+const OVERVIEW_CARD_META = [
+  { key: 'total', label: 'Total bookings', tone: 'blue' as const, icon: <CalendarOutlined /> },
+  { key: 'pending', label: 'Pending bookings', tone: 'amber' as const, icon: <ClockCircleOutlined /> },
+  { key: 'completed', label: 'Completed visits', tone: 'emerald' as const, icon: <CheckCircleOutlined /> },
+  { key: 'outstanding', label: 'Outstanding invoices', tone: 'violet' as const, icon: <WalletOutlined /> },
+]
+
 export default function AdminDashboardPage() {
   const { token } = useAuth()
   const [summary, setSummary] = useState<AdminSummaryResponse | null>(null)
-  const [tableRows, setTableRows] = useState<BookingRecord[]>(bookingRecords)
+  const [tableRows, setTableRows] = useState<BookingRecord[]>([])
+  const [revenueReport, setRevenueReport] = useState<RevenueReport | null>(null)
+  const [dailyIntake, setDailyIntake] = useState<{ date: string; count: number }[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [requestError, setRequestError] = useState('')
 
@@ -372,9 +390,16 @@ export default function AdminDashboardPage() {
       setRequestError('')
 
       try {
-        const [summaryResponse, bookingsResponse] = await Promise.all([
+        const end = new Date()
+        const start = new Date()
+        start.setDate(start.getDate() - 29)
+        const isoDate = (date: Date) => date.toISOString().slice(0, 10)
+
+        const [summaryResponse, bookingsResponse, revenueResponse, dailyIntakeResponse] = await Promise.all([
           fetchAdminSummary(token),
           fetchAdminBookings(token),
+          fetchRevenueReport(token, isoDate(start), isoDate(end)),
+          fetchAdminDailyIntake(token, 7),
         ])
 
         if (cancelled) {
@@ -383,6 +408,8 @@ export default function AdminDashboardPage() {
 
         setSummary(summaryResponse)
         setTableRows(bookingsResponse.bookings.map(mapBookingRecordFromApi))
+        setRevenueReport(revenueResponse.report)
+        setDailyIntake(dailyIntakeResponse.days)
       } catch (error) {
         if (!cancelled) {
           setRequestError(error instanceof Error ? error.message : 'Unable to load dashboard data.')
@@ -403,37 +430,61 @@ export default function AdminDashboardPage() {
 
   const overviewCards = useMemo(() => {
     if (!summary) {
-      return bookingOverview
+      return OVERVIEW_CARD_META.map((meta) => ({ ...meta, value: '—', delta: 'Loading…' }))
     }
 
     const { total, today, byStatus } = summary.bookings
-
-    return [
-      { label: 'Total bookings', value: total, delta: `Today ${today}`, tone: 'blue' as const },
-      {
-        label: 'Pending bookings',
-        value: byStatus.pending || 0,
-        delta: `Confirmed ${byStatus.confirmed || 0}`,
-        tone: 'amber' as const,
-      },
-      {
-        label: 'Completed visits',
-        value: byStatus.completed || 0,
-        delta: `Cancelled ${byStatus.cancelled || 0}`,
-        tone: 'emerald' as const,
-      },
-      {
-        label: 'Outstanding invoices',
+    const values: Record<string, { value: string | number; delta: string }> = {
+      total: { value: total, delta: `Today ${today}` },
+      pending: { value: byStatus.pending || 0, delta: `Confirmed ${byStatus.confirmed || 0}` },
+      completed: { value: byStatus.completed || 0, delta: `Cancelled ${byStatus.cancelled || 0}` },
+      outstanding: {
         value: formatCompactCurrency(summary.revenue.outstanding, summary.revenue.currency),
         delta: `Collected ${formatCompactCurrency(summary.revenue.collected, summary.revenue.currency)}`,
-        tone: 'violet' as const,
       },
-    ]
+    }
+
+    return OVERVIEW_CARD_META.map((meta) => ({ ...meta, ...values[meta.key] }))
   }, [summary])
+
+  const serviceMixData = useMemo<ChartSlice[]>(() => {
+    const byService = revenueReport?.byService ?? []
+    return byService
+      .filter((row) => row.revenue > 0)
+      .slice(0, 6)
+      .map((row, index) => ({
+        label: row.serviceName || 'Unnamed service',
+        value: row.revenue,
+        color: CHART_COLOR_CYCLE[index % CHART_COLOR_CYCLE.length],
+      }))
+  }, [revenueReport])
+
+  const technicianLoadData = useMemo<ChartSlice[]>(() => {
+    const byTechnician = revenueReport?.byTechnician ?? []
+    return byTechnician.slice(0, 6).map((row, index) => ({
+      label: row.technicianName || 'Unassigned',
+      value: Math.round(row.completionRate * 100),
+      color: CHART_COLOR_CYCLE[index % CHART_COLOR_CYCLE.length],
+    }))
+  }, [revenueReport])
+
+  const dailyTrafficData = useMemo(
+    () =>
+      dailyIntake.map((day) => ({
+        label: new Date(`${day.date}T00:00:00Z`).toLocaleDateString('en-US', { weekday: 'short', timeZone: 'UTC' }),
+        value: day.count,
+      })),
+    [dailyIntake],
+  )
 
   const statusProgress = useMemo(() => {
     if (!summary) {
-      return weeklyStatus
+      return [
+        { label: 'Pending', value: 0, color: '#f59e0b' },
+        { label: 'Confirmed', value: 0, color: '#2563eb' },
+        { label: 'Completed', value: 0, color: '#10b981' },
+        { label: 'Cancelled', value: 0, color: '#8b5cf6' },
+      ]
     }
 
     const total = Math.max(summary.bookings.total, 1)
@@ -522,7 +573,11 @@ export default function AdminDashboardPage() {
         title: 'Amount',
         dataIndex: 'amount',
         key: 'amount',
-        render: (value: number) => <span className="font-semibold" style={{ color: dashboardPalette.ink }}>${value}</span>,
+        render: (value: number) => (
+          <span className="font-semibold" style={{ color: dashboardPalette.ink }}>
+            {new Intl.NumberFormat('vi-VN').format(value)} ₫
+          </span>
+        ),
       },
     ],
     [],
@@ -530,167 +585,148 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminShell eyebrow="Admin dashboard" title="Garage operations overview">
-              <div
-                className="gap-4"
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
-                }}
-              >
-                {overviewCards.map((item) => (
-                  <DashboardMetricCard key={item.label} label={item.label} value={item.value} delta={item.delta} tone={item.tone} />
-                ))}
-              </div>
+      <div className="gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+        {overviewCards.map((item, index) => (
+          <DashboardMetricCard
+            key={item.label}
+            label={item.label}
+            value={item.value}
+            delta={item.delta}
+            tone={item.tone}
+            icon={item.icon}
+            enterDelay={index + 1}
+          />
+        ))}
+      </div>
 
-              {requestError ? (
-                <div
-                  className="rounded-[22px] border px-5 py-4 text-sm font-medium"
-                  style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}
-                >
-                  {requestError}
+      {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
+
+      <Card
+        bordered={false}
+        className="bo-enter bo-enter-2 rounded-2xl"
+        styles={{ body: { padding: 20 } }}
+        style={{ background: dashboardPalette.panel, boxShadow: dashboardPalette.shadow, border: `1px solid ${dashboardPalette.border}` }}
+        title={
+          <div className="py-1">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: dashboardPalette.textMuted }}>
+              Service advisor queue
+            </div>
+            <div className="mt-1.5 text-[19px] leading-none font-semibold" style={{ color: dashboardPalette.ink }}>
+              Active reception &amp; repair orders
+            </div>
+          </div>
+        }
+        extra={
+          <Button type="primary" style={{ background: dashboardPalette.red, borderColor: dashboardPalette.red }}>
+            Export CSV
+          </Button>
+        }
+      >
+        <Table
+          rowKey="key"
+          columns={columns}
+          dataSource={tableRows}
+          pagination={{ pageSize: 6, size: 'small' }}
+          size="middle"
+          loading={isLoading}
+          scroll={{ x: 1080 }}
+          className="bo-table"
+        />
+      </Card>
+
+      <div className="gap-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', alignItems: 'start' }}>
+        <Card
+          bordered={false}
+          className="bo-enter bo-enter-3 rounded-2xl"
+          styles={{ body: { padding: 20 } }}
+          style={{
+            background: 'linear-gradient(160deg, #0f172a 0%, #1e293b 100%)',
+            boxShadow: '0 10px 32px rgba(15, 23, 42, 0.18)',
+          }}
+        >
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <div className="text-[11px] font-semibold uppercase tracking-[0.16em] text-white/55">Status balance</div>
+              <div className="mt-1.5 text-[19px] leading-none font-semibold text-white">Repair order pipeline</div>
+            </div>
+            <CheckCircleOutlined className="text-lg text-white/70" />
+          </div>
+
+          <div className="mt-5 space-y-3">
+            {statusProgress.map((item) => (
+              <div key={item.label}>
+                <div className="mb-1.5 flex items-center justify-between text-sm">
+                  <span className="font-medium text-white/80">{item.label}</span>
+                  <span className="text-[16px] leading-none font-semibold text-white" style={{ fontVariantNumeric: 'tabular-nums' }}>
+                    {item.value}%
+                  </span>
                 </div>
-              ) : null}
-
-              <div
-                className="gap-5"
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))',
-                }}
-              >
-                <Card
-                  bordered={false}
-                  className="rounded-[32px]"
-                  styles={{ body: { padding: 20 } }}
-                  style={{
-                    background: dashboardPalette.panel,
-                    boxShadow: dashboardPalette.shadow,
-                  }}
-                  title={
-                    <div>
-                      <div className="text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: dashboardPalette.textMuted }}>
-                        Service advisor queue
-                      </div>
-                      <div className="mt-2 font-['Oswald'] text-[30px] leading-none" style={{ color: dashboardPalette.ink }}>
-                        Active reception & repair orders
-                      </div>
-                    </div>
-                  }
-                  extra={
-                    <Button type="primary" style={{ background: dashboardPalette.red, borderColor: dashboardPalette.red }}>
-                      Export CSV
-                    </Button>
-                  }
-                >
-                  <Table
-                    rowKey="key"
-                    columns={columns}
-                    dataSource={tableRows}
-                    pagination={false}
-                    size="middle"
-                    loading={isLoading}
-                    scroll={{ x: 980 }}
-                    className="admin-dashboard-table"
-                  />
-                </Card>
-
-                <div
-                  className="gap-5"
-                  style={{
-                    display: 'grid',
-                    gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
-                  }}
-                >
-                  <Card
-                    bordered={false}
-                    className="rounded-[32px]"
-                    styles={{ body: { padding: 20 } }}
-                    style={{
-                      background: `linear-gradient(180deg, #1a1919 0%, #33201c 100%)`,
-                      boxShadow: '0 26px 65px rgba(15, 14, 14, 0.18)',
-                    }}
-                  >
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <div className="text-[12px] font-semibold uppercase tracking-[0.22em] text-white/60">Status balance</div>
-                        <div className="mt-2 font-['Oswald'] text-[28px] leading-none text-white">Repair order pipeline</div>
-                      </div>
-                      <CheckCircleOutlined className="text-xl text-[#ffb347]" />
-                    </div>
-
-                    <div className="mt-5 space-y-3">
-                      {statusProgress.map((item) => (
-                        <div key={item.label}>
-                          <div className="mb-2 flex items-center justify-between text-sm">
-                            <span className="font-semibold text-white/88">{item.label}</span>
-                            <span className="font-['Oswald'] text-[22px] leading-none text-white">{item.value}</span>
-                          </div>
-                          <Progress percent={item.value} strokeColor={item.color} trailColor="rgba(255,255,255,0.1)" showInfo={false} />
-                        </div>
-                      ))}
-                    </div>
-                  </Card>
-
-                  <Card
-                    bordered={false}
-                    className="rounded-[32px]"
-                    styles={{ body: { padding: 20 } }}
-                    style={{ background: dashboardPalette.panel, boxShadow: dashboardPalette.shadow }}
-                  >
-                    <div className="mb-5">
-                      <div className="text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: dashboardPalette.textMuted }}>
-                        Technician productivity
-                      </div>
-                      <div className="mt-2 font-['Oswald'] text-[28px] leading-none" style={{ color: dashboardPalette.ink }}>
-                        Completion by technician
-                      </div>
-                    </div>
-                    <HorizontalBarChart />
-                  </Card>
-                </div>
+                <Progress percent={item.value} strokeColor={item.color} trailColor="rgba(255,255,255,0.12)" showInfo={false} size="small" />
               </div>
+            ))}
+          </div>
 
-              <div
-                className="gap-5"
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-                }}
-              >
-                <Card
-                  bordered={false}
-                  className="rounded-[32px]"
-                  styles={{ body: { padding: 20 } }}
-                  style={{ background: dashboardPalette.panel, boxShadow: dashboardPalette.shadow }}
-                >
-                    <div className="mb-5">
-                      <div className="text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: dashboardPalette.textMuted }}>
-                        Accounting overview
-                      </div>
-                      <div className="mt-2 font-['Oswald'] text-[28px] leading-none" style={{ color: dashboardPalette.ink }}>
-                        Revenue by service
-                      </div>
-                    </div>
-                    <DonutChart />
-                </Card>
+          <div className="mt-5 flex items-center justify-between border-t border-white/10 pt-4 text-sm">
+            <span className="text-white/55">Total bookings on record</span>
+            <span className="text-[18px] font-semibold text-white" style={{ fontVariantNumeric: 'tabular-nums' }}>
+              {summary?.bookings.total ?? '—'}
+            </span>
+          </div>
+        </Card>
 
-                <Card
-                  bordered={false}
-                  className="rounded-[32px]"
-                  styles={{ body: { padding: 20 } }}
-                  style={{ background: dashboardPalette.panel, boxShadow: dashboardPalette.shadow }}
-                >
-                    <div className="mb-5">
-                      <div className="text-[12px] font-semibold uppercase tracking-[0.22em]" style={{ color: dashboardPalette.textMuted }}>
-                        Vehicle intake
-                      </div>
-                      <div className="mt-2 font-['Oswald'] text-[28px] leading-none" style={{ color: dashboardPalette.ink }}>
-                        Daily reception volume
-                      </div>
-                    </div>
-                    <VerticalBarChart />
-                </Card>
-              </div>
+        <Card
+          bordered={false}
+          className="bo-enter bo-enter-4 rounded-2xl"
+          styles={{ body: { padding: 20 } }}
+          style={{ background: dashboardPalette.panel, boxShadow: dashboardPalette.shadow, border: `1px solid ${dashboardPalette.border}` }}
+        >
+          <div className="mb-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: dashboardPalette.textMuted }}>
+              Technician productivity · last 30 days
+            </div>
+            <div className="mt-1.5 text-[19px] leading-none font-semibold" style={{ color: dashboardPalette.ink }}>
+              Completion by technician
+            </div>
+          </div>
+          <HorizontalBarChart data={technicianLoadData} />
+        </Card>
+      </div>
+
+      <div className="gap-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'start' }}>
+        <Card
+          bordered={false}
+          className="bo-enter bo-enter-5 rounded-2xl"
+          styles={{ body: { padding: 20 } }}
+          style={{ background: dashboardPalette.panel, boxShadow: dashboardPalette.shadow, border: `1px solid ${dashboardPalette.border}` }}
+        >
+          <div className="mb-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: dashboardPalette.textMuted }}>
+              Accounting overview · last 30 days
+            </div>
+            <div className="mt-1.5 text-[19px] leading-none font-semibold" style={{ color: dashboardPalette.ink }}>
+              Revenue by service
+            </div>
+          </div>
+          <DonutChart data={serviceMixData} centerLabel="Revenue mix" formatValue={(value) => formatCompactCurrency(value, revenueReport?.currency || 'VND')} />
+        </Card>
+
+        <Card
+          bordered={false}
+          className="bo-enter bo-enter-5 rounded-2xl"
+          styles={{ body: { padding: 20 } }}
+          style={{ background: dashboardPalette.panel, boxShadow: dashboardPalette.shadow, border: `1px solid ${dashboardPalette.border}` }}
+        >
+          <div className="mb-4">
+            <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: dashboardPalette.textMuted }}>
+              Vehicle intake · last 7 days
+            </div>
+            <div className="mt-1.5 text-[19px] leading-none font-semibold" style={{ color: dashboardPalette.ink }}>
+              Daily reception volume
+            </div>
+          </div>
+          <VerticalBarChart data={dailyTrafficData} />
+        </Card>
+      </div>
     </AdminShell>
   )
 }

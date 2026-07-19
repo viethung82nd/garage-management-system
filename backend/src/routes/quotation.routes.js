@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   createQuotation,
   updateQuotation,
@@ -15,33 +15,33 @@ quotationRouter.get(
   "",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(listQuotations),
+  catchAsync(listQuotations),
 );
 
 quotationRouter.post(
   "",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(createQuotation),
+  catchAsync(createQuotation),
 );
 
 quotationRouter.patch(
   "/:id",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(updateQuotation),
+  catchAsync(updateQuotation),
 );
 
 quotationRouter.patch(
   "/:id/send",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(sendQuotation),
+  catchAsync(sendQuotation),
 );
 
 quotationRouter.patch(
   "/:id/confirm",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(confirmQuotation),
+  catchAsync(confirmQuotation),
 );

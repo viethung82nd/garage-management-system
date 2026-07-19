@@ -1,18 +1,5 @@
-/**
- * Error carrying an HTTP status. Throw from controllers to produce a clean
- * JSON error response instead of a generic 500.
- */
-export class HttpError extends Error {
-  constructor(status, message) {
-    super(message);
-    this.status = status;
-  }
-}
-
-/** Wraps an async route handler so rejections reach the error handler. */
-export function asyncHandler(fn) {
-  return (req, res, next) => Promise.resolve(fn(req, res, next)).catch(next);
-}
+import { ApiError } from "../utils/apiError.js";
+import { logger } from "../utils/logger.js";
 
 /** Fallback 404 for unmatched routes. */
 export function notFound(req, res) {
@@ -28,7 +15,7 @@ export function errorHandler(err, _req, res, _next) {
   let status = 500;
   let message = "Internal server error";
 
-  if (err instanceof HttpError) {
+  if (err instanceof ApiError) {
     status = err.status;
     message = err.message;
   } else if (err?.name === "ValidationError" || err?.name === "CastError") {
@@ -42,7 +29,7 @@ export function errorHandler(err, _req, res, _next) {
   }
 
   if (status >= 500) {
-    console.error("[error]", err instanceof Error ? err.stack : err);
+    logger.error("error", err instanceof Error ? err.stack : err);
   }
   res.status(status).json({ error: message });
 }

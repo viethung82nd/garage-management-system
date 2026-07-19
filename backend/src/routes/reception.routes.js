@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   createReception,
   getReceptionHistory,
@@ -12,12 +12,12 @@ receptionRouter.get(
   "/history",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(getReceptionHistory),
+  catchAsync(getReceptionHistory),
 );
 
 receptionRouter.post(
   "",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(createReception),
+  catchAsync(createReception),
 );

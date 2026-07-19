@@ -1,4 +1,5 @@
 import { ToolOutlined, FileTextOutlined } from '@ant-design/icons'
+import { ConfigProvider } from 'antd'
 import type { ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../../../shared/auth'
@@ -8,6 +9,7 @@ export { technicianPalette }
 
 function activeMenuKey(pathname: string) {
   if (pathname.startsWith('/technician/repair-notes')) return 'repair-notes'
+  if (pathname.startsWith('/technician/profile')) return 'profile'
   return 'work-orders'
 }
 
@@ -18,6 +20,16 @@ export function TechnicianShell({ title, eyebrow = 'Technician', children }: { t
   const profileInitial = profileName.trim().charAt(0).toUpperCase() || 'T'
 
   return (
+    <ConfigProvider
+      theme={{
+        token: {
+          colorPrimary: technicianPalette.red,
+          colorLink: technicianPalette.red,
+          colorLinkHover: technicianPalette.redDeep,
+          borderRadius: 10,
+        },
+      }}
+    >
     <BackOfficeShell
       palette={technicianPalette}
       background={`radial-gradient(circle at top left, rgba(245, 19, 4, 0.12), transparent 22%), radial-gradient(circle at top right, rgba(255, 179, 71, 0.16), transparent 22%), ${technicianPalette.canvas}`}
@@ -31,6 +43,7 @@ export function TechnicianShell({ title, eyebrow = 'Technician', children }: { t
       profileName={profileName}
       profileRole="Technician"
       profileAccent={technicianPalette.red}
+      profileHref="/technician/profile"
       onLogout={logout}
       selectedMenuKeys={[activeMenuKey(location.pathname)]}
       menuItems={[
@@ -40,5 +53,6 @@ export function TechnicianShell({ title, eyebrow = 'Technician', children }: { t
     >
       {children}
     </BackOfficeShell>
+    </ConfigProvider>
   )
 }

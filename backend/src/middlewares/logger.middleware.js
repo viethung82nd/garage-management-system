@@ -1,3 +1,5 @@
+import { logger } from "../utils/logger.js";
+
 /**
  * Request logger. Logs one line per request once the response is flushed,
  * capturing method, URL, status code, and how long the handler took. Mounted
@@ -8,8 +10,9 @@ export function requestLogger(req, res, next) {
 
   res.on("finish", () => {
     const ms = Number(process.hrtime.bigint() - start) / 1e6;
-    console.log(
-      `[req] ${req.method} ${req.originalUrl} ${res.statusCode} ${ms.toFixed(1)}ms`
+    logger.info(
+      "req",
+      `${req.method} ${req.originalUrl} ${res.statusCode} ${ms.toFixed(1)}ms`,
     );
   });
 

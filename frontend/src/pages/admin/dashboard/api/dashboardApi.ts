@@ -55,3 +55,15 @@ export function fetchAdminBookings(token: string) {
     token,
   })
 }
+
+export type AdminDailyIntakeResponse = {
+  days: Array<{ date: string; count: number }>
+}
+
+/** GET /api/admin/stats/daily-intake — real booking counts per day for the reception-volume chart. */
+export function fetchAdminDailyIntake(token: string, days = 7) {
+  return apiRequest<AdminDailyIntakeResponse>(`/api/admin/stats/daily-intake?days=${days}`, {
+    method: 'GET',
+    token,
+  })
+}

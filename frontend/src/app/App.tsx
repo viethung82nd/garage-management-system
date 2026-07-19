@@ -22,6 +22,7 @@ const AdminServicesPage = lazy(() => import('../pages/admin/services').then((mod
 const AdminPartsPage = lazy(() => import('../pages/admin/parts').then((module) => ({ default: module.AdminPartsPage })))
 const AdminConfigPage = lazy(() => import('../pages/admin/config').then((module) => ({ default: module.AdminConfigPage })))
 const AdminReportsPage = lazy(() => import('../pages/admin/reports').then((module) => ({ default: module.AdminReportsPage })))
+const AdminProfilePage = lazy(() => import('../pages/admin/profile').then((module) => ({ default: module.AdminProfilePage })))
 const ServiceAdvisorDashboardPage = lazy(() =>
   import('../pages/advisor/ServiceAdvisorDashboardPage').then((module) => ({ default: module.ServiceAdvisorDashboardPage })),
 )
@@ -50,11 +51,17 @@ const VehicleInspectionPage = lazy(() =>
 const TransferRequestReviewPage = lazy(() =>
   import('../pages/advisor/TransferRequestReviewPage').then((module) => ({ default: module.TransferRequestReviewPage })),
 )
+const ServiceAdvisorProfilePage = lazy(() =>
+  import('../pages/advisor/ServiceAdvisorProfilePage').then((module) => ({ default: module.ServiceAdvisorProfilePage })),
+)
 const TechnicianWorkOrdersPage = lazy(() =>
   import('../pages/technician/TechnicianWorkOrdersPage').then((module) => ({ default: module.TechnicianWorkOrdersPage })),
 )
 const TechnicianRepairNotesPage = lazy(() =>
   import('../pages/technician/TechnicianRepairNotesPage').then((module) => ({ default: module.TechnicianRepairNotesPage })),
+)
+const TechnicianProfilePage = lazy(() =>
+  import('../pages/technician/TechnicianProfilePage').then((module) => ({ default: module.TechnicianProfilePage })),
 )
 
 function RouteFallback() {
@@ -214,6 +221,18 @@ export default function App() {
         }
       />
       <Route
+        path="/admin/profile"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['admin']}>
+                <AdminProfilePage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
         path="/accountant/invoices"
         element={
           <Suspense fallback={<RouteFallback />}>
@@ -361,6 +380,18 @@ export default function App() {
           </Suspense>
         }
       />
+      <Route
+        path="/advisor/profile"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <ServiceAdvisorProfilePage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
       <Route path="/technician" element={<Navigate to="/technician/work-orders" replace />} />
       <Route
         path="/technician/work-orders"
@@ -381,6 +412,18 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['technician']}>
                 <TechnicianRepairNotesPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/technician/profile"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['technician']}>
+                <TechnicianProfilePage />
               </RequireRole>
             </RequireAuth>
           </Suspense>

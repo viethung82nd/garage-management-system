@@ -1,17 +1,17 @@
-import { CheckOutlined, SearchOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Input, Select, Table, Tag } from 'antd'
+import { CarOutlined, SearchOutlined } from '@ant-design/icons'
+import { Avatar, Button, Card, Input, Select, Table, Tabs, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
-import { confirmWorkshopBooking, fetchWorkshopBookings, personName, rejectWorkshopBooking, unwrapArray, vehicleName, vehiclePlate, type ApiBooking } from '../../shared/api/workshop'
+import { useNavigate } from 'react-router-dom'
+import { fetchWorkshopBookings, formatApiDate, personName, rejectWorkshopBooking, unwrapArray, vehicleName, vehiclePlate, type ApiBooking } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
-import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
+import { InlineBanner, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected'
 
 type BookingRequest = {
   id: string
-  advisor: string
   customer: string
   date: string
   initials: string
@@ -34,12 +34,10 @@ function mapBooking(booking: ApiBooking): BookingRequest {
   const customer = booking.customerId || booking.customer
   const vehicle = booking.vehicleId || booking.vehicle
   const service = booking.serviceId || booking.service
-  const advisor = booking.advisorId || booking.advisor
 
   return {
-    advisor: personName(advisor, 'Unassigned'),
     customer: personName(customer, 'Customer'),
-    date: booking.bookingDate || booking.date || 'Not updated',
+    date: booking.bookingDate || booking.date ? formatApiDate(booking.bookingDate || booking.date) : 'Not updated',
     id: booking._id || booking.id || crypto.randomUUID(),
     initials: getUserInitials(customer),
     phone: customer?.phone || 'No phone on file',
@@ -80,11 +78,13 @@ const serviceMatchTerms: Record<string, string[]> = {
 
 export function BookingRequestsPage() {
   const { token } = useAuth()
+  const navigate = useNavigate()
   const [bookings, setBookings] = useState<BookingRequest[]>([])
   const [loading, setLoading] = useState(true)
   const [apiMessage, setApiMessage] = useState<string>()
   const [query, setQuery] = useState('')
   const [service, setService] = useState('all')
+  const [activeTab, setActiveTab] = useState<'pending' | 'processed'>('pending')
 
   useEffect(() => {
     if (!token) return
@@ -117,6 +117,8 @@ export function BookingRequestsPage() {
     const normalizedQuery = query.trim().toLowerCase()
 
     return bookings.filter((booking) => {
+      const matchesTab = activeTab === 'pending' ? booking.status === 'pending' : booking.status !== 'pending'
+
       const matchesQuery =
         !normalizedQuery ||
         `${booking.customer} ${booking.phone} ${booking.vehicle} ${booking.plate} ${booking.vin} ${booking.service}`
@@ -126,24 +128,33 @@ export function BookingRequestsPage() {
       const serviceTerms = serviceMatchTerms[service] ?? []
       const matchesService = serviceTerms.length === 0 || serviceTerms.some((term) => booking.service.toLowerCase().includes(term))
 
-      return matchesQuery && matchesService
+      return matchesTab && matchesQuery && matchesService
     })
-  }, [bookings, query, service])
+  }, [bookings, query, service, activeTab])
 
-  async function updateStatus(id: string, status: BookingStatus) {
+  // Confirming and receiving the vehicle are the same real-world moment, so
+  // "Confirm" hands off to Vehicle Reception instead of just flipping a
+  // status in place — reception is what actually opens the repair order this
+  // booking continues into (see reception.controller.js#createReception).
+  function receiveBooking(id: string) {
+    navigate(`/advisor/reception?bookingId=${id}`)
+  }
+
+  async function rejectBookingRequest(id: string) {
     if (!token) return
 
     setApiMessage(undefined)
     try {
-      const response = status === 'confirmed' ? await confirmWorkshopBooking(token, id) : await rejectWorkshopBooking(token, id)
-      const booking = 'booking' in response && response.booking ? response.booking : response
-      setBookings((current) => current.map((item) => (item.id === id ? mapBooking(booking as ApiBooking) : item)))
+      const response = await rejectWorkshopBooking(token, id)
+      const booking = ('booking' in response && response.booking ? response.booking : response) as ApiBooking
+      setBookings((current) => current.map((item) => (item.id === id ? mapBooking(booking) : item)))
     } catch (err) {
       setApiMessage(err instanceof Error ? err.message : 'Unable to update the booking status')
     }
   }
 
   const pendingCount = bookings.filter((booking) => booking.status === 'pending').length
+  const processedCount = bookings.length - pendingCount
 
   const columns: ColumnsType<BookingRequest> = [
     {
@@ -173,12 +184,7 @@ export function BookingRequestsPage() {
     {
       title: 'Requested service',
       key: 'service',
-      render: (_, booking) => (
-        <div>
-          <div style={{ color: advisorPalette.ink, fontWeight: 600, maxWidth: 240 }}>{booking.service}</div>
-          <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 2 }}>Advisor: {booking.advisor}</div>
-        </div>
-      ),
+      render: (_, booking) => <div style={{ color: advisorPalette.ink, fontWeight: 600, maxWidth: 240 }}>{booking.service}</div>,
     },
     {
       title: 'Time slot',
@@ -196,37 +202,39 @@ export function BookingRequestsPage() {
       key: 'status',
       render: (status: BookingStatus) => <Tag color={statusColors[status]}>{statusLabels[status]}</Tag>,
     },
-    {
-      title: 'Actions',
-      key: 'actions',
-      render: (_, booking) => (
-        <div className="flex justify-end gap-2">
-          <Button
-            disabled={booking.status !== 'pending'}
-            icon={<CheckOutlined />}
-            onClick={() => updateStatus(booking.id, 'confirmed')}
-            title="Confirm"
-            type="primary"
-          />
-          <Button disabled={booking.status !== 'pending'} onClick={() => updateStatus(booking.id, 'rejected')}>
-            Reject
-          </Button>
-        </div>
-      ),
-    },
+    ...(activeTab === 'pending'
+      ? [
+          {
+            title: 'Actions',
+            key: 'actions',
+            width: 220,
+            render: (_: unknown, booking: BookingRequest) => (
+              <div className="flex gap-2">
+                <Button icon={<CarOutlined />} onClick={() => receiveBooking(booking.id)} type="primary">
+                  Receive
+                </Button>
+                <Button onClick={() => rejectBookingRequest(booking.id)}>Reject</Button>
+              </div>
+            ),
+          },
+        ]
+      : []),
   ]
 
   return (
     <ServiceAdvisorShell title="Booking requests">
-      <StatCard label="Pending bookings" note="Awaiting confirmation" palette={advisorPalette} value={String(pendingCount).padStart(2, '0')} />
+      {apiMessage ? <InlineBanner tone="error">{apiMessage}</InlineBanner> : null}
 
-      {apiMessage ? (
-        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
-          {apiMessage}
-        </div>
-      ) : null}
+      <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
+        <Tabs
+          activeKey={activeTab}
+          onChange={(key) => setActiveTab(key as 'pending' | 'processed')}
+          items={[
+            { key: 'pending', label: `Needs review (${pendingCount})` },
+            { key: 'processed', label: `Reviewed (${processedCount})` },
+          ]}
+        />
 
-      <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
         <div className="flex flex-wrap items-center gap-3" style={{ marginBottom: 20 }}>
           <Input
             allowClear
@@ -239,7 +247,15 @@ export function BookingRequestsPage() {
           <Select onChange={setService} options={serviceFilterOptions} style={{ width: 220 }} value={service} />
         </div>
 
-        <Table columns={columns} dataSource={filteredBookings} loading={loading} pagination={false} rowKey="id" scroll={{ x: 960 }} />
+        <Table
+          columns={columns}
+          dataSource={filteredBookings}
+          loading={loading}
+          pagination={{ pageSize: 8, showTotal: (total) => `${total} bookings` }}
+          rowKey="id"
+          scroll={{ x: 960 }}
+          className="bo-table"
+        />
       </Card>
     </ServiceAdvisorShell>
   )

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   createVehicle,
   checkVehicleExists,
@@ -14,7 +14,7 @@ vehicleRouter.get(
   "/exists",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(checkVehicleExists)
+  catchAsync(checkVehicleExists)
 );
 
 // Create a vehicle profile: staff register for any customer; registered
@@ -23,5 +23,5 @@ vehicleRouter.post(
   "/",
   requireAuth,
   requireRole("serviceAdvisor", "admin", "onlineCustomer"),
-  asyncHandler(createVehicle)
+  catchAsync(createVehicle)
 );

@@ -1,8 +1,8 @@
-import { DownloadOutlined } from '@ant-design/icons'
-import { Button, Card, DatePicker, Divider, Table } from 'antd'
+import { BankOutlined, DownloadOutlined, ToolOutlined, UserOutlined } from '@ant-design/icons'
+import { Button, Card, DatePicker, Table } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import dayjs, { type Dayjs } from 'dayjs'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { useAuth } from '../../../../shared/auth'
 import { ApiClientError } from '../../../../shared/lib/api-client'
 import { PDF_EXPORT_IGNORE_ATTRIBUTE, exportNodeToPdf } from '../../../../shared/lib/pdf-export'
@@ -14,6 +14,7 @@ import {
   type TechnicianPerformance,
 } from '../api/reportsApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
+import { InlineBanner, StatCard } from '../../../../widgets/backoffice-shell'
 
 const { RangePicker } = DatePicker
 
@@ -24,18 +25,57 @@ function formatMoney(value: number, currency: string) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency }).format(value)
 }
 
-function SummaryCard({ label, value }: { label: string; value: string }) {
+function ShareBar({ fraction, color }: { fraction: number; color: string }) {
+  const percent = Math.max(0, Math.min(1, fraction)) * 100
+  return (
+    <div className="flex items-center gap-2">
+      <div className="h-1.5 w-20 overflow-hidden rounded-full" style={{ background: '#eef1f5' }}>
+        <div className="h-full rounded-full transition-all duration-500" style={{ width: `${percent}%`, background: color }} />
+      </div>
+      <span className="text-xs tabular-nums" style={{ color: adminPalette.textMuted }}>
+        {percent.toFixed(0)}%
+      </span>
+    </div>
+  )
+}
+
+function ReportSectionCard({
+  icon,
+  eyebrow,
+  title,
+  enterDelay,
+  children,
+}: {
+  icon: ReactNode
+  eyebrow: string
+  title: string
+  enterDelay: number
+  children: ReactNode
+}) {
   return (
     <Card
       bordered={false}
-      className="rounded-[28px]"
-      styles={{ body: { padding: 20 } }}
-      style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow }}
+      className={`bo-enter bo-enter-${enterDelay} rounded-2xl`}
+      styles={{ body: { padding: 24 } }}
+      style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, border: `1px solid ${adminPalette.border}` }}
     >
-      <div style={{ color: adminPalette.textMuted, fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', textTransform: 'uppercase' }}>
-        {label}
+      <div className="mb-4 flex items-center gap-3">
+        <span
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-base"
+          style={{ background: adminPalette.panelAlt, color: adminPalette.red }}
+        >
+          {icon}
+        </span>
+        <div>
+          <div className="text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: adminPalette.textMuted }}>
+            {eyebrow}
+          </div>
+          <div className="text-[16px] font-semibold" style={{ color: adminPalette.ink }}>
+            {title}
+          </div>
+        </div>
       </div>
-      <div style={{ color: adminPalette.ink, fontSize: 30, fontWeight: 700, marginTop: 8 }}>{value}</div>
+      {children}
     </Card>
   )
 }
@@ -72,58 +112,82 @@ export default function AdminReportsPage() {
     await exportNodeToPdf(printableRef.current, `revenue-report-${range[0].format('YYYY-MM-DD')}-to-${range[1].format('YYYY-MM-DD')}.pdf`)
   }
 
+  const currency = report?.currency || 'VND'
+  const totalServiceRevenue = useMemo(() => (report?.byService ?? []).reduce((sum, item) => sum + item.revenue, 0), [report])
+  const totalPaymentAmount = useMemo(() => (report?.byPaymentMethod ?? []).reduce((sum, item) => sum + item.amount, 0), [report])
+
   const serviceColumns: ColumnsType<RevenueByService> = [
     { title: 'Service', dataIndex: 'serviceName', key: 'serviceName', render: (value?: string) => value || 'Unnamed service' },
-    { title: 'Orders', dataIndex: 'orderCount', key: 'orderCount' },
+    { title: 'Orders', dataIndex: 'orderCount', key: 'orderCount', sorter: (a, b) => a.orderCount - b.orderCount, width: 100 },
     {
       title: 'Revenue',
       dataIndex: 'revenue',
       key: 'revenue',
-      render: (value: number) => formatMoney(value, report?.currency || 'VND'),
+      sorter: (a, b) => a.revenue - b.revenue,
+      defaultSortOrder: 'descend',
+      render: (value: number) => formatMoney(value, currency),
+    },
+    {
+      title: 'Share',
+      key: 'share',
+      width: 140,
+      render: (_, record) => <ShareBar fraction={totalServiceRevenue ? record.revenue / totalServiceRevenue : 0} color={adminPalette.red} />,
     },
   ]
 
   const paymentColumns: ColumnsType<RevenueByPaymentMethod> = [
     { title: 'Method', dataIndex: 'method', key: 'method' },
-    { title: 'Count', dataIndex: 'count', key: 'count' },
+    { title: 'Count', dataIndex: 'count', key: 'count', width: 100 },
     {
       title: 'Amount',
       dataIndex: 'amount',
       key: 'amount',
-      render: (value: number) => formatMoney(value, report?.currency || 'VND'),
+      sorter: (a, b) => a.amount - b.amount,
+      defaultSortOrder: 'descend',
+      render: (value: number) => formatMoney(value, currency),
+    },
+    {
+      title: 'Share',
+      key: 'share',
+      width: 140,
+      render: (_, record) => <ShareBar fraction={totalPaymentAmount ? record.amount / totalPaymentAmount : 0} color={adminPalette.navy} />,
     },
   ]
 
   const technicianColumns: ColumnsType<TechnicianPerformance> = [
     { title: 'Technician', dataIndex: 'technicianName', key: 'technicianName', render: (value?: string | null) => value || 'Unknown' },
-    { title: 'Completed orders', dataIndex: 'orderCount', key: 'orderCount' },
+    { title: 'Completed orders', dataIndex: 'orderCount', key: 'orderCount', sorter: (a, b) => a.orderCount - b.orderCount },
     {
       title: 'Completion rate',
       dataIndex: 'completionRate',
       key: 'completionRate',
-      render: (value: number) => `${Math.round(value * 100)}%`,
+      sorter: (a, b) => a.completionRate - b.completionRate,
+      render: (value: number) => <ShareBar fraction={value} color={adminPalette.green} />,
     },
     {
       title: 'Avg. time (hrs)',
       dataIndex: 'avgTime',
       key: 'avgTime',
+      sorter: (a, b) => a.avgTime - b.avgTime,
     },
     {
       title: 'Revenue',
       dataIndex: 'revenue',
       key: 'revenue',
-      render: (value: number) => formatMoney(value, report?.currency || 'VND'),
+      sorter: (a, b) => a.revenue - b.revenue,
+      defaultSortOrder: 'descend',
+      render: (value: number) => formatMoney(value, currency),
     },
   ]
 
   return (
     <AdminShell eyebrow="Admin" title="Reports">
-      <div ref={printableRef}>
+      <div ref={printableRef} className="flex flex-col gap-5">
         <Card
           bordered={false}
-          className="rounded-[32px]"
+          className="bo-enter rounded-2xl"
           styles={{ body: { padding: 24 } }}
-          style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, marginBottom: 20 }}
+          style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, border: `1px solid ${adminPalette.border}` }}
         >
           <div className="flex flex-wrap items-center justify-between gap-4" style={{ marginBottom: 16 }}>
             <RangePicker
@@ -145,30 +209,16 @@ export default function AdminReportsPage() {
             </Button>
           </div>
 
-          {requestError ? (
-            <div
-              style={{ background: '#fff1f2', borderColor: '#fecaca', borderRadius: 18, borderWidth: 1, borderStyle: 'solid', color: '#991b1b', marginBottom: 16, padding: '12px 16px' }}
-            >
-              {requestError}
-            </div>
-          ) : null}
+          {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
 
           <div className="flex flex-wrap gap-4" style={{ marginBottom: 4 }}>
-            <SummaryCard label="Total revenue" value={formatMoney(report?.totalRevenue ?? 0, report?.currency || 'VND')} />
-            <SummaryCard label="Completed orders" value={String(report?.totalOrders ?? 0)} />
-            <SummaryCard label="Paid invoices" value={String(report?.totalInvoices ?? 0)} />
+            <StatCard label="Total revenue" value={formatMoney(report?.totalRevenue ?? 0, currency)} palette={adminPalette} enterDelay={1} />
+            <StatCard label="Completed orders" value={report?.totalOrders ?? 0} palette={adminPalette} enterDelay={2} />
+            <StatCard label="Paid invoices" value={report?.totalInvoices ?? 0} palette={adminPalette} enterDelay={3} />
           </div>
         </Card>
 
-        <Card
-          bordered={false}
-          className="rounded-[32px]"
-          styles={{ body: { padding: 24 } }}
-          style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow }}
-        >
-          <div style={{ color: adminPalette.textMuted, fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', marginBottom: 16, textTransform: 'uppercase' }}>
-            Revenue by service
-          </div>
+        <ReportSectionCard icon={<ToolOutlined />} eyebrow="Breakdown" title="Revenue by service" enterDelay={2}>
           <Table
             columns={serviceColumns}
             dataSource={report?.byService ?? []}
@@ -176,13 +226,31 @@ export default function AdminReportsPage() {
             locale={{ emptyText: 'No completed orders in this date range.' }}
             pagination={false}
             rowKey="serviceId"
+            className="bo-table"
+            summary={(rows) => {
+              const orders = rows.reduce((sum, row) => sum + row.orderCount, 0)
+              const revenue = rows.reduce((sum, row) => sum + row.revenue, 0)
+              return rows.length ? (
+                <Table.Summary.Row>
+                  <Table.Summary.Cell index={0}>
+                    <span className="font-semibold" style={{ color: adminPalette.ink }}>
+                      Total
+                    </span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={1}>
+                    <span className="font-semibold">{orders}</span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={2}>
+                    <span className="font-semibold">{formatMoney(revenue, currency)}</span>
+                  </Table.Summary.Cell>
+                  <Table.Summary.Cell index={3} />
+                </Table.Summary.Row>
+              ) : null
+            }}
           />
+        </ReportSectionCard>
 
-          <Divider />
-
-          <div style={{ color: adminPalette.textMuted, fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', marginBottom: 16, textTransform: 'uppercase' }}>
-            Revenue by payment method
-          </div>
+        <ReportSectionCard icon={<BankOutlined />} eyebrow="Breakdown" title="Revenue by payment method" enterDelay={3}>
           <Table
             columns={paymentColumns}
             dataSource={report?.byPaymentMethod ?? []}
@@ -190,13 +258,11 @@ export default function AdminReportsPage() {
             locale={{ emptyText: 'No successful payments in this date range.' }}
             pagination={false}
             rowKey="method"
+            className="bo-table"
           />
+        </ReportSectionCard>
 
-          <Divider />
-
-          <div style={{ color: adminPalette.textMuted, fontSize: 12, fontWeight: 600, letterSpacing: '0.16em', marginBottom: 16, textTransform: 'uppercase' }}>
-            Technician performance
-          </div>
+        <ReportSectionCard icon={<UserOutlined />} eyebrow="Breakdown" title="Technician performance" enterDelay={4}>
           <Table
             columns={technicianColumns}
             dataSource={report?.byTechnician ?? []}
@@ -204,8 +270,9 @@ export default function AdminReportsPage() {
             locale={{ emptyText: 'No completed repair orders in this date range.' }}
             pagination={false}
             rowKey="technicianId"
+            className="bo-table"
           />
-        </Card>
+        </ReportSectionCard>
       </div>
     </AdminShell>
   )

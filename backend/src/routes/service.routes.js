@@ -1,7 +1,7 @@
 import { Router } from "express";
-import multer from "multer";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
+import { imageUpload } from "../middlewares/upload.middleware.js";
 import {
   getAllServiceCategories,
   getServiceCategoryById,
@@ -18,75 +18,63 @@ import {
 
 export const serviceRouter = Router();
 
-// Buffers in memory — the controller uploads straight to Cloudinary, so this
-// doesn't depend on a persistent local filesystem.
-const categoryPhotoUpload = multer({
-  storage: multer.memoryStorage(),
-  fileFilter(_req, file, cb) {
-    if (!file.mimetype.startsWith("image/")) {
-      cb(new Error("Only image files are allowed for category photos"), false);
-      return;
-    }
-    cb(null, true);
-  },
-  limits: { fileSize: 5 * 1024 * 1024 },
-});
+const categoryPhotoUpload = imageUpload();
 
 // ============= SERVICE CATEGORY ROUTES =============
 
 // Public routes
-serviceRouter.get("/categories", asyncHandler(getAllServiceCategories));
-serviceRouter.get("/categories/:id", asyncHandler(getServiceCategoryById));
+serviceRouter.get("/categories", catchAsync(getAllServiceCategories));
+serviceRouter.get("/categories/:id", catchAsync(getServiceCategoryById));
 
 // Admin only routes
 serviceRouter.post(
   "/categories",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(createServiceCategory),
+  catchAsync(createServiceCategory),
 );
 serviceRouter.put(
   "/categories/:id",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(updateServiceCategory),
+  catchAsync(updateServiceCategory),
 );
 serviceRouter.delete(
   "/categories/:id",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(deleteServiceCategory),
+  catchAsync(deleteServiceCategory),
 );
 serviceRouter.post(
   "/categories/:id/photo",
   requireAuth,
   requireRole("admin"),
   categoryPhotoUpload.single("photo"),
-  asyncHandler(uploadServiceCategoryPhoto),
+  catchAsync(uploadServiceCategoryPhoto),
 );
 
 // ============= SERVICE ROUTES =============
 
 // Public routes
-serviceRouter.get("", asyncHandler(getAllServices));
-serviceRouter.get("/:id", asyncHandler(getServiceById));
+serviceRouter.get("", catchAsync(getAllServices));
+serviceRouter.get("/:id", catchAsync(getServiceById));
 
 // Admin only routes
 serviceRouter.post(
   "",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(createService),
+  catchAsync(createService),
 );
 serviceRouter.put(
   "/:id",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(updateService),
+  catchAsync(updateService),
 );
 serviceRouter.delete(
   "/:id",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(deleteService),
+  catchAsync(deleteService),
 );

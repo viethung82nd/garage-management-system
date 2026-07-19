@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   createReview,
   myReviews,
@@ -14,14 +14,14 @@ reviewRouter.post(
   "/",
   requireAuth,
   requireRole("onlineCustomer"),
-  asyncHandler(createReview)
+  catchAsync(createReview)
 );
-reviewRouter.get("/mine", requireAuth, asyncHandler(myReviews));
+reviewRouter.get("/mine", requireAuth, catchAsync(myReviews));
 
 // Staff browse reviews (e.g. for technician performance).
 reviewRouter.get(
   "/",
   requireAuth,
   requireRole("admin", "accountant", "serviceAdvisor"),
-  asyncHandler(listReviews)
+  catchAsync(listReviews)
 );

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   getStatsSummary,
   getDailyIntake,
@@ -20,13 +20,13 @@ adminRouter.get(
   "/users",
   requireAuth,
   requireRole("admin", "serviceAdvisor", "technician"),
-  asyncHandler(listUsers)
+  catchAsync(listUsers)
 );
 adminRouter.patch(
   "/users/:id/deactivate",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(deactivateUser)
+  catchAsync(deactivateUser)
 );
 
 // Dashboard stats: admins always; accountants for the revenue figures.
@@ -34,13 +34,13 @@ adminRouter.get(
   "/stats/summary",
   requireAuth,
   requireRole("admin", "accountant"),
-  asyncHandler(getStatsSummary)
+  catchAsync(getStatsSummary)
 );
 adminRouter.get(
   "/stats/daily-intake",
   requireAuth,
   requireRole("admin", "accountant"),
-  asyncHandler(getDailyIntake)
+  catchAsync(getDailyIntake)
 );
 
 // Detailed reports: admins and accountants.
@@ -48,11 +48,11 @@ adminRouter.get(
   "/reports/revenue",
   requireAuth,
   requireRole("admin", "accountant"),
-  asyncHandler(getRevenueReport)
+  catchAsync(getRevenueReport)
 );
 adminRouter.get(
   "/reports/technicians",
   requireAuth,
   requireRole("admin", "accountant"),
-  asyncHandler(getTechnicianPerformance)
+  catchAsync(getTechnicianPerformance)
 );

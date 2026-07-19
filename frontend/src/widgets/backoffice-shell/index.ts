@@ -1,3 +1,6 @@
 export { BackOfficeShell } from './ui/BackOfficeShell'
 export { StatCard } from './ui/StatCard'
+export { InlineBanner } from './ui/InlineBanner'
+export { useCountUp } from './lib/useCountUp'
+export { useApiMessage } from './lib/useApiMessage'
 export { accountantPalette, adminPalette, advisorPalette, technicianPalette, type BackOfficePalette } from './model/palettes'

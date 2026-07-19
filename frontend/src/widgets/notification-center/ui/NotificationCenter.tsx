@@ -1,24 +1,31 @@
-import { notification } from 'antd'
+import { App } from 'antd'
 import { useEffect, useRef } from 'react'
-import { fetchNotifications, markNotificationRead } from '../../../shared/api/notifications'
+import { useNavigate } from 'react-router-dom'
+import { NEW_NOTIFICATION_EVENT, fetchNotifications, markNotificationRead, notificationTarget } from '../../../shared/api/notifications'
 import { useAuth } from '../../../shared/auth'
 
-const POLL_INTERVAL_MS = 30000
+const POLL_INTERVAL_MS = 12000
+const TOAST_DURATION_SECONDS = 6
 
 /**
  * Headless — renders nothing itself. Polls for unread notifications and
- * opens one antd notification per unread item, duration: 0 (never
- * auto-closes; only dismissed by clicking its own x), which is what makes
- * multiple simultaneous notifications stack as a queue in the corner
- * instead of overwriting each other or vanishing on their own.
+ * pops a toast for each one that's genuinely new since this component
+ * started watching. The first poll after login only records a baseline of
+ * what's already unread (visible via the bell dropdown) instead of
+ * toasting it — otherwise every login dumps a wall of stacked, non-expiring
+ * toasts straight over the header, blocking clicks on everything under them.
  */
 export function NotificationCenter() {
-  const { token, isAuthenticated } = useAuth()
+  const { token, isAuthenticated, user } = useAuth()
+  const { notification } = App.useApp()
+  const navigate = useNavigate()
   const shownIdsRef = useRef<Set<string>>(new Set())
+  const initializedRef = useRef(false)
 
   useEffect(() => {
     if (!isAuthenticated || !token) {
       shownIdsRef.current = new Set()
+      initializedRef.current = false
       return
     }
 
@@ -30,16 +37,32 @@ export function NotificationCenter() {
         const response = await fetchNotifications(authToken, '?isRead=false&limit=20')
         if (cancelled) return
 
+        const isBaselinePoll = !initializedRef.current
+        initializedRef.current = true
+
         for (const item of response.notifications) {
           const id = item._id || item.id
           if (!id || shownIdsRef.current.has(id)) continue
           shownIdsRef.current.add(id)
 
+          if (isBaselinePoll) continue
+
+          window.dispatchEvent(new CustomEvent(NEW_NOTIFICATION_EVENT))
+
+          const target = user?.role ? notificationTarget(user.role, item) : null
           notification.open({
             description: item.message,
-            duration: 0,
+            duration: TOAST_DURATION_SECONDS,
             key: id,
             message: item.title,
+            style: target ? { cursor: 'pointer' } : undefined,
+            onClick: target
+              ? () => {
+                  void markNotificationRead(authToken, id).catch(() => {})
+                  notification.destroy(id)
+                  navigate(target)
+                }
+              : undefined,
             onClose: () => {
               void markNotificationRead(authToken, id)
             },
@@ -60,7 +83,7 @@ export function NotificationCenter() {
       cancelled = true
       window.clearInterval(intervalId)
     }
-  }, [token, isAuthenticated])
+  }, [token, isAuthenticated, notification, navigate, user?.role])
 
   return null
 }

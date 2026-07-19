@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   getTechnicianSchedule,
   updateScheduleAvailability,
@@ -13,33 +13,33 @@ scheduleRouter.get(
   "/",
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
-  asyncHandler(getTechnicianSchedule),
+  catchAsync(getTechnicianSchedule),
 );
 
 scheduleRouter.get(
   "/technician/:technicianId",
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
-  asyncHandler(getTechnicianSchedule),
+  catchAsync(getTechnicianSchedule),
 );
 
 scheduleRouter.patch(
   "/",
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
-  asyncHandler(updateTechnicianSchedule),
+  catchAsync(updateTechnicianSchedule),
 );
 
 scheduleRouter.patch(
   "/technician/:technicianId",
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
-  asyncHandler(updateTechnicianSchedule),
+  catchAsync(updateTechnicianSchedule),
 );
 
 scheduleRouter.put(
   "/:scheduleId/availability",
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
-  asyncHandler(updateScheduleAvailability),
+  catchAsync(updateScheduleAvailability),
 );

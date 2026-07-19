@@ -4,9 +4,9 @@
  * Requires the dev server running on http://localhost:4000.
  * Usage: node scripts/test-slot-concurrency.js
  */
-import { connectDb } from "../src/db/connect.js";
+import { connectDb } from "../src/config/db.js";
 import { BookingModel, VehicleModel, UserModel } from "../src/models/index.js";
-import { SLOT_CAPACITY } from "../src/config/slots.js";
+import { SLOT_CAPACITY } from "../src/config/constants.js";
 import mongoose from "mongoose";
 
 const BASE = "http://localhost:4000";

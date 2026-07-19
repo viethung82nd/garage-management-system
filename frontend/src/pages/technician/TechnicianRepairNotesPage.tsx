@@ -1,20 +1,28 @@
-import { CheckOutlined, PlusCircleOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Input, InputNumber, Select, Steps, Tag } from 'antd'
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { getUserInitials, useAuth } from '../../shared/auth'
+import { ArrowLeftOutlined, CheckOutlined, PictureOutlined, PlusOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Image, Input, InputNumber, Select, Steps, Tag } from 'antd'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useAuth } from '../../shared/auth'
+import { resolveApiAssetUrl } from '../../shared/lib/api-client'
 import {
   addWorkshopStepNote,
   createAdditionalServiceProposal,
+  createTransferRequestApi,
+  fetchInspectionReports,
+  fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
+  fetchWorkshopTechnicians,
   orderId,
+  personName,
   unwrapArray,
   updateWorkshopRepairProgress,
   vehicleName,
   vehiclePlate,
+  type ApiInspectionReport,
   type ApiRepairOrder,
+  type ApiTechnician,
 } from '../../shared/api/workshop'
-import { StatCard } from '../../widgets/backoffice-shell'
+import { InlineBanner, useApiMessage } from '../../widgets/backoffice-shell'
 import { TechnicianShell, technicianPalette } from '../../widgets/technician-shell'
 
 const { TextArea } = Input
@@ -22,399 +30,673 @@ const { TextArea } = Input
 type RepairStepStatus = 'completed' | 'active' | 'waiting'
 
 type RepairStep = {
-  checklist: string[]
-  completedAt?: string
+  stepIndex: number
   estimate: string
-  id: string
-  order: number
   status: RepairStepStatus
   summary: string
   title: string
 }
 
-const emptyStep: RepairStep = {
-  checklist: [],
-  estimate: '0 min',
-  id: '',
-  order: 0,
-  status: 'waiting',
-  summary: 'No repair step from the API yet.',
-  title: 'No data',
-}
-
 function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
-  const services = order.services?.length ? order.services : [{ name: 'Inspect and repair', quantity: 1 }]
+  const services = order.services || []
   const notes = order.stepNotes || []
+  const orderCompleted = order.status === 'completed'
 
   return services.map((service, index) => {
     const apiService = typeof service.serviceId === 'object' ? service.serviceId : undefined
-    const note = notes[index]
-    const completed = order.status === 'completed'
-    const active = !completed && (order.status === 'inProgress' || order.status === 'in-progress') && index === 0
+    const latestNote = [...notes].reverse().find((note) => note.stepIndex === index)
+    const status: RepairStepStatus =
+      orderCompleted || service.status === 'completed' ? 'completed' : service.status === 'inProgress' ? 'active' : 'waiting'
 
     return {
-      checklist: ['Confirm the right item', 'Follow the technical procedure', 'Record the result and evidence'],
-      completedAt: completed ? (order.completedAt ? new Date(order.completedAt).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }) : 'Done') : undefined,
       estimate: `${apiService?.estimatedDuration || 45} min`,
-      id: (typeof service.serviceId === 'string' ? service.serviceId : apiService?._id || apiService?.id) || 'service-' + index,
-      order: index + 1,
-      status: completed ? 'completed' : active ? 'active' : 'waiting',
-      summary: note?.content || 'No note for this item yet.',
+      status,
+      stepIndex: index,
+      summary: latestNote?.content || '',
       title: apiService?.name || service.name || 'Repair item',
     }
   })
 }
 
-const statusLabels: Record<RepairStepStatus, string> = {
-  active: 'In progress',
-  completed: 'Completed',
-  waiting: 'Waiting',
+const stepTag: Record<RepairStepStatus, { label: string; color: string }> = {
+  active: { label: 'In progress', color: 'red' },
+  completed: { label: 'Completed', color: 'success' },
+  waiting: { label: 'Not started', color: 'default' },
 }
 
-const statusColors: Record<RepairStepStatus, string> = {
-  active: 'red',
-  completed: 'green',
-  waiting: 'default',
-}
-
-const stepStatus: Record<RepairStepStatus, 'finish' | 'process' | 'wait'> = {
+const antStepStatus: Record<RepairStepStatus, 'finish' | 'process' | 'wait'> = {
   active: 'process',
   completed: 'finish',
   waiting: 'wait',
 }
 
-function nowTime() {
-  return new Intl.DateTimeFormat('en-US', { hour: '2-digit', minute: '2-digit' }).format(new Date())
+function extractOrder(response: { order?: ApiRepairOrder } | ApiRepairOrder): ApiRepairOrder | undefined {
+  return response && typeof response === 'object' && 'order' in response && response.order ? response.order : (response as ApiRepairOrder)
 }
 
 export function TechnicianRepairNotesPage() {
   const { token, user } = useAuth()
-  const technicianInitials = getUserInitials(user)
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const orderIdParam = searchParams.get('orderId') ?? ''
+
   const [repairOrder, setRepairOrder] = useState<ApiRepairOrder>()
+  const [inspection, setInspection] = useState<ApiInspectionReport | null>(null)
+  const [assignedCount, setAssignedCount] = useState<number | null>(null)
   const [steps, setSteps] = useState<RepairStep[]>([])
-  const [selectedStepId, setSelectedStepId] = useState('')
-  const [notes, setNotes] = useState<Record<string, string>>({})
-  const [checkedByStep, setCheckedByStep] = useState<Record<string, string[]>>({})
-  const [apiMessage, setApiMessage] = useState<string>()
+  const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
+  const [note, setNote] = useState('')
+  const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
 
+  // Secondary: additional-service proposal
   const [proposalOpen, setProposalOpen] = useState(false)
   const [proposalServiceName, setProposalServiceName] = useState('')
   const [proposalAffectedPart, setProposalAffectedPart] = useState('')
   const [proposalReason, setProposalReason] = useState('')
-  const [proposalCustomerImpact, setProposalCustomerImpact] = useState('')
   const [proposalLaborCost, setProposalLaborCost] = useState(0)
   const [proposalPartsCost, setProposalPartsCost] = useState(0)
   const [proposalEstimateMinutes, setProposalEstimateMinutes] = useState(30)
   const [proposalPriority, setProposalPriority] = useState<'high' | 'medium' | 'low'>('medium')
+  const [proposalErrors, setProposalErrors] = useState<Record<string, string>>({})
   const [submittingProposal, setSubmittingProposal] = useState(false)
 
-  useEffect(() => {
-    if (!token) return
-    const authToken = token
+  // Secondary: transfer
+  const [transferOpen, setTransferOpen] = useState(false)
+  const [technicians, setTechnicians] = useState<ApiTechnician[]>([])
+  const [transferTechnicianId, setTransferTechnicianId] = useState('')
+  const [transferReason, setTransferReason] = useState('')
+  const [transferErrors, setTransferErrors] = useState<Record<string, string>>({})
+  const [requestingTransfer, setRequestingTransfer] = useState(false)
 
+  // No ?orderId= — auto-open a lone assigned order, otherwise send the
+  // technician to their work-orders list to pick one (no duplicate picker).
+  useEffect(() => {
+    if (!token || orderIdParam) return
+    const authToken = token
     let cancelled = false
 
-    async function loadRepairOrder() {
-      setApiMessage(undefined)
+    async function loadAssigned() {
       try {
         const userId = user?._id || user?.id
         const response = await fetchWorkshopRepairOrders(authToken, userId ? '?technicianId=' + encodeURIComponent(userId) : '')
-        const order = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])[0]
-        if (!cancelled && order) {
-          const nextSteps = mapRepairSteps(order)
-          setRepairOrder(order)
-          setSteps(nextSteps)
-          setSelectedStepId(nextSteps.find((step) => step.status === 'active')?.id || nextSteps[0]?.id || '')
-          setNotes(Object.fromEntries(nextSteps.map((step) => [step.id, step.summary === 'No note for this item yet.' ? '' : step.summary])))
+        const list = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
+        if (cancelled) return
+        if (list.length === 1) {
+          const onlyId = list[0]._id || list[0].id
+          if (onlyId) {
+            navigate(`/technician/repair-notes?orderId=${onlyId}`, { replace: true })
+            return
+          }
+        }
+        setAssignedCount(list.length)
+      } catch {
+        if (!cancelled) setAssignedCount(0)
+      }
+    }
+
+    void loadAssigned()
+    return () => {
+      cancelled = true
+    }
+  }, [token, orderIdParam, user?._id, user?.id])
+
+  useEffect(() => {
+    if (!token || !orderIdParam) {
+      setRepairOrder(undefined)
+      setSteps([])
+      setInspection(null)
+      return
+    }
+    const authToken = token
+    let cancelled = false
+
+    async function loadRepairOrder() {
+      clearApiMessage()
+      try {
+        const order = await fetchWorkshopRepairOrderById(authToken, orderIdParam)
+        if (cancelled) return
+        const nextSteps = mapRepairSteps(order)
+        setRepairOrder(order)
+        setSteps(nextSteps)
+        setSelectedStepIndex(nextSteps.find((step) => step.status === 'active')?.stepIndex ?? nextSteps.find((step) => step.status === 'waiting')?.stepIndex ?? nextSteps[0]?.stepIndex ?? null)
+        setNote('')
+
+        // Pull the advisor's inspection so the technician sees the vehicle
+        // photos, findings and flagged repair points they're inheriting —
+        // that handoff is the useful context here, not a re-typed customer line.
+        try {
+          const reportResponse = await fetchInspectionReports(authToken, `?repairOrderId=${orderIdParam}`)
+          if (!cancelled) setInspection(unwrapArray<ApiInspectionReport>(reportResponse, ['inspectionReports'])[0] ?? null)
+        } catch {
+          if (!cancelled) setInspection(null)
         }
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load repair progress from the API')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load repair progress from the API')
       }
     }
 
     void loadRepairOrder()
-
     return () => {
       cancelled = true
     }
-  }, [token, user?._id, user?.id])
+  }, [token, orderIdParam])
 
-  const selectedStep = steps.find((step) => step.id === selectedStepId) ?? steps[0] ?? emptyStep
+  // Technicians for the transfer picker — only fetched when the panel opens.
+  useEffect(() => {
+    if (!token || !transferOpen || technicians.length) return
+    const authToken = token
+    let cancelled = false
+    void (async () => {
+      try {
+        const list = await fetchWorkshopTechnicians(authToken)
+        if (!cancelled) setTechnicians(list.filter((technician) => (technician._id || technician.id) !== (user?._id || user?.id)))
+      } catch {
+        /* best-effort */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, transferOpen, technicians.length, user?._id, user?.id])
+
+  const selectedStep = steps.find((step) => step.stepIndex === selectedStepIndex)
   const completedCount = steps.filter((step) => step.status === 'completed').length
-  const activeCount = steps.filter((step) => step.status === 'active').length
-  const checkedItems = checkedByStep[selectedStep.id] ?? []
-  const note = notes[selectedStep.id] ?? ''
-  const progress = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
-  const currentVehicle = repairOrder?.vehicleId || repairOrder?.vehicle
-  const repairOrderLabel = repairOrder ? orderId(repairOrder) : 'No order'
-  const repairVehicleLabel = repairOrder ? `${vehicleName(currentVehicle)} - ${vehiclePlate(currentVehicle)}` : 'No vehicle assigned'
+  const progressPct = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
+  const vehicle = repairOrder?.vehicleId || repairOrder?.vehicle
+  const repairOrderLabel = repairOrder ? orderId(repairOrder) : ''
+  const vehicleTitle = repairOrder ? `${vehicleName(vehicle)} · ${vehiclePlate(vehicle)}` : 'Repair progress'
+  const customerName = repairOrder ? personName(repairOrder.customer || vehicle?.customerId || vehicle?.customer, 'Customer') : ''
+  const orderIsTerminal = repairOrder?.status === 'completed' || repairOrder?.status === 'cancelled'
+  const orderNeedsRework = repairOrder?.status === 'reworkRequired'
+  const reworkReason = useMemo(
+    () => (orderNeedsRework ? [...(repairOrder?.stepNotes || [])].reverse().find((entry) => entry.stepIndex === undefined)?.content : undefined),
+    [orderNeedsRework, repairOrder?.stepNotes],
+  )
+  const orderProgressActive = repairOrder?.status === 'inProgress' || orderNeedsRework
 
-  function updateStepStatus(status: RepairStepStatus) {
-    const stamp = nowTime()
+  const inspectionPhotos = inspection?.photos ?? []
+  const inspectionRepairItems = (inspection?.items ?? []).filter((item) => item.status === 'repair')
+  const inspectionRecommended = inspection?.recommendedServices ?? []
+  const hasInspection = Boolean(inspection && (inspectionPhotos.length || inspection.findings || inspectionRepairItems.length || inspectionRecommended.length))
 
-    setSteps((current) =>
-      current.map((step) => {
-        if (step.id !== selectedStep.id) return step
-        return { ...step, completedAt: status === 'completed' ? stamp : step.completedAt, status }
-      }),
-    )
+  function selectStep(index: number) {
+    setSelectedStepIndex(index)
+    setNote('')
   }
 
-  async function persistStepStatus(status: RepairStepStatus) {
-    const repairOrderId = repairOrder?._id || repairOrder?.id
-    if (!repairOrderId || !selectedStep.id || !token) return
+  function applyUpdatedOrder(updated: ApiRepairOrder | undefined, advanceFrom?: number) {
+    if (!updated) return
+    const nextSteps = mapRepairSteps(updated)
+    setRepairOrder(updated)
+    setSteps(nextSteps)
+    if (advanceFrom !== undefined) {
+      const next = nextSteps.find((step) => step.stepIndex > advanceFrom && step.status !== 'completed')
+      if (next) setSelectedStepIndex(next.stepIndex)
+    }
+  }
 
+  async function startStep() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !selectedStep || !token) return
     setSaving(true)
-    setApiMessage(undefined)
+    clearApiMessage()
     try {
-      await updateWorkshopRepairProgress(token, repairOrderId, { status: status === 'active' ? 'inProgress' : status === 'completed' ? 'completed' : 'pending', stepId: selectedStep.id })
-      updateStepStatus(status)
+      const response = await updateWorkshopRepairProgress(token, repairOrderId, { status: 'inProgress', stepIndex: selectedStep.stepIndex })
+      applyUpdatedOrder(extractOrder(response))
+      showSuccess('Step started — record what you do, then mark it complete.')
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Unable to update the step progress')
+      showError(err instanceof Error ? err.message : 'Unable to start this step')
     } finally {
       setSaving(false)
     }
   }
 
-  async function completeSelectedStep() {
-    await persistStepStatus('completed')
-    setSteps((current) =>
-      current.map((step) => {
-        const nextWaiting = step.order === selectedStep.order + 1 && step.status === 'waiting'
-        return nextWaiting ? { ...step, status: 'active' } : step
-      }),
-    )
-  }
-
-  async function saveSelectedNote() {
+  async function completeStep() {
     const repairOrderId = repairOrder?._id || repairOrder?.id
-    if (!repairOrderId || !selectedStep.id || !token) return
-
+    if (!repairOrderId || !selectedStep || !token) return
     setSaving(true)
-    setApiMessage(undefined)
+    clearApiMessage()
     try {
-      await addWorkshopStepNote(token, repairOrderId, { checklist: checkedItems, content: note, stepId: selectedStep.id })
-      setApiMessage('Repair note saved.')
+      if (note.trim()) {
+        await addWorkshopStepNote(token, repairOrderId, { content: note.trim(), stepIndex: selectedStep.stepIndex })
+      }
+      const response = await updateWorkshopRepairProgress(token, repairOrderId, { status: 'completed', stepIndex: selectedStep.stepIndex })
+      applyUpdatedOrder(extractOrder(response), selectedStep.stepIndex)
+      setNote('')
+      showSuccess('Step completed.')
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Unable to save the repair note')
+      showError(err instanceof Error ? err.message : 'Unable to complete this step')
     } finally {
       setSaving(false)
     }
   }
 
-  function toggleChecklist(item: string) {
-    setCheckedByStep((current) => {
-      const items = current[selectedStep.id] ?? []
-      const nextItems = items.includes(item) ? items.filter((value) => value !== item) : [...items, item]
-      return { ...current, [selectedStep.id]: nextItems }
-    })
+  async function saveNoteOnly() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !selectedStep || !token) return
+    if (!note.trim()) {
+      showError('Write a note before saving.')
+      return
+    }
+    setSaving(true)
+    clearApiMessage()
+    try {
+      const response = await addWorkshopStepNote(token, repairOrderId, { content: note.trim(), stepIndex: selectedStep.stepIndex })
+      if (response.stepNotes) {
+        setRepairOrder((current) => {
+          if (!current) return current
+          const updated = { ...current, stepNotes: response.stepNotes }
+          setSteps(mapRepairSteps(updated))
+          return updated
+        })
+      }
+      setNote('')
+      showSuccess('Note saved.')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to save the note')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  async function reopenStep() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !selectedStep || !token) return
+    setSaving(true)
+    clearApiMessage()
+    try {
+      const response = await updateWorkshopRepairProgress(token, repairOrderId, { status: 'inProgress', stepIndex: selectedStep.stepIndex })
+      applyUpdatedOrder(extractOrder(response))
+      showSuccess('Step reopened.')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to reopen this step')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  function validateProposal() {
+    const errors: Record<string, string> = {}
+    if (!proposalServiceName.trim()) errors.serviceName = 'Service name is required.'
+    if (!proposalReason.trim()) errors.reason = 'Explain why this work is needed.'
+    if (proposalLaborCost + proposalPartsCost <= 0) errors.cost = 'Add a labour or parts cost.'
+    if (proposalEstimateMinutes < 1) errors.estimate = 'Estimate must be at least 1 minute.'
+    return errors
   }
 
   async function submitProposal() {
     const repairOrderId = repairOrder?._id || repairOrder?.id
-    if (!repairOrderId || !token || !proposalServiceName.trim()) {
-      setApiMessage('Enter a service name before submitting the proposal.')
-      return
-    }
+    if (!repairOrderId || !token) return
+    const errors = validateProposal()
+    setProposalErrors(errors)
+    if (Object.keys(errors).length) return
 
     setSubmittingProposal(true)
-    setApiMessage(undefined)
+    clearApiMessage()
     try {
       await createAdditionalServiceProposal(token, {
-        affectedPart: proposalAffectedPart || undefined,
-        customerImpact: proposalCustomerImpact || undefined,
+        affectedPart: proposalAffectedPart.trim() || undefined,
         estimateMinutes: proposalEstimateMinutes,
         laborCost: proposalLaborCost,
         partsCost: proposalPartsCost,
         priority: proposalPriority,
-        reason: proposalReason || undefined,
+        reason: proposalReason.trim(),
         repairOrderId,
         serviceName: proposalServiceName.trim(),
       })
-      setApiMessage('Additional service proposal sent to the service advisor.')
+      showSuccess('Additional service proposal sent to the service advisor.')
       setProposalOpen(false)
       setProposalServiceName('')
       setProposalAffectedPart('')
       setProposalReason('')
-      setProposalCustomerImpact('')
       setProposalLaborCost(0)
       setProposalPartsCost(0)
       setProposalEstimateMinutes(30)
       setProposalPriority('medium')
+      setProposalErrors({})
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Unable to submit the additional service proposal')
+      showError(err instanceof Error ? err.message : 'Unable to submit the additional service proposal')
     } finally {
       setSubmittingProposal(false)
     }
   }
 
+  async function submitTransfer() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !token) return
+    const errors: Record<string, string> = {}
+    if (!transferTechnicianId) errors.technician = 'Choose a technician to hand this order to.'
+    if (!transferReason.trim()) errors.reason = 'Give a reason for the transfer.'
+    setTransferErrors(errors)
+    if (Object.keys(errors).length) return
+
+    setRequestingTransfer(true)
+    clearApiMessage()
+    try {
+      await createTransferRequestApi(token, { reason: transferReason.trim(), repairOrderId, toTechnicianId: transferTechnicianId })
+      showSuccess('Transfer request sent to the service advisor.')
+      setTransferOpen(false)
+      setTransferTechnicianId('')
+      setTransferReason('')
+      setTransferErrors({})
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to submit the transfer request')
+    } finally {
+      setRequestingTransfer(false)
+    }
+  }
+
+  const fieldError = (message?: string) => (message ? <div style={{ color: technicianPalette.red, fontSize: 12, marginTop: 4 }}>{message}</div> : null)
+
+  // No order in context: prompt to pick one from the list rather than
+  // duplicating the whole work-orders list here.
+  if (!orderIdParam) {
+    return (
+      <TechnicianShell eyebrow="Technician Repair Progress" title="Repair progress">
+        <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }}>
+          <div className="flex flex-col items-center gap-4 py-6 text-center">
+            <p style={{ color: technicianPalette.textMuted, fontSize: 14, maxWidth: 360 }}>
+              {assignedCount === 0 ? 'You have no repair orders assigned right now.' : 'Pick a repair order from your work orders to start working on its steps.'}
+            </p>
+            <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/technician/work-orders')} type="primary">
+              Go to my work orders
+            </Button>
+          </div>
+        </Card>
+      </TechnicianShell>
+    )
+  }
+
   return (
-    <TechnicianShell eyebrow="Technician Repair Progress" title={repairVehicleLabel}>
-      {apiMessage ? (
-        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
-          {apiMessage}
-        </div>
-      ) : null}
+    <TechnicianShell eyebrow="Technician Repair Progress" title={vehicleTitle}>
+      {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
-      <div className="flex flex-wrap items-center gap-4">
-        <StatCard label="Steps done" palette={technicianPalette} value={`${completedCount}/${steps.length}`} />
-        <StatCard label="In progress" palette={technicianPalette} value={String(activeCount).padStart(2, '0')} />
-        <StatCard label="Order progress" palette={technicianPalette} value={`${progress}%`} />
-        <Link to="/technician/work-orders" style={{ color: technicianPalette.textMuted, fontSize: 13, fontWeight: 700 }}>
-          ← Back to work orders
-        </Link>
-      </div>
-
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
-        <div className="flex flex-col gap-5">
-          <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title={`${repairOrderLabel} — repair steps`}>
-            {steps.length ? (
-              <Steps
-                current={steps.findIndex((step) => step.id === selectedStep.id)}
-                items={steps.map((step) => ({
-                  description: (
-                    <button
-                      onClick={() => setSelectedStepId(step.id)}
-                      style={{
-                        background: 'none',
-                        border: 'none',
-                        color: step.id === selectedStep.id ? technicianPalette.ink : technicianPalette.textMuted,
-                        cursor: 'pointer',
-                        fontSize: 12,
-                        fontWeight: step.id === selectedStep.id ? 700 : 600,
-                        padding: 0,
-                        textAlign: 'left',
-                      }}
-                      type="button"
-                    >
-                      {step.estimate} · {step.summary}
-                      {step.completedAt ? ` · Done ${step.completedAt}` : ''}
-                    </button>
-                  ),
-                  status: stepStatus[step.status],
-                  title: step.title,
-                }))}
-                onChange={(index) => setSelectedStepId(steps[index]?.id ?? selectedStepId)}
-              />
-            ) : (
-              <Empty description="No repair steps from the API yet." />
-            )}
-          </Card>
-
-          <Card
-            bordered={false}
-            className="rounded-[28px]"
-            extra={
-              <Button icon={<PlusCircleOutlined />} onClick={() => setProposalOpen((current) => !current)} type={proposalOpen ? 'default' : 'primary'}>
-                Submit additional service
-              </Button>
-            }
-            style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }}
-            title="Additional service request"
-          >
-            {proposalOpen ? (
-              <div className="flex flex-col gap-3">
-                <Input onChange={(event) => setProposalServiceName(event.target.value)} placeholder="Service name" value={proposalServiceName} />
-                <Input onChange={(event) => setProposalAffectedPart(event.target.value)} placeholder="Affected part" value={proposalAffectedPart} />
-                <Input onChange={(event) => setProposalReason(event.target.value)} placeholder="Reason" value={proposalReason} />
-                <TextArea onChange={(event) => setProposalCustomerImpact(event.target.value)} placeholder="Customer impact" rows={2} value={proposalCustomerImpact} />
-                <div className="grid grid-cols-3 gap-3">
-                  <InputNumber addonBefore="Labor" min={0} onChange={(value) => setProposalLaborCost(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={proposalLaborCost} />
-                  <InputNumber addonBefore="Parts" min={0} onChange={(value) => setProposalPartsCost(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={proposalPartsCost} />
-                  <InputNumber addonBefore="Min" min={0} onChange={(value) => setProposalEstimateMinutes(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={proposalEstimateMinutes} />
-                </div>
-                <Select
-                  onChange={setProposalPriority}
-                  options={[
-                    { label: 'High priority', value: 'high' },
-                    { label: 'Recommended', value: 'medium' },
-                    { label: 'Monitor', value: 'low' },
-                  ]}
-                  value={proposalPriority}
-                />
-                <Button block icon={<PlusCircleOutlined />} loading={submittingProposal} onClick={submitProposal} type="primary">
-                  Send to service advisor
-                </Button>
-              </div>
-            ) : (
-              <p style={{ color: technicianPalette.textMuted, fontSize: 13 }}>Found extra work while repairing this order? Submit a proposal for the service advisor to review.</p>
-            )}
-          </Card>
-        </div>
-
-        <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
-          <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.ink, boxShadow: technicianPalette.shadow }}>
-            <div className="flex items-start justify-between gap-4">
+      {!repairOrder ? (
+        <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }}>
+          <Empty description="Loading repair order..." image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        </Card>
+      ) : (
+        <>
+          {/* Compact header */}
+          <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} styles={{ body: { padding: 20 } }}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p style={{ color: '#ffb4ab', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Selected step</p>
-                <h3 style={{ color: 'white', fontSize: 20, fontWeight: 700, marginTop: 10 }}>{selectedStep.title}</h3>
+                <button
+                  onClick={() => navigate('/technician/work-orders')}
+                  style={{ alignItems: 'center', background: 'none', border: 'none', color: technicianPalette.textMuted, cursor: 'pointer', display: 'inline-flex', fontSize: 12, fontWeight: 700, gap: 6, padding: 0 }}
+                  type="button"
+                >
+                  <ArrowLeftOutlined /> Work orders
+                </button>
+                <div style={{ color: technicianPalette.ink, fontSize: 18, fontWeight: 700, marginTop: 6 }}>{repairOrderLabel}</div>
+                <div style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 2 }}>Customer · {customerName}</div>
               </div>
-              <Tag color={statusColors[selectedStep.status]}>{statusLabels[selectedStep.status]}</Tag>
+              <div className="text-right">
+                <div style={{ color: technicianPalette.ink, fontSize: 22, fontWeight: 700 }}>{completedCount}/{steps.length}</div>
+                <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>steps done</div>
+              </div>
             </div>
-            <p style={{ color: 'rgba(255,255,255,0.7)', fontSize: 13, marginTop: 12 }}>{selectedStep.summary}</p>
-            <div className="mt-5 grid grid-cols-2 gap-3">
-              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14 }}>
-                <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Estimate</p>
-                <p style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 6 }}>{selectedStep.estimate}</p>
-              </div>
-              <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 16, padding: 14 }}>
-                <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Technician</p>
-                <p style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 6 }}>{technicianInitials}</p>
-              </div>
+            <div className="mt-4" style={{ background: technicianPalette.panelAlt, borderRadius: 999, height: 8, overflow: 'hidden' }}>
+              <div style={{ background: orderProgressActive ? technicianPalette.red : technicianPalette.ink, borderRadius: 999, height: '100%', transition: 'width 0.4s ease', width: `${progressPct}%` }} />
             </div>
           </Card>
 
-          <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Checklist">
-            <div className="flex flex-col gap-2">
-              {selectedStep.checklist.map((item) => {
-                const checked = checkedItems.includes(item)
-                return (
-                  <button
-                    className="flex w-full items-start gap-3 text-left"
-                    key={item}
-                    onClick={() => toggleChecklist(item)}
-                    style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
-                    type="button"
-                  >
-                    <span
-                      style={{
-                        alignItems: 'center',
-                        background: checked ? technicianPalette.red : 'transparent',
-                        border: checked ? 'none' : `1px solid ${technicianPalette.border}`,
-                        borderRadius: 6,
-                        color: 'white',
-                        display: 'flex',
-                        flexShrink: 0,
-                        height: 22,
-                        justifyContent: 'center',
-                        marginTop: 2,
-                        width: 22,
-                      }}
-                    >
-                      {checked ? <CheckOutlined style={{ fontSize: 12 }} /> : null}
-                    </span>
-                    <span style={{ color: checked ? technicianPalette.ink : technicianPalette.textMuted, fontSize: 13, fontWeight: checked ? 700 : 600 }}>{item}</span>
-                  </button>
-                )
-              })}
-            </div>
-          </Card>
+          {orderNeedsRework ? (
+            <InlineBanner tone="error">
+              Quality check sent this order back{reworkReason ? `: ${reworkReason}` : '.'} Reopen the affected step, fix it, and mark it complete again.
+            </InlineBanner>
+          ) : null}
 
-          <Card bordered={false} className="rounded-[28px]" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow }} title="Step notes">
-            <TextArea onChange={(event) => setNotes((current) => ({ ...current, [selectedStep.id]: event.target.value }))} rows={5} value={note} />
-            <div className="mt-4 grid grid-cols-3 gap-3">
-              <Button icon={<ThunderboltOutlined />} onClick={() => persistStepStatus('active')}>
-                Start
-              </Button>
-              <Button disabled={saving} icon={<CheckOutlined />} onClick={() => saveSelectedNote()} type="primary">
-                Save
-              </Button>
-              <Button onClick={() => completeSelectedStep()}>Complete</Button>
+          {orderIsTerminal ? (
+            <InlineBanner tone="success">This order is {repairOrder.status === 'completed' ? 'completed' : 'cancelled'} — its steps can no longer be changed.</InlineBanner>
+          ) : null}
+
+          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+            <div className="flex flex-col gap-5">
+              {/* Steps */}
+              <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Repair steps">
+                {steps.length && selectedStep ? (
+                  <Steps
+                    current={steps.findIndex((step) => step.stepIndex === selectedStep.stepIndex)}
+                    direction="vertical"
+                    items={steps.map((step) => ({
+                      description: (
+                        <span style={{ color: technicianPalette.textMuted, fontSize: 12 }}>{step.summary || `${step.estimate} · not started`}</span>
+                      ),
+                      status: antStepStatus[step.status],
+                      title: <span style={{ color: technicianPalette.ink, fontWeight: step.stepIndex === selectedStep.stepIndex ? 700 : 600 }}>{step.title}</span>,
+                    }))}
+                    onChange={(index) => {
+                      const target = steps[index]
+                      if (target) selectStep(target.stepIndex)
+                    }}
+                  />
+                ) : (
+                  <Empty description="No repair steps on this order." image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                )}
+              </Card>
+
+              {/* Advisor inspection handoff — the context the technician inherits from the SA */}
+              <Card
+                bordered={false}
+                className="bo-enter rounded-2xl"
+                extra={inspection?.inspectedAt ? <span style={{ color: technicianPalette.textMuted, fontSize: 12 }}>{new Date(inspection.inspectedAt).toLocaleDateString('en-GB')}</span> : null}
+                style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }}
+                title="Advisor inspection"
+              >
+                {hasInspection ? (
+                  <div className="flex flex-col gap-4">
+                    {inspectionPhotos.length ? (
+                      <div>
+                        <div className="flex items-center gap-2" style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 700, marginBottom: 8, textTransform: 'uppercase' }}>
+                          <PictureOutlined /> Vehicle photos
+                        </div>
+                        <Image.PreviewGroup>
+                          <div className="flex flex-wrap gap-2">
+                            {inspectionPhotos.map((url, index) => (
+                              <Image
+                                key={`${url}-${index}`}
+                                src={resolveApiAssetUrl(url)}
+                                width={76}
+                                height={76}
+                                style={{ borderRadius: 10, objectFit: 'cover' }}
+                              />
+                            ))}
+                          </div>
+                        </Image.PreviewGroup>
+                      </div>
+                    ) : null}
+
+                    {inspection?.findings ? (
+                      <div>
+                        <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>Findings</div>
+                        <p style={{ color: technicianPalette.inkSoft, fontSize: 14, margin: 0, whiteSpace: 'pre-line' }}>{inspection.findings}</p>
+                      </div>
+                    ) : null}
+
+                    {inspectionRepairItems.length ? (
+                      <div>
+                        <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 700, marginBottom: 8, textTransform: 'uppercase' }}>Flagged for repair</div>
+                        <div className="flex flex-col gap-2">
+                          {inspectionRepairItems.map((item, index) => (
+                            <div key={`${item.label}-${index}`} style={{ background: technicianPalette.panelAlt, borderRadius: 12, padding: '10px 12px' }}>
+                              <div style={{ color: technicianPalette.ink, fontSize: 14, fontWeight: 600 }}>
+                                {item.label}
+                                {item.category ? <span style={{ color: technicianPalette.textMuted, fontWeight: 500 }}> · {item.category}</span> : null}
+                              </div>
+                              {item.note ? <div style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 2 }}>{item.note}</div> : null}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ) : inspectionRecommended.length ? (
+                      <div>
+                        <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 700, marginBottom: 8, textTransform: 'uppercase' }}>Recommended work</div>
+                        <div className="flex flex-wrap gap-2">
+                          {inspectionRecommended.map((service, index) => (
+                            <Tag key={`${service.name}-${index}`}>{service.name}</Tag>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {inspection?.odometer || inspection?.fuelLevel ? (
+                      <div className="flex flex-wrap gap-4" style={{ borderTop: `1px solid ${technicianPalette.border}`, paddingTop: 12 }}>
+                        {inspection.odometer ? (
+                          <span style={{ color: technicianPalette.textMuted, fontSize: 13 }}>Odometer · <strong style={{ color: technicianPalette.ink }}>{inspection.odometer.toLocaleString('en-US')} km</strong></span>
+                        ) : null}
+                        {inspection.fuelLevel ? (
+                          <span style={{ color: technicianPalette.textMuted, fontSize: 13 }}>Fuel · <strong style={{ color: technicianPalette.ink }}>{inspection.fuelLevel}</strong></span>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <Empty
+                    description={repairOrder.issueDescription ? `Reason for visit: ${repairOrder.issueDescription}` : 'No inspection report was attached to this order.'}
+                    image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  />
+                )}
+              </Card>
             </div>
-          </Card>
-        </div>
-      </div>
+
+            {/* Focused work panel — the primary action lives here */}
+            {selectedStep ? (
+              <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}`, position: 'sticky', top: 96 }} styles={{ body: { padding: 22 } }}>
+                <div style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+                  Step {selectedStep.stepIndex + 1} of {steps.length}
+                </div>
+                <div className="mt-2 flex items-center justify-between gap-3">
+                  <h3 style={{ color: technicianPalette.ink, fontSize: 20, fontWeight: 700 }}>{selectedStep.title}</h3>
+                  <Tag color={stepTag[selectedStep.status].color} style={{ marginRight: 0 }}>{stepTag[selectedStep.status].label}</Tag>
+                </div>
+
+                {orderIsTerminal ? (
+                  <div className="mt-4" style={{ background: technicianPalette.panelAlt, borderRadius: 12, color: technicianPalette.inkSoft, fontSize: 13, padding: 14 }}>
+                    {selectedStep.summary || 'No note was recorded for this step.'}
+                  </div>
+                ) : selectedStep.status === 'completed' ? (
+                  <div className="mt-4 flex flex-col gap-3">
+                    <div style={{ background: technicianPalette.panelAlt, borderRadius: 12, color: technicianPalette.inkSoft, fontSize: 13, padding: 14 }}>
+                      {selectedStep.summary || 'This step is marked complete.'}
+                    </div>
+                    <Button block disabled={saving} icon={<ThunderboltOutlined />} onClick={reopenStep} size="large">
+                      Reopen this step
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="mt-4 flex flex-col gap-3">
+                    <div>
+                      <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Notes for this step</div>
+                      <TextArea onChange={(event) => setNote(event.target.value)} placeholder="What did you find or do for this item?" rows={5} value={note} />
+                    </div>
+
+                    {selectedStep.status === 'waiting' ? (
+                      <Button block disabled={saving} icon={<ThunderboltOutlined />} onClick={startStep} size="large" type="primary">
+                        Start this step
+                      </Button>
+                    ) : (
+                      <>
+                        <Button block disabled={saving} icon={<CheckOutlined />} onClick={completeStep} size="large" type="primary">
+                          Mark step complete
+                        </Button>
+                        <Button block disabled={saving || !note.trim()} onClick={saveNoteOnly} type="text" style={{ color: technicianPalette.textMuted }}>
+                          Save note without completing
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                )}
+              </Card>
+            ) : null}
+          </div>
+
+          {/* Secondary actions — clearly de-emphasised below the main work */}
+          {!orderIsTerminal ? (
+            <div className="grid gap-5 md:grid-cols-2">
+              <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Found extra work?">
+                {proposalOpen ? (
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <Input onChange={(event) => setProposalServiceName(event.target.value)} placeholder="Service name" status={proposalErrors.serviceName ? 'error' : undefined} value={proposalServiceName} />
+                      {fieldError(proposalErrors.serviceName)}
+                    </div>
+                    <Input onChange={(event) => setProposalAffectedPart(event.target.value)} placeholder="Affected part (optional)" value={proposalAffectedPart} />
+                    <div>
+                      <Input onChange={(event) => setProposalReason(event.target.value)} placeholder="Why is it needed?" status={proposalErrors.reason ? 'error' : undefined} value={proposalReason} />
+                      {fieldError(proposalErrors.reason)}
+                    </div>
+                    <div>
+                      <div className="grid grid-cols-3 gap-2">
+                        <InputNumber addonBefore="Labour" min={0} onChange={(value) => setProposalLaborCost(Math.max(0, Number(value) || 0))} status={proposalErrors.cost ? 'error' : undefined} style={{ width: '100%' }} value={proposalLaborCost} />
+                        <InputNumber addonBefore="Parts" min={0} onChange={(value) => setProposalPartsCost(Math.max(0, Number(value) || 0))} status={proposalErrors.cost ? 'error' : undefined} style={{ width: '100%' }} value={proposalPartsCost} />
+                        <InputNumber addonBefore="Min" min={1} onChange={(value) => setProposalEstimateMinutes(Math.max(0, Number(value) || 0))} status={proposalErrors.estimate ? 'error' : undefined} style={{ width: '100%' }} value={proposalEstimateMinutes} />
+                      </div>
+                      {fieldError(proposalErrors.cost || proposalErrors.estimate)}
+                    </div>
+                    <Select
+                      onChange={setProposalPriority}
+                      options={[
+                        { label: 'High priority', value: 'high' },
+                        { label: 'Recommended', value: 'medium' },
+                        { label: 'Monitor', value: 'low' },
+                      ]}
+                      value={proposalPriority}
+                    />
+                    <div className="flex gap-2">
+                      <Button block icon={<PlusOutlined />} loading={submittingProposal} onClick={submitProposal} type="primary">
+                        Send to advisor
+                      </Button>
+                      <Button onClick={() => { setProposalOpen(false); setProposalErrors({}) }}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <p style={{ color: technicianPalette.textMuted, fontSize: 13, margin: 0 }}>Propose an extra service for the advisor to approve.</p>
+                    <Button icon={<PlusOutlined />} onClick={() => setProposalOpen(true)}>Add</Button>
+                  </div>
+                )}
+              </Card>
+
+              <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Hand this order off?">
+                {transferOpen ? (
+                  <div className="flex flex-col gap-3">
+                    <div>
+                      <Select
+                        filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                        onChange={setTransferTechnicianId}
+                        options={technicians.map((technician) => ({ label: technician.fullName || technician.email, value: technician._id || technician.id }))}
+                        placeholder="Transfer to technician..."
+                        showSearch
+                        status={transferErrors.technician ? 'error' : undefined}
+                        style={{ width: '100%' }}
+                        value={transferTechnicianId || undefined}
+                      />
+                      {fieldError(transferErrors.technician)}
+                    </div>
+                    <div>
+                      <Input onChange={(event) => setTransferReason(event.target.value)} placeholder="Reason for the transfer" status={transferErrors.reason ? 'error' : undefined} value={transferReason} />
+                      {fieldError(transferErrors.reason)}
+                    </div>
+                    <div className="flex gap-2">
+                      <Button block icon={<SwapOutlined />} loading={requestingTransfer} onClick={submitTransfer} type="primary">
+                        Send request
+                      </Button>
+                      <Button onClick={() => { setTransferOpen(false); setTransferErrors({}) }}>Cancel</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between gap-3">
+                    <p style={{ color: technicianPalette.textMuted, fontSize: 13, margin: 0 }}>Ask the advisor to reassign this order to another technician.</p>
+                    <Button icon={<SwapOutlined />} onClick={() => setTransferOpen(true)}>Transfer</Button>
+                  </div>
+                )}
+              </Card>
+            </div>
+          ) : null}
+        </>
+      )}
     </TechnicianShell>
   )
 }

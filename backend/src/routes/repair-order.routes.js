@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import {
   getAllRepairOrders,
   getMyRepairOrders,
@@ -26,7 +26,7 @@ repairOrderRouter.get(
   "/mine",
   requireAuth,
   requireRole("onlineCustomer"),
-  asyncHandler(getMyRepairOrders),
+  catchAsync(getMyRepairOrders),
 );
 
 // Get all repair orders (staff roles only)
@@ -34,7 +34,7 @@ repairOrderRouter.get(
   "",
   requireAuth,
   requireRole("admin", "accountant", "serviceAdvisor", "technician"),
-  asyncHandler(getAllRepairOrders),
+  catchAsync(getAllRepairOrders),
 );
 
 // Get a specific repair order
@@ -42,7 +42,7 @@ repairOrderRouter.get(
   "/:id",
   requireAuth,
   requireRole("admin", "accountant", "serviceAdvisor", "technician"),
-  asyncHandler(getRepairOrderById),
+  catchAsync(getRepairOrderById),
 );
 
 // Create a new repair order (service advisor or admin only)
@@ -50,7 +50,7 @@ repairOrderRouter.post(
   "",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(createRepairOrder),
+  catchAsync(createRepairOrder),
 );
 
 // Update a repair order (service advisor or admin only)
@@ -58,7 +58,7 @@ repairOrderRouter.put(
   "/:id",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(updateRepairOrder),
+  catchAsync(updateRepairOrder),
 );
 
 // Update repair order progress (technician, service advisor, or admin)
@@ -66,7 +66,7 @@ repairOrderRouter.patch(
   "/:id/progress",
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
-  asyncHandler(updateRepairProgress),
+  catchAsync(updateRepairProgress),
 );
 
 // Delete a repair order (admin only)
@@ -74,7 +74,7 @@ repairOrderRouter.delete(
   "/:id",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(deleteRepairOrder),
+  catchAsync(deleteRepairOrder),
 );
 
 // ============= STEP NOTES ROUTES =============
@@ -84,7 +84,7 @@ repairOrderRouter.get(
   "/:id/step-notes",
   requireAuth,
   requireRole("admin", "accountant", "serviceAdvisor", "technician"),
-  asyncHandler(getStepNotes),
+  catchAsync(getStepNotes),
 );
 
 // Add a step note to a repair order (technician or admin only)
@@ -92,7 +92,7 @@ repairOrderRouter.post(
   "/:id/step-notes",
   requireAuth,
   requireRole("technician", "admin"),
-  asyncHandler(addStepNote),
+  catchAsync(addStepNote),
 );
 
 // Delete a step note from a repair order (admin only)
@@ -100,7 +100,7 @@ repairOrderRouter.delete(
   "/:orderId/step-notes/:noteIndex",
   requireAuth,
   requireRole("admin"),
-  asyncHandler(deleteStepNote),
+  catchAsync(deleteStepNote),
 );
 
 // Get repair order status
@@ -108,14 +108,14 @@ repairOrderRouter.get(
   "/:id/status",
   requireAuth,
   requireRole("admin", "accountant", "serviceAdvisor", "technician"),
-  asyncHandler(getRepairOrderStatus),
+  catchAsync(getRepairOrderStatus),
 );
 
 repairOrderRouter.get(
   "/:id/summary",
   requireAuth,
   requireRole("admin", "accountant", "serviceAdvisor", "technician"),
-  asyncHandler(getRepairOrderSummary),
+  catchAsync(getRepairOrderSummary),
 );
 
 // Quality check: service advisor reviews a technician-completed order.
@@ -123,7 +123,7 @@ repairOrderRouter.post(
   "/:id/quality-check",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(submitQualityCheck),
+  catchAsync(submitQualityCheck),
 );
 
 // Forward a QC-passed order to accounting for invoicing.
@@ -131,5 +131,5 @@ repairOrderRouter.post(
   "/:id/forward-to-accountant",
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
-  asyncHandler(forwardToAccountant),
+  catchAsync(forwardToAccountant),
 );

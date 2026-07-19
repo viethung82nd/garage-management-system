@@ -98,3 +98,23 @@ export async function meRequest(token: string) {
 
   return response.user
 }
+
+export type UpdateMePayload = {
+  fullName?: string
+  phone?: string
+  email?: string
+  currentPassword?: string
+  newPassword?: string
+}
+
+export async function updateMeRequest(token: string, payload: UpdateMePayload) {
+  const response = await requestJson<{ user: AuthUser }>('/api/auth/me', {
+    method: 'PUT',
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(payload),
+  })
+
+  return response.user
+}

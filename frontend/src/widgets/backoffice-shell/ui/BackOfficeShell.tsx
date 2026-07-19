@@ -1,17 +1,23 @@
-import { MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
+import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
 import { Avatar, Badge, Button, Empty, List, Menu, Popover, Space, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { useEffect, useState, type ReactNode } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import {
+  NEW_NOTIFICATION_EVENT,
+  clearReadNotifications,
+  deleteNotification,
   fetchNotifications,
   fetchUnreadNotificationCount,
   markAllNotificationsRead,
+  markNotificationRead,
+  notificationTarget,
   type ApiNotification,
 } from '../../../shared/api/notifications'
 import { useAuth } from '../../../shared/auth'
 import type { BackOfficePalette } from '../model/palettes'
 
-const NOTIFICATION_POLL_INTERVAL_MS = 30000
+const NOTIFICATION_POLL_INTERVAL_MS = 12000
 
 const { Title } = Typography
 const KAPA_LOGO_URL = '/kapa-auth/wp-content/uploads/2023/01/Kapa_Logo-1.svg'
@@ -32,6 +38,7 @@ export function BackOfficeShell({
   onLogout,
   menuItems,
   selectedMenuKeys,
+  profileHref,
   children,
 }: {
   palette: BackOfficePalette
@@ -49,10 +56,16 @@ export function BackOfficeShell({
   onLogout?: () => void
   menuItems: MenuProps['items']
   selectedMenuKeys: string[]
+  /** When set, the header profile chip links here (e.g. "/admin/profile"). */
+  profileHref?: string
   children: ReactNode
 }) {
-  const { token } = useAuth()
+  const resolvedBodyFont = 'var(--font-body)'
+  const resolvedDisplayFont = "'Oswald', var(--font-body)"
+  const { token, user } = useAuth()
+  const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
+  const [notifOpen, setNotifOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [recentNotifications, setRecentNotifications] = useState<ApiNotification[]>([])
   const sidebarWidth = collapsed ? 76 : 288
@@ -76,9 +89,19 @@ export function BackOfficeShell({
       void poll()
     }, NOTIFICATION_POLL_INTERVAL_MS)
 
+    // NotificationCenter's toast poll runs independently and fires this the
+    // moment it sees something new, so the bell bumps immediately instead of
+    // waiting for this component's own next interval tick.
+    function onNewNotification() {
+      void poll()
+      void loadRecentNotifications()
+    }
+    window.addEventListener(NEW_NOTIFICATION_EVENT, onNewNotification)
+
     return () => {
       cancelled = true
       window.clearInterval(intervalId)
+      window.removeEventListener(NEW_NOTIFICATION_EVENT, onNewNotification)
     }
   }, [token])
 
@@ -99,13 +122,41 @@ export function BackOfficeShell({
     setRecentNotifications((current) => current.map((item) => ({ ...item, isRead: true })))
   }
 
+  async function handleClearRead() {
+    if (!token) return
+    await clearReadNotifications(token)
+    setRecentNotifications((current) => current.filter((item) => !item.isRead))
+  }
+
+  async function handleDeleteNotification(item: ApiNotification) {
+    if (!token) return
+    setRecentNotifications((current) => current.filter((entry) => entry._id !== item._id))
+    if (!item.isRead) setUnreadCount((current) => Math.max(0, current - 1))
+    try {
+      await deleteNotification(token, item._id)
+    } catch {
+      // Best-effort — a failed delete just leaves it gone locally until the next reload.
+    }
+  }
+
+  function handleNotificationClick(item: ApiNotification) {
+    setNotifOpen(false)
+    if (token && !item.isRead) {
+      void markNotificationRead(token, item._id).catch(() => {})
+      setUnreadCount((current) => Math.max(0, current - 1))
+      setRecentNotifications((current) => current.map((entry) => (entry._id === item._id ? { ...entry, isRead: true } : entry)))
+    }
+    const target = user?.role ? notificationTarget(user.role, item) : null
+    if (target) navigate(target)
+  }
+
   return (
     <div
       className="min-h-screen"
       style={{
         background,
         color: palette.ink,
-        fontFamily: 'var(--font-body)',
+        fontFamily: resolvedBodyFont,
       }}
     >
       <div className="flex min-h-screen">
@@ -114,17 +165,19 @@ export function BackOfficeShell({
           style={{
             width: sidebarWidth,
             background: sidebarGradient,
-            borderColor: 'rgba(255,255,255,0.08)',
-            boxShadow: '18px 0 60px rgba(15, 14, 14, 0.14)',
+            borderColor: 'rgba(255,255,255,0.06)',
+            boxShadow: '4px 0 24px rgba(15, 23, 42, 0.10)',
           }}
         >
           <div className="sticky top-0 flex h-screen flex-col">
-            <div className="flex min-h-[160px] flex-col items-center justify-center gap-3 border-b border-white/10 px-4 py-5 text-center">
-              <img src={KAPA_LOGO_URL} alt="Kapa" className={collapsed ? 'h-10 w-auto max-w-[56px]' : 'h-20 w-auto max-w-[150px]'} />
+            <div className="flex min-h-[140px] flex-col items-center justify-center gap-3 border-b border-white/10 px-4 py-5 text-center">
+              <img src={KAPA_LOGO_URL} alt="Kapa" className={collapsed ? 'h-9 w-auto max-w-[52px]' : 'h-14 w-auto max-w-[120px]'} />
               {!collapsed && (
                 <div className="flex flex-col items-center">
-                  <div className="font-['Oswald'] text-[24px] uppercase leading-none text-white">{sidebarTitle}</div>
-                  <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-white/80">{sidebarSubtitle}</div>
+                  <div className="text-[20px] font-semibold uppercase leading-none tracking-wide text-white" style={{ fontFamily: resolvedDisplayFont }}>
+                    {sidebarTitle}
+                  </div>
+                  <div className="mt-2 text-[10px] font-semibold uppercase tracking-[0.22em] text-white/55">{sidebarSubtitle}</div>
                 </div>
               )}
             </div>
@@ -135,7 +188,7 @@ export function BackOfficeShell({
                 mode="inline"
                 selectedKeys={selectedMenuKeys}
                 className="!border-0 !bg-transparent"
-                style={{ fontFamily: 'var(--font-body)' }}
+                style={{ fontFamily: resolvedBodyFont }}
                 items={menuItems}
               />
             </div>
@@ -144,26 +197,30 @@ export function BackOfficeShell({
 
         <main className="min-w-0 flex-1">
           <header
-            className="sticky top-0 z-30 flex h-20 items-center justify-between border-b px-5 md:px-6 backdrop-blur-xl"
+            className="sticky top-0 z-30 flex h-[72px] items-center justify-between border-b px-5 md:px-6 backdrop-blur-xl"
             style={{
-              background: 'rgba(255, 253, 250, 0.84)',
+              background: 'rgba(255, 255, 255, 0.86)',
               borderColor: palette.border,
             }}
           >
-            <div>
+            <div className="bo-fade">
               <div className="flex items-center gap-3">
                 <Button
                   type="text"
                   icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
                   onClick={() => setCollapsed((value) => !value)}
-                  className="!inline-flex !h-11 !w-11 !items-center !justify-center !rounded-full"
-                  style={{ color: palette.ink }}
+                  className="!inline-flex !h-9 !w-9 !items-center !justify-center !rounded-lg"
+                  style={{ color: palette.textMuted }}
                 />
-                <span className="text-[12px] font-semibold uppercase tracking-[0.26em]" style={{ color: palette.textMuted }}>
+                <span className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: palette.textMuted }}>
                   {headerEyebrow}
                 </span>
               </div>
-              <Title level={2} className="!mb-0 !mt-1 !font-['Oswald'] !text-[28px] md:!text-[34px] !leading-none" style={{ color: palette.ink }}>
+              <Title
+                level={2}
+                className="!mb-0 !mt-0.5 !text-[20px] md:!text-[22px] !leading-none !font-semibold"
+                style={{ color: palette.ink, fontFamily: resolvedDisplayFont }}
+              >
                 {headerTitle}
               </Title>
             </div>
@@ -174,18 +231,45 @@ export function BackOfficeShell({
                   <div style={{ width: 320 }}>
                     <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
                       <span style={{ color: palette.ink, fontWeight: 700 }}>Notifications</span>
-                      <Button onClick={handleMarkAllRead} size="small" type="link">
-                        Mark all read
-                      </Button>
+                      <Space size={4}>
+                        <Button onClick={handleMarkAllRead} size="small" type="link">
+                          Mark all read
+                        </Button>
+                        <Button onClick={handleClearRead} size="small" type="link" danger>
+                          Clear read
+                        </Button>
+                      </Space>
                     </div>
                     <List
                       dataSource={recentNotifications}
                       locale={{ emptyText: <Empty description="No notifications yet" image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
                       renderItem={(item) => (
-                        <List.Item key={item._id} style={{ opacity: item.isRead ? 0.55 : 1, padding: '8px 0' }}>
-                          <div>
-                            <div style={{ color: palette.ink, fontSize: 13, fontWeight: 600 }}>{item.title}</div>
-                            {item.message ? <div style={{ color: palette.textMuted, fontSize: 12, marginTop: 2 }}>{item.message}</div> : null}
+                        <List.Item key={item._id} style={{ padding: 0 }}>
+                          <div className="flex w-full items-stretch gap-1">
+                            <button
+                              className="min-w-0 flex-1 text-left transition-colors duration-150 hover:bg-black/4"
+                              onClick={() => handleNotificationClick(item)}
+                              style={{ background: 'none', border: 'none', borderRadius: 10, cursor: 'pointer', opacity: item.isRead ? 0.55 : 1, padding: '10px 12px' }}
+                              type="button"
+                            >
+                              <div className="flex items-start gap-2">
+                                {!item.isRead ? <span style={{ background: palette.red, borderRadius: 999, flexShrink: 0, height: 7, marginTop: 6, width: 7 }} /> : <span style={{ flexShrink: 0, width: 7 }} />}
+                                <div style={{ minWidth: 0 }}>
+                                  <div style={{ color: palette.ink, fontSize: 13, fontWeight: 600 }}>{item.title}</div>
+                                  {item.message ? <div style={{ color: palette.textMuted, fontSize: 12, marginTop: 2 }}>{item.message}</div> : null}
+                                </div>
+                              </div>
+                            </button>
+                            <Button
+                              icon={<CloseOutlined style={{ fontSize: 11 }} />}
+                              onClick={(event) => {
+                                event.stopPropagation()
+                                void handleDeleteNotification(item)
+                              }}
+                              size="small"
+                              style={{ alignSelf: 'center', flexShrink: 0 }}
+                              type="text"
+                            />
                           </div>
                         </List.Item>
                       )}
@@ -193,29 +277,49 @@ export function BackOfficeShell({
                     />
                   </div>
                 }
+                open={notifOpen}
                 onOpenChange={(open) => {
+                  setNotifOpen(open)
                   if (open) void loadRecentNotifications()
                 }}
                 placement="bottomRight"
                 trigger="click"
               >
-                <Badge count={unreadCount} offset={[-4, 8]}>
-                  <Button shape="circle" icon={notificationIcon} />
+                <Badge count={unreadCount} offset={[-2, 2]} style={{ boxShadow: '0 0 0 2px #fff' }}>
+                  <Button shape="circle" icon={notificationIcon} className="!transition-colors !duration-200" />
                 </Badge>
               </Popover>
-              <Space size="middle" className="rounded-full border px-3 py-2" style={{ borderColor: palette.border, background: palette.panel }}>
-                <Avatar style={{ background: profileAccent, color: '#fff' }}>{profileInitial}</Avatar>
-                <div className="leading-tight">
-                  <div className="text-sm font-semibold" style={{ color: palette.ink }}>
-                    {profileName}
+              {(() => {
+                const profileContent = (
+                  <>
+                    <Avatar size={30} style={{ background: profileAccent, color: '#fff', fontSize: 13 }}>
+                      {profileInitial}
+                    </Avatar>
+                    <div className="leading-tight">
+                      <div className="text-sm font-semibold" style={{ color: palette.ink }}>
+                        {profileName}
+                      </div>
+                      <div className="text-xs" style={{ color: palette.textMuted }}>
+                        {profileRole}
+                      </div>
+                    </div>
+                  </>
+                )
+                const profileClassName = 'flex items-center gap-3 rounded-full border px-3 py-1.5 transition-colors duration-200 hover:bg-black/3'
+                const profileStyle = { borderColor: palette.border, background: palette.panelAlt }
+
+                return profileHref ? (
+                  <Link to={profileHref} className={profileClassName} style={profileStyle}>
+                    {profileContent}
+                  </Link>
+                ) : (
+                  <div className={profileClassName} style={profileStyle}>
+                    {profileContent}
                   </div>
-                  <div className="text-xs" style={{ color: palette.textMuted }}>
-                    {profileRole}
-                  </div>
-                </div>
-              </Space>
+                )
+              })()}
               {onLogout && (
-                <Button onClick={onLogout} className="!rounded-full !font-semibold">
+                <Button onClick={onLogout} className="!rounded-full !font-semibold !transition-colors !duration-200">
                   Logout
                 </Button>
               )}
@@ -223,7 +327,7 @@ export function BackOfficeShell({
           </header>
 
           <section className="px-4 py-5 md:px-6">
-            <div className="mx-auto flex w-full max-w-[1480px] flex-col gap-5">{children}</div>
+            <div className="bo-fade flex w-full flex-col gap-5">{children}</div>
           </section>
         </main>
       </div>

@@ -17,7 +17,7 @@ import {
   type TransferRequestStatus,
 } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
-import { StatCard, advisorPalette } from '../../widgets/backoffice-shell'
+import { InlineBanner, StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 type TransferRequestRow = {
@@ -191,18 +191,22 @@ export function TransferRequestReviewPage() {
     <ServiceAdvisorShell title="Transfer requests">
       <StatCard label="Pending transfer requests" note="Awaiting your decision" palette={advisorPalette} value={String(pendingCount).padStart(2, '0')} />
 
-      {apiMessage ? (
-        <div style={{ background: '#fff1f2', border: '1px solid #fecaca', borderRadius: 18, color: '#991b1b', padding: '12px 16px' }}>
-          {apiMessage}
-        </div>
-      ) : null}
+      {apiMessage ? <InlineBanner tone="error">{apiMessage}</InlineBanner> : null}
 
-      <Card bordered={false} className="rounded-[32px]" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow }}>
+      <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
         <div style={{ marginBottom: 20 }}>
           <Select onChange={setStatusFilter} options={statusFilterOptions} style={{ width: 200 }} value={statusFilter} />
         </div>
 
-        <Table columns={columns} dataSource={requests} loading={loading} pagination={false} rowKey="id" scroll={{ x: 960 }} />
+        <Table
+          columns={columns}
+          dataSource={requests}
+          loading={loading}
+          pagination={{ pageSize: 8, showTotal: (total) => `${total} requests` }}
+          rowKey="id"
+          scroll={{ x: 960 }}
+          className="bo-table"
+        />
       </Card>
     </ServiceAdvisorShell>
   )

@@ -1,6 +1,6 @@
 import { Router } from "express";
-import { requireAuth, requireRole } from "../middleware/auth.js";
-import { asyncHandler } from "../middleware/error.js";
+import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
+import { catchAsync } from "../utils/catchAsync.js";
 import { recordPayment, getPayment } from "../controllers/payment.controller.js";
 
 export const paymentRouter = Router();
@@ -10,11 +10,11 @@ paymentRouter.post(
   "/",
   requireAuth,
   requireRole("accountant", "admin"),
-  asyncHandler(recordPayment)
+  catchAsync(recordPayment)
 );
 paymentRouter.get(
   "/:id",
   requireAuth,
   requireRole("accountant", "admin"),
-  asyncHandler(getPayment)
+  catchAsync(getPayment)
 );

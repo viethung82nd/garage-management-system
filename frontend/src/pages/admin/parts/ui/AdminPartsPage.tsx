@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { createPart, deletePart, fetchParts, updatePart, type PartPayload, type PartRecord } from '../api/partsApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
+import { InlineBanner } from '../../../../widgets/backoffice-shell'
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
@@ -126,11 +127,16 @@ export default function AdminPartsPage() {
 
   return (
     <AdminShell eyebrow="Admin" title="Parts catalog">
-      <Card bordered={false} className="rounded-[32px]" styles={{ body: { padding: 24 } }} style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow }}>
+      <Card
+        bordered={false}
+        className="bo-enter rounded-2xl"
+        styles={{ body: { padding: 24 } }}
+        style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, border: `1px solid ${adminPalette.border}` }}
+      >
         <div className="flex flex-wrap items-center justify-between gap-4" style={{ marginBottom: 20 }}>
           <Input
             allowClear
-            prefix={<SearchOutlined />}
+            prefix={<SearchOutlined style={{ color: adminPalette.textMuted }} />}
             placeholder="Search by name or SKU"
             value={query}
             onChange={(event) => setQuery(event.target.value)}
@@ -141,19 +147,16 @@ export default function AdminPartsPage() {
           </Button>
         </div>
 
-        {requestError ? (
-          <div className="mb-4 rounded-[18px] border px-4 py-3 text-sm font-medium" style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b' }}>
-            {requestError}
-          </div>
-        ) : null}
+        {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
 
         <Table
           rowKey="_id"
           columns={columns}
           dataSource={filteredParts}
           loading={isLoading}
-          pagination={false}
+          pagination={{ pageSize: 8, showTotal: (total) => `${total} parts` }}
           locale={{ emptyText: 'No parts in the catalog yet.' }}
+          className="bo-table"
         />
       </Card>
 

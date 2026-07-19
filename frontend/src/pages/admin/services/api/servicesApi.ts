@@ -43,6 +43,14 @@ export function createServiceCategory(token: string, payload: ServiceCategoryPay
   })
 }
 
+export function updateServiceCategory(token: string, id: string, payload: ServiceCategoryPayload) {
+  return apiRequest<ServiceCategoryRecord>(`/api/services/categories/${id}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(payload),
+  })
+}
+
 export function deleteServiceCategory(token: string, id: string) {
   return apiRequest<{ message: string }>(`/api/services/categories/${id}`, { method: 'DELETE', token })
 }

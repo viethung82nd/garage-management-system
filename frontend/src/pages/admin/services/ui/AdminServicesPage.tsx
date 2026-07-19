@@ -1,4 +1,4 @@
-import { CloseOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
+import { DeleteOutlined, EditOutlined, PictureOutlined, PlusOutlined, UploadOutlined } from '@ant-design/icons'
 import { Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Select, Switch, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useRef, useState } from 'react'
@@ -12,12 +12,15 @@ import {
   fetchServiceCategories,
   fetchServices,
   updateService,
+  updateServiceCategory,
   uploadServiceCategoryPhoto,
+  type ServiceCategoryPayload,
   type ServiceCategoryRecord,
   type ServicePayload,
   type ServiceRecord,
 } from '../api/servicesApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
+import { InlineBanner } from '../../../../widgets/backoffice-shell'
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
@@ -31,8 +34,9 @@ export default function AdminServicesPage() {
   const [requestError, setRequestError] = useState('')
 
   const [categoryModalOpen, setCategoryModalOpen] = useState(false)
+  const [editingCategory, setEditingCategory] = useState<ServiceCategoryRecord | null>(null)
   const [categorySaving, setCategorySaving] = useState(false)
-  const [categoryForm] = Form.useForm<{ name: string; description?: string }>()
+  const [categoryForm] = Form.useForm<ServiceCategoryPayload>()
 
   const [serviceModalOpen, setServiceModalOpen] = useState(false)
   const [editingService, setEditingService] = useState<ServiceRecord | null>(null)
@@ -62,17 +66,36 @@ export default function AdminServicesPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token])
 
-  async function handleCreateCategory(values: { name: string; description?: string }) {
+  function openCreateCategoryModal() {
+    setEditingCategory(null)
+    setRequestError('')
+    categoryForm.resetFields()
+    categoryForm.setFieldsValue({ isActive: true })
+    setCategoryModalOpen(true)
+  }
+
+  function openEditCategoryModal(category: ServiceCategoryRecord) {
+    setEditingCategory(category)
+    setRequestError('')
+    categoryForm.setFieldsValue(category)
+    setCategoryModalOpen(true)
+  }
+
+  async function handleSubmitCategory(values: ServiceCategoryPayload) {
     if (!token) return
     setCategorySaving(true)
     setRequestError('')
     try {
-      const category = await createServiceCategory(token, values)
-      setCategories((current) => [category, ...current])
+      if (editingCategory) {
+        const updated = await updateServiceCategory(token, editingCategory._id, values)
+        setCategories((current) => current.map((item) => (item._id === editingCategory._id ? updated : item)))
+      } else {
+        const category = await createServiceCategory(token, values)
+        setCategories((current) => [category, ...current])
+      }
       setCategoryModalOpen(false)
-      categoryForm.resetFields()
     } catch (error) {
-      setRequestError(error instanceof ApiClientError ? error.message : 'Unable to create this category.')
+      setRequestError(error instanceof ApiClientError ? error.message : 'Unable to save this category.')
     } finally {
       setCategorySaving(false)
     }
@@ -159,6 +182,15 @@ export default function AdminServicesPage() {
     [categories],
   )
 
+  const serviceCountByCategory = useMemo(() => {
+    const counts = new Map<string, number>()
+    for (const service of services) {
+      if (!service.category) continue
+      counts.set(service.category, (counts.get(service.category) || 0) + 1)
+    }
+    return counts
+  }, [services])
+
   const columns = useMemo<ColumnsType<ServiceRecord>>(
     () => [
       { title: 'Name', dataIndex: 'name', key: 'name' },
@@ -198,93 +230,111 @@ export default function AdminServicesPage() {
 
   return (
     <AdminShell eyebrow="Admin" title="Service catalog">
-      {requestError ? (
-        <div
-          className="mb-4 rounded-[18px] border px-4 py-3 text-sm font-medium"
-          style={{ borderColor: '#fecaca', background: '#fff1f2', color: '#991b1b', marginBottom: 20 }}
-        >
-          {requestError}
-        </div>
-      ) : null}
+      {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
 
       <Card
         bordered={false}
-        className="rounded-[32px]"
+        className="bo-enter rounded-2xl"
         styles={{ body: { padding: 24 } }}
-        style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, marginBottom: 20 }}
+        style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, border: `1px solid ${adminPalette.border}` }}
       >
-        <div className="flex flex-wrap items-center justify-between gap-4" style={{ marginBottom: 16 }}>
+        <div className="flex flex-wrap items-center justify-between gap-4" style={{ marginBottom: 20 }}>
           <div>
-            <div className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: adminPalette.textMuted }}>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: adminPalette.textMuted }}>
               Categories
             </div>
+            <div className="mt-1 text-[16px] font-semibold" style={{ color: adminPalette.ink }}>
+              {categories.length} categor{categories.length === 1 ? 'y' : 'ies'}
+            </div>
           </div>
-          <Button
-            icon={<PlusOutlined />}
-            onClick={() => {
-              setRequestError('')
-              categoryForm.resetFields()
-              setCategoryModalOpen(true)
-            }}
-          >
+          <Button type="primary" icon={<PlusOutlined />} onClick={openCreateCategoryModal}>
             Add category
           </Button>
         </div>
+
         <input accept="image/*" className="hidden" onChange={handleCategoryPhotoSelected} ref={photoInputRef} type="file" />
-        <div className="flex flex-wrap gap-2">
-          {categories.length === 0 ? <span style={{ color: adminPalette.textMuted }}>No categories yet.</span> : null}
-          {categories.map((category) => (
-            <span
-              key={category._id}
-              style={{
-                alignItems: 'center',
-                border: `1px solid ${adminPalette.border}`,
-                borderRadius: 999,
-                display: 'inline-flex',
-                fontSize: 13,
-                gap: 8,
-                padding: '4px 10px',
-              }}
-            >
-              {category.imageUrl ? (
-                <img
-                  alt=""
-                  src={resolveApiAssetUrl(category.imageUrl)}
-                  style={{
-                    borderRadius: '50%',
-                    flexShrink: 0,
-                    height: 20,
-                    objectFit: 'cover',
-                    width: 20,
-                  }}
-                />
-              ) : null}
-              {category.name}
-              <button
-                onClick={() => openCategoryPhotoPicker(category._id)}
-                style={{ background: 'transparent', border: 0, cursor: 'pointer', display: 'flex', padding: 0 }}
-                title="Upload photo"
-                type="button"
+
+        {categories.length === 0 ? (
+          <div className="rounded-xl border border-dashed py-12 text-center text-sm" style={{ borderColor: adminPalette.border, color: adminPalette.textMuted }}>
+            No categories yet — add one to start organizing your service catalog.
+          </div>
+        ) : (
+          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+            {categories.map((category) => (
+              <div
+                key={category._id}
+                className="bo-card-hover overflow-hidden rounded-xl border transition-shadow"
+                style={{ borderColor: adminPalette.border, background: adminPalette.panel }}
               >
-                <UploadOutlined style={{ color: adminPalette.textMuted }} />
-              </button>
-              <button
-                onClick={() => handleDeleteCategory(category)}
-                style={{ background: 'transparent', border: 0, cursor: 'pointer', display: 'flex', padding: 0 }}
-                title="Remove category"
-                type="button"
-              >
-                <CloseOutlined style={{ color: adminPalette.textMuted }} />
-              </button>
-            </span>
-          ))}
-        </div>
+                <button
+                  type="button"
+                  onClick={() => openCategoryPhotoPicker(category._id)}
+                  className="group relative block h-28 w-full cursor-pointer border-0 p-0"
+                  style={{ background: adminPalette.panelAlt }}
+                  title="Change photo"
+                >
+                  {category.imageUrl ? (
+                    <img alt="" src={resolveApiAssetUrl(category.imageUrl)} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full w-full items-center justify-center">
+                      <PictureOutlined style={{ color: adminPalette.textMuted, fontSize: 28 }} />
+                    </div>
+                  )}
+                  <div className="absolute inset-0 flex items-center justify-center bg-black/0 text-white opacity-0 transition-all duration-200 group-hover:bg-black/40 group-hover:opacity-100">
+                    <UploadOutlined className="text-lg" />
+                  </div>
+                </button>
+
+                <div className="p-3">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="truncate text-sm font-semibold" style={{ color: adminPalette.ink }} title={category.name}>
+                      {category.name}
+                    </div>
+                    <Tag color={category.isActive === false ? 'default' : 'green'} className="!m-0 shrink-0">
+                      {category.isActive === false ? 'Inactive' : 'Active'}
+                    </Tag>
+                  </div>
+                  {category.description ? (
+                    <div
+                      className="mt-1 text-xs"
+                      style={{ color: adminPalette.textMuted, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}
+                    >
+                      {category.description}
+                    </div>
+                  ) : null}
+                  <div className="mt-2 text-xs" style={{ color: adminPalette.textMuted }}>
+                    {serviceCountByCategory.get(category.name) || 0} service{(serviceCountByCategory.get(category.name) || 0) === 1 ? '' : 's'}
+                  </div>
+
+                  <div className="mt-3 flex items-center gap-1.5 border-t pt-3" style={{ borderColor: adminPalette.border }}>
+                    <Button size="small" icon={<EditOutlined />} onClick={() => openEditCategoryModal(category)}>
+                      Edit
+                    </Button>
+                    <Popconfirm title="Remove this category?" okText="Remove" onConfirm={() => handleDeleteCategory(category)}>
+                      <Button size="small" danger icon={<DeleteOutlined />} />
+                    </Popconfirm>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </Card>
 
-      <Card bordered={false} className="rounded-[32px]" styles={{ body: { padding: 24 } }} style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow }}>
+      <Card
+        bordered={false}
+        className="bo-enter bo-enter-2 rounded-2xl"
+        styles={{ body: { padding: 24 } }}
+        style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, border: `1px solid ${adminPalette.border}` }}
+      >
         <div className="flex flex-wrap items-center justify-between gap-4" style={{ marginBottom: 20 }}>
-          <div className="text-[12px] font-semibold uppercase tracking-[0.18em]" style={{ color: adminPalette.textMuted }}>
-            Services
+          <div>
+            <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: adminPalette.textMuted }}>
+              Services
+            </div>
+            <div className="mt-1 text-[16px] font-semibold" style={{ color: adminPalette.ink }}>
+              {services.length} service{services.length === 1 ? '' : 's'} in the catalog
+            </div>
           </div>
           <Button type="primary" icon={<PlusOutlined />} onClick={openCreateServiceModal}>
             Add service
@@ -296,25 +346,29 @@ export default function AdminServicesPage() {
           columns={columns}
           dataSource={services}
           loading={isLoading}
-          pagination={false}
+          pagination={{ pageSize: 8, showTotal: (total) => `${total} services` }}
           locale={{ emptyText: 'No services in the catalog yet.' }}
+          className="bo-table"
         />
       </Card>
 
       <Modal
-        title="Add service category"
+        title={editingCategory ? 'Edit category' : 'Add service category'}
         open={categoryModalOpen}
         onCancel={() => setCategoryModalOpen(false)}
         onOk={() => categoryForm.submit()}
         confirmLoading={categorySaving}
-        okText="Add category"
+        okText={editingCategory ? 'Save changes' : 'Add category'}
       >
-        <Form form={categoryForm} layout="vertical" onFinish={handleCreateCategory}>
+        <Form form={categoryForm} layout="vertical" onFinish={handleSubmitCategory}>
           <Form.Item name="name" label="Name" rules={[{ required: true, message: 'Name is required' }]}>
             <Input />
           </Form.Item>
           <Form.Item name="description" label="Description">
             <Input.TextArea rows={2} />
+          </Form.Item>
+          <Form.Item name="isActive" label="Active" valuePropName="checked">
+            <Switch />
           </Form.Item>
         </Form>
       </Modal>
