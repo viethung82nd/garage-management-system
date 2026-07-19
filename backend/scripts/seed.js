@@ -10,6 +10,7 @@
 import mongoose from "mongoose";
 import { env } from "../src/config/env.js";
 import { hashPassword } from "../src/utils/password.js";
+import { logAudit } from "../src/utils/audit.js";
 import {
   UserModel,
   VehicleModel,
@@ -27,6 +28,8 @@ import {
   PaymentModel,
   NotificationModel,
   ReviewModel,
+  AuditLogModel,
+  PartModel,
 } from "../src/models/index.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -68,6 +71,8 @@ async function clearCollections() {
     PaymentModel.deleteMany({}),
     NotificationModel.deleteMany({}),
     ReviewModel.deleteMany({}),
+    AuditLogModel.deleteMany({}),
+    PartModel.deleteMany({}),
   ]);
   console.log("[seed] cleared existing collections");
 }
@@ -150,25 +155,25 @@ async function seedCatalog() {
 
   const byName = Object.fromEntries(categories.map((c) => [c.name, c.name]));
   const services = await ServiceModel.insertMany([
-    { name: "Full Engine Diagnostic Scan", category: byName["Engine Diagnostics & Repair"], basePrice: 89, estimatedDuration: 60, isActive: true },
-    { name: "Check Engine Light Diagnosis", category: byName["Engine Diagnostics & Repair"], basePrice: 65, estimatedDuration: 45, isActive: true },
-    { name: "Timing Belt Replacement", category: byName["Engine Diagnostics & Repair"], basePrice: 620, estimatedDuration: 240, isActive: true },
-    { name: "Front Brake Pad Replacement", category: byName["Brake Service"], basePrice: 180, estimatedDuration: 75, isActive: true },
-    { name: "Brake Rotor Resurfacing", category: byName["Brake Service"], basePrice: 140, estimatedDuration: 60, isActive: true },
-    { name: "Full Brake System Inspection", category: byName["Brake Service"], basePrice: 45, estimatedDuration: 30, isActive: true },
-    { name: "Synthetic Oil Change", category: byName["Oil & Fluid Change"], basePrice: 69, estimatedDuration: 30, isActive: true },
-    { name: "Coolant Flush & Refill", category: byName["Oil & Fluid Change"], basePrice: 95, estimatedDuration: 45, isActive: true },
-    { name: "Transmission Fluid Service", category: byName["Oil & Fluid Change"], basePrice: 150, estimatedDuration: 60, isActive: true },
-    { name: "Tire Rotation & Balancing", category: byName["Tire & Wheel Service"], basePrice: 55, estimatedDuration: 40, isActive: true },
-    { name: "Wheel Alignment", category: byName["Tire & Wheel Service"], basePrice: 99, estimatedDuration: 50, isActive: true },
-    { name: "New Tire Set Installation", category: byName["Tire & Wheel Service"], basePrice: 480, estimatedDuration: 60, isActive: true },
-    { name: "Car Battery Replacement", category: byName["Electrical System"], basePrice: 175, estimatedDuration: 30, isActive: true },
-    { name: "Alternator Repair", category: byName["Electrical System"], basePrice: 320, estimatedDuration: 90, isActive: true },
-    { name: "AC Recharge Service", category: byName["AC & Climate Control"], basePrice: 120, estimatedDuration: 45, isActive: true },
-    { name: "Cabin Air Filter Replacement", category: byName["AC & Climate Control"], basePrice: 35, estimatedDuration: 20, isActive: true },
-    { name: "Dent Removal & Panel Repair", category: byName["Bodywork & Paint"], basePrice: 250, estimatedDuration: 180, isActive: true },
-    { name: "Full Multi-Point Inspection", category: byName["General Maintenance"], basePrice: 49, estimatedDuration: 40, isActive: true },
-    { name: "Scheduled Maintenance Package", category: byName["General Maintenance"], basePrice: 210, estimatedDuration: 120, isActive: true },
+    { name: "Full Engine Diagnostic Scan", category: byName["Engine Diagnostics & Repair"], basePrice: 89000, estimatedDuration: 60, isActive: true },
+    { name: "Check Engine Light Diagnosis", category: byName["Engine Diagnostics & Repair"], basePrice: 65000, estimatedDuration: 45, isActive: true },
+    { name: "Timing Belt Replacement", category: byName["Engine Diagnostics & Repair"], basePrice: 620000, estimatedDuration: 240, isActive: true },
+    { name: "Front Brake Pad Replacement", category: byName["Brake Service"], basePrice: 180000, estimatedDuration: 75, isActive: true },
+    { name: "Brake Rotor Resurfacing", category: byName["Brake Service"], basePrice: 140000, estimatedDuration: 60, isActive: true },
+    { name: "Full Brake System Inspection", category: byName["Brake Service"], basePrice: 45000, estimatedDuration: 30, isActive: true },
+    { name: "Synthetic Oil Change", category: byName["Oil & Fluid Change"], basePrice: 69000, estimatedDuration: 30, isActive: true },
+    { name: "Coolant Flush & Refill", category: byName["Oil & Fluid Change"], basePrice: 95000, estimatedDuration: 45, isActive: true },
+    { name: "Transmission Fluid Service", category: byName["Oil & Fluid Change"], basePrice: 150000, estimatedDuration: 60, isActive: true },
+    { name: "Tire Rotation & Balancing", category: byName["Tire & Wheel Service"], basePrice: 55000, estimatedDuration: 40, isActive: true },
+    { name: "Wheel Alignment", category: byName["Tire & Wheel Service"], basePrice: 99000, estimatedDuration: 50, isActive: true },
+    { name: "New Tire Set Installation", category: byName["Tire & Wheel Service"], basePrice: 480000, estimatedDuration: 60, isActive: true },
+    { name: "Car Battery Replacement", category: byName["Electrical System"], basePrice: 175000, estimatedDuration: 30, isActive: true },
+    { name: "Alternator Repair", category: byName["Electrical System"], basePrice: 320000, estimatedDuration: 90, isActive: true },
+    { name: "AC Recharge Service", category: byName["AC & Climate Control"], basePrice: 120000, estimatedDuration: 45, isActive: true },
+    { name: "Cabin Air Filter Replacement", category: byName["AC & Climate Control"], basePrice: 35000, estimatedDuration: 20, isActive: true },
+    { name: "Dent Removal & Panel Repair", category: byName["Bodywork & Paint"], basePrice: 250000, estimatedDuration: 180, isActive: true },
+    { name: "Full Multi-Point Inspection", category: byName["General Maintenance"], basePrice: 49000, estimatedDuration: 40, isActive: true },
+    { name: "Scheduled Maintenance Package", category: byName["General Maintenance"], basePrice: 210000, estimatedDuration: 120, isActive: true },
   ]);
 
   console.log(`[seed] categories: ${categories.length}, services: ${services.length}`);
@@ -277,7 +282,8 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     ],
   });
 
-  // 4) Pending quality check (completed by technician, awaiting SA review)
+  // 4) Completed, quality-checked, invoiced weeks ago — invoice now overdue
+  // (demo case for accountant overdue tracking).
   const order4 = await RepairOrderModel.create({
     vehicleId: vehicles[2]._id,
     advisorId: advisors[1]._id,
@@ -285,10 +291,11 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     services: [svcLine("Wheel Alignment"), svcLine("Tire Rotation & Balancing")],
     status: "completed",
     totalCost: findService("Wheel Alignment").basePrice + findService("Tire Rotation & Balancing").basePrice,
-    startedAt: daysAgo(1),
-    completedAt: new Date(),
+    startedAt: daysAgo(21),
+    completedAt: daysAgo(20),
     stepNotes: [
-      { content: "Alignment adjusted to spec, all four tires rotated and balanced.", technicianId: technicians[2]._id, createdAt: new Date() },
+      { content: "Alignment adjusted to spec, all four tires rotated and balanced.", technicianId: technicians[2]._id, createdAt: daysAgo(20) },
+      { content: "[QC pass] Test drive confirms straight tracking, no pull.", technicianId: advisors[1]._id, createdAt: daysAgo(20) },
     ],
   });
 
@@ -316,7 +323,18 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     totalCost: findService("Dent Removal & Panel Repair").basePrice,
   });
 
-  const repairOrders = [order1, order2, order3, order4, order5, order6];
+  // 7) Just opened at reception, not yet quoted — backs the draft quote below
+  // (ServiceQuote.repairOrderId/vehicleId are both required, so a draft quote
+  // needs a real order to attach to, same as the real reception flow).
+  const order7 = await RepairOrderModel.create({
+    vehicleId: vehicles[6]._id,
+    advisorId: advisors[1]._id,
+    services: [svcLine("AC Recharge Service")],
+    status: "pending",
+    totalCost: findService("AC Recharge Service").basePrice,
+  });
+
+  const repairOrders = [order1, order2, order3, order4, order5, order6, order7];
   console.log(`[seed] repair orders: ${repairOrders.length}`);
 
   // Inspection reports
@@ -326,16 +344,16 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
       vehicleId: vehicles[0]._id,
       advisorId: advisors[0]._id,
       findings: "Engine misfire detected on cylinder 1 during diagnostic scan. Ignition coil showing signs of wear.",
-      estimatedCost: 240,
+      estimatedCost: 240000,
       odometer: 24680,
       fuelLevel: "3/4",
       items: [
-        { category: "Engine", label: "Ignition coils", status: "repair", note: "Cylinder 1 coil arcing, replacement recommended.", laborCost: 60, partsCost: 85 },
+        { category: "Engine", label: "Ignition coils", status: "repair", note: "Cylinder 1 coil arcing, replacement recommended.", laborCost: 60000, partsCost: 85000 },
         { category: "Engine", label: "Spark plugs", status: "monitor", note: "Slight wear, still within service life.", laborCost: 0, partsCost: 0 },
         { category: "Exterior", label: "Body panels", status: "ok", note: "No visible damage.", laborCost: 0, partsCost: 0 },
       ],
       photos: [IMG.engine],
-      recommendedServices: [{ serviceId: findService("Full Engine Diagnostic Scan")._id, name: "Full Engine Diagnostic Scan", price: 89, isRequired: true }],
+      recommendedServices: [{ serviceId: findService("Full Engine Diagnostic Scan")._id, name: "Full Engine Diagnostic Scan", price: 89000, isRequired: true }],
       status: "completed",
       inspectedAt: daysAgo(1),
     },
@@ -344,11 +362,11 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
       vehicleId: vehicles[4]._id,
       advisorId: advisors[2]._id,
       findings: "Battery replaced; terminal corrosion found on positive lead, requires cleaning and reseating.",
-      estimatedCost: 40,
+      estimatedCost: 40000,
       odometer: 8250,
       fuelLevel: "1/2",
       items: [
-        { category: "Electrical", label: "Battery terminals", status: "repair", note: "Corrosion on positive terminal causing intermittent connection.", laborCost: 25, partsCost: 15 },
+        { category: "Electrical", label: "Battery terminals", status: "repair", note: "Corrosion on positive terminal causing intermittent connection.", laborCost: 25000, partsCost: 15000 },
       ],
       photos: [IMG.battery],
       recommendedServices: [],
@@ -357,37 +375,55 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     },
     {
       bookingId: bookings[6]._id,
+      repairOrderId: order1._id,
       vehicleId: vehicles[7]._id,
       advisorId: advisors[0]._id,
       findings: "Front brake pads worn to 2mm, rotors show light scoring. Rear brakes within spec.",
-      estimatedCost: 220,
+      estimatedCost: 220000,
       odometer: 35100,
       fuelLevel: "Full",
       items: [
-        { category: "Brakes", label: "Front pads", status: "repair", note: "2mm remaining, below safe threshold.", laborCost: 60, partsCost: 90 },
-        { category: "Brakes", label: "Front rotors", status: "monitor", note: "Light scoring, resurfacing recommended.", laborCost: 40, partsCost: 30 },
+        { category: "Brakes", label: "Front pads", status: "repair", note: "2mm remaining, below safe threshold.", laborCost: 60000, partsCost: 90000 },
+        { category: "Brakes", label: "Front rotors", status: "monitor", note: "Light scoring, resurfacing recommended.", laborCost: 40000, partsCost: 30000 },
       ],
       photos: [IMG.brake, IMG.garage],
-      recommendedServices: [{ serviceId: findService("Brake Rotor Resurfacing")._id, name: "Brake Rotor Resurfacing", price: 140, isRequired: false }],
+      recommendedServices: [{ serviceId: findService("Brake Rotor Resurfacing")._id, name: "Brake Rotor Resurfacing", price: 140000, isRequired: false }],
       status: "completed",
       inspectedAt: daysAgo(5),
+    },
+    {
+      repairOrderId: order2._id,
+      vehicleId: vehicles[8]._id,
+      advisorId: advisors[1]._id,
+      findings: "Multi-point inspection ahead of scheduled maintenance — fluids low, air filter due soon.",
+      estimatedCost: 279000,
+      odometer: 41900,
+      fuelLevel: "1/2",
+      items: [
+        { category: "Fluids", label: "Engine oil", status: "repair", note: "Due for a full synthetic oil change.", laborCost: 20000, partsCost: 49000 },
+        { category: "Filters", label: "Air filter", status: "monitor", note: "Visibly dirty, replace within 5,000 miles.", laborCost: 0, partsCost: 0 },
+      ],
+      photos: [IMG.oil, IMG.garage],
+      recommendedServices: [],
+      status: "completed",
+      inspectedAt: daysAgo(8),
     },
     {
       repairOrderId: order4._id,
       vehicleId: vehicles[2]._id,
       advisorId: advisors[1]._id,
       findings: "Front-end alignment out of spec, uneven tire wear on front-left.",
-      estimatedCost: 154,
+      estimatedCost: 154000,
       odometer: 15900,
       fuelLevel: "1/2",
       items: [
-        { category: "Suspension", label: "Front alignment", status: "repair", note: "Toe-in out of spec by 0.4 degrees.", laborCost: 99, partsCost: 0 },
+        { category: "Suspension", label: "Front alignment", status: "repair", note: "Toe-in out of spec by 0.4 degrees.", laborCost: 99000, partsCost: 0 },
         { category: "Tires", label: "Front-left tread", status: "monitor", note: "Slightly uneven wear pattern.", laborCost: 0, partsCost: 0 },
       ],
       photos: [IMG.tire],
       recommendedServices: [],
       status: "completed",
-      inspectedAt: daysAgo(1),
+      inspectedAt: daysAgo(21),
     },
   ]);
   for (const report of inspections) {
@@ -402,6 +438,7 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     {
       code: "QT-10231",
       repairOrderId: order3._id,
+      vehicleId: vehicles[0]._id,
       customerId: customers[0]._id,
       advisorId: advisors[0]._id,
       customerName: customers[0].fullName,
@@ -409,12 +446,12 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
       vehicleName: "Toyota Camry",
       vehiclePlate: vehicles[0].licensePlate,
       lines: [
-        { description: "Ignition coil replacement (cylinder 1)", kind: "part", quantity: 1, unitPrice: 85 },
-        { description: "Diagnostic labor", kind: "labor", quantity: 1, unitPrice: 60 },
+        { description: "Ignition coil replacement (cylinder 1)", kind: "part", quantity: 1, unitPrice: 85000 },
+        { description: "Diagnostic labor", kind: "labor", quantity: 1, unitPrice: 60000 },
       ],
       discountPercent: 0,
       taxPercent: 8,
-      totalEstimate: Math.round((85 + 60) * 1.08),
+      totalEstimate: Math.round((85000 + 60000) * 1.08),
       status: "sent",
       note: "Recommend replacing coil before it affects catalytic converter.",
       validUntil: daysFromNow(7),
@@ -422,38 +459,115 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     {
       code: "QT-10245",
       repairOrderId: order5._id,
+      vehicleId: vehicles[4]._id,
       customerId: customers[3]._id,
       advisorId: advisors[2]._id,
       customerName: customers[3].fullName,
       customerPhone: customers[3].phone,
       vehicleName: "Audi A4",
       vehiclePlate: vehicles[4].licensePlate,
-      lines: [{ description: "Battery terminal cleaning and reseating", kind: "labor", quantity: 1, unitPrice: 25 }],
+      lines: [{ description: "Battery terminal cleaning and reseating", kind: "labor", quantity: 1, unitPrice: 25000 }],
       discountPercent: 10,
       taxPercent: 8,
-      totalEstimate: Math.round(25 * 0.9 * 1.08),
+      totalEstimate: Math.round(25000 * 0.9 * 1.08),
       status: "approved",
       note: "Included at no extra charge as part of the rework.",
       validUntil: daysFromNow(5),
     },
     {
       code: "QT-10198",
+      repairOrderId: order7._id,
+      vehicleId: vehicles[6]._id,
       customerId: customers[5]._id,
       advisorId: advisors[1]._id,
       customerName: customers[5].fullName,
       customerPhone: customers[5].phone,
       vehicleName: "Volkswagen Jetta",
       vehiclePlate: vehicles[6].licensePlate,
-      lines: [{ description: "AC recharge service", kind: "service", quantity: 1, unitPrice: 120 }],
+      lines: [{ description: "AC recharge service", kind: "service", quantity: 1, unitPrice: 120000 }],
       discountPercent: 0,
       taxPercent: 8,
-      totalEstimate: Math.round(120 * 1.08),
+      totalEstimate: Math.round(120000 * 1.08),
       status: "draft",
       note: "Waiting on customer confirmation for appointment slot.",
       validUntil: daysFromNow(10),
     },
+    // Confirmed quotes behind order2's and order4's invoices — lets the
+    // accountant's "View original quote" cross-check show real matching data.
+    {
+      code: "QT-10267",
+      repairOrderId: order2._id,
+      vehicleId: vehicles[8]._id,
+      customerId: walkIns[1]._id,
+      advisorId: advisors[1]._id,
+      customerName: walkIns[1].fullName,
+      customerPhone: walkIns[1].phone,
+      vehicleName: "Nissan Altima",
+      vehiclePlate: vehicles[8].licensePlate,
+      lines: [
+        { description: "Scheduled Maintenance Package", kind: "service", quantity: 1, unitPrice: 210000 },
+        { description: "Synthetic Oil Change", kind: "service", quantity: 1, unitPrice: 69000 },
+      ],
+      discountPercent: 5,
+      taxPercent: 8,
+      totalEstimate: 286000,
+      status: "approved",
+      note: "Loyalty discount applied — repeat walk-in customer.",
+      validUntil: daysAgo(1),
+    },
+    {
+      code: "QT-10276",
+      repairOrderId: order4._id,
+      vehicleId: vehicles[2]._id,
+      customerId: customers[1]._id,
+      advisorId: advisors[1]._id,
+      customerName: customers[1].fullName,
+      customerPhone: customers[1].phone,
+      vehicleName: "BMW 3 Series",
+      vehiclePlate: vehicles[2].licensePlate,
+      lines: [
+        { description: "Wheel Alignment", kind: "service", quantity: 1, unitPrice: 99000 },
+        { description: "Tire Rotation & Balancing", kind: "service", quantity: 1, unitPrice: 55000 },
+      ],
+      discountPercent: 0,
+      taxPercent: 8,
+      totalEstimate: 166000,
+      status: "approved",
+      note: "Standard alignment package.",
+      validUntil: daysAgo(19),
+    },
   ]);
   console.log(`[seed] service quotes: ${quotes.length}`);
+
+  // Sync order2 and order4 with their confirmed quotes, same as
+  // quotation.service.js's confirmQuotation would — so their invoices can
+  // demonstrate the quote↔invoice sync (order2) and a post-quote addition
+  // that legitimately diverges from the quote (order4, below).
+  const quote2 = quotes[3];
+  const quote4 = quotes[4];
+
+  order2.quoteId = quote2._id;
+  order2.quotedDiscountPercent = quote2.discountPercent;
+  order2.quotedTaxPercent = quote2.taxPercent;
+  order2.quotedTotal = quote2.totalEstimate;
+  await order2.save();
+
+  order4.quoteId = quote4._id;
+  order4.quotedDiscountPercent = quote4.discountPercent;
+  order4.quotedTaxPercent = quote4.taxPercent;
+  order4.quotedTotal = quote4.totalEstimate;
+  // A wheel-bearing noise the technician found while under the car — approved
+  // and added after the quote was confirmed, so the invoice total legitimately
+  // exceeds what was quoted.
+  order4.services.push({
+    name: "Wheel Bearing Inspection & Repack",
+    priceAtTime: 35000,
+    quantity: 1,
+    kind: "labor",
+    source: "additionalService",
+  });
+  order4.totalCost = 189000;
+  await order4.save();
 
   // Additional service proposals
   const proposals = await ServiceRequestModel.insertMany([
@@ -464,8 +578,8 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
       affectedPart: "Front brake rotors",
       reason: "Light scoring found on both front rotors during pad replacement.",
       customerImpact: "May cause a faint vibration when braking if not addressed.",
-      laborCost: 40,
-      partsCost: 30,
+      laborCost: 40000,
+      partsCost: 30000,
       estimateMinutes: 45,
       evidenceCount: 2,
       priority: "medium",
@@ -478,8 +592,8 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
       affectedPart: "Cylinders 2-4 spark plugs",
       reason: "Plugs show early wear consistent with the misfire pattern.",
       customerImpact: "Reduced fuel efficiency if left unaddressed for another 5,000 miles.",
-      laborCost: 45,
-      partsCost: 40,
+      laborCost: 45000,
+      partsCost: 40000,
       estimateMinutes: 30,
       evidenceCount: 1,
       priority: "low",
@@ -492,11 +606,25 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
       affectedPart: "Cabin air filter",
       reason: "Filter is visibly dirty and restricting airflow.",
       customerImpact: "Reduced AC/heater airflow and cabin air quality.",
-      laborCost: 15,
-      partsCost: 20,
+      laborCost: 15000,
+      partsCost: 20000,
       estimateMinutes: 15,
       evidenceCount: 1,
       priority: "low",
+      status: "approved",
+    },
+    {
+      repairOrderId: order4._id,
+      technicianId: technicians[2]._id,
+      serviceName: "Wheel Bearing Inspection & Repack",
+      affectedPart: "Front-left wheel bearing",
+      reason: "Slight roughness felt while spinning the wheel during alignment work.",
+      customerImpact: "Left unaddressed, bearing wear can progress to noise and eventual failure.",
+      laborCost: 35000,
+      partsCost: 0,
+      estimateMinutes: 40,
+      evidenceCount: 1,
+      priority: "medium",
       status: "approved",
     },
   ]);
@@ -547,56 +675,166 @@ async function seedSchedules({ technicians, repairOrders }) {
   return schedules;
 }
 
-async function seedInvoicesPayments({ order1, order2, accountants, customers, walkIns }) {
+async function seedInvoicesPayments({ order1, order2, order4, accountants, customers, walkIns }) {
+  const displayId = (prefix, id) => `${prefix}-${String(id).slice(-6).toUpperCase()}`;
+  const dueFrom = (issuedAt) => new Date(issuedAt.getTime() + 15 * DAY_MS);
+
+  // Invoice 1 — order1 (brake job), paid in full same day. No linked quote:
+  // walk-in customer, price agreed verbally at the counter.
+  const invoice1IssuedAt = daysAgo(4);
   const invoice1 = await InvoiceModel.create({
     repairOrderId: order1._id,
     accountantId: accountants[0]._id,
     lineItems: [
-      { description: "Front Brake Pad Replacement", quantity: 1, unitPrice: 180 },
-      { description: "Full Brake System Inspection", quantity: 1, unitPrice: 45 },
+      { description: "Front Brake Pad Replacement", quantity: 1, unitPrice: 180000, kind: "service", source: "quote" },
+      { description: "Full Brake System Inspection", quantity: 1, unitPrice: 45000, kind: "service", source: "quote" },
     ],
-    subtotal: 225,
+    subtotal: 225000,
     discount: 0,
-    total: 225,
+    taxAmount: 18000,
+    total: 243000,
+    amountPaid: 243000,
     status: "paid",
-    issuedAt: daysAgo(4),
+    issuedAt: invoice1IssuedAt,
+    dueAt: dueFrom(invoice1IssuedAt),
   });
 
+  // Invoice 2 — order2 (maintenance), synced 1:1 with its confirmed quote
+  // (QT-10267: 5% discount, 8% tax) and partially paid — demonstrates the
+  // accountant's "balance due" reconciliation against what was quoted.
+  const invoice2IssuedAt = daysAgo(7);
   const invoice2 = await InvoiceModel.create({
     repairOrderId: order2._id,
     accountantId: accountants[1]._id,
     lineItems: [
-      { description: "Scheduled Maintenance Package", quantity: 1, unitPrice: 210 },
-      { description: "Synthetic Oil Change", quantity: 1, unitPrice: 69 },
+      { description: "Scheduled Maintenance Package", quantity: 1, unitPrice: 210000, kind: "service", source: "quote" },
+      { description: "Synthetic Oil Change", quantity: 1, unitPrice: 69000, kind: "service", source: "quote" },
     ],
-    subtotal: 279,
-    discount: 20,
-    total: 259,
+    subtotal: 279000,
+    discount: 14000,
+    taxAmount: 21000,
+    total: 286000,
+    amountPaid: 150000,
+    status: "partiallyPaid",
+    issuedAt: invoice2IssuedAt,
+    dueAt: dueFrom(invoice2IssuedAt),
+    quoteId: order2.quoteId,
+    quotedTotal: order2.quotedTotal,
+  });
+
+  // Invoice 3 — order4 (wheel alignment), invoiced three weeks ago, still
+  // unpaid — now overdue. Carries one line added after the quote was
+  // confirmed (source: additionalService), so the quoted-vs-actual delta has
+  // a real explanation instead of looking like an unexplained mismatch.
+  const invoice3IssuedAt = daysAgo(20);
+  const invoice3 = await InvoiceModel.create({
+    repairOrderId: order4._id,
+    accountantId: accountants[0]._id,
+    lineItems: [
+      { description: "Wheel Alignment", quantity: 1, unitPrice: 99000, kind: "service", source: "quote" },
+      { description: "Tire Rotation & Balancing", quantity: 1, unitPrice: 55000, kind: "service", source: "quote" },
+      { description: "Wheel Bearing Inspection & Repack", quantity: 1, unitPrice: 35000, kind: "labor", source: "additionalService" },
+    ],
+    subtotal: 189000,
+    discount: 0,
+    taxAmount: 15000,
+    total: 204000,
+    amountPaid: 0,
     status: "unpaid",
-    issuedAt: daysAgo(7),
+    issuedAt: invoice3IssuedAt,
+    dueAt: dueFrom(invoice3IssuedAt),
+    quoteId: order4.quoteId,
+    quotedTotal: order4.quotedTotal,
   });
 
   const payments = await PaymentModel.insertMany([
     {
       invoiceId: invoice1._id,
       customerId: walkIns[0]._id,
-      amount: 225,
+      amount: 243000,
       method: "card",
       gatewayRef: "MOCKPAY-88213",
       status: "succeeded",
-      paidAt: daysAgo(4),
+      paidAt: invoice1IssuedAt,
     },
     {
       invoiceId: invoice2._id,
       customerId: walkIns[1]._id,
-      amount: 100,
+      amount: 150000,
       method: "cash",
-      status: "pending",
+      reference: "Deposit at pickup",
+      status: "succeeded",
+      paidAt: daysAgo(6),
     },
   ]);
 
-  console.log(`[seed] invoices: 2, payments: ${payments.length}`);
-  return { invoice1, invoice2 };
+  // Mirror the audit trail that generateInvoiceFromRepairOrder/recordPayment/
+  // sendInvoiceToCustomer produce in real usage, so the Audit Trail screen
+  // has real history on a fresh demo database instead of an empty state.
+  await logAudit({
+    action: "invoiceGenerated",
+    actorId: accountants[0]._id,
+    invoiceId: invoice1._id,
+    repairOrderId: order1._id,
+    details: `${displayId("INV", invoice1._id)} generated for 243.000 ₫`,
+  });
+  await logAudit({
+    action: "paymentRecorded",
+    actorId: accountants[0]._id,
+    invoiceId: invoice1._id,
+    repairOrderId: order1._id,
+    details: "243.000 ₫ via card — paid in full",
+  });
+  await logAudit({
+    action: "invoiceGenerated",
+    actorId: accountants[1]._id,
+    invoiceId: invoice2._id,
+    repairOrderId: order2._id,
+    details: `${displayId("INV", invoice2._id)} generated for 286.000 ₫`,
+  });
+  await logAudit({
+    action: "paymentRecorded",
+    actorId: accountants[1]._id,
+    invoiceId: invoice2._id,
+    repairOrderId: order2._id,
+    details: "150.000 ₫ via cash — 136.000 ₫ remaining (ref Deposit at pickup)",
+  });
+  await logAudit({
+    action: "invoiceGenerated",
+    actorId: accountants[0]._id,
+    invoiceId: invoice3._id,
+    repairOrderId: order4._id,
+    details: `${displayId("INV", invoice3._id)} generated for 204.000 ₫`,
+  });
+  await logAudit({
+    action: "invoiceSent",
+    actorId: accountants[0]._id,
+    invoiceId: invoice3._id,
+    repairOrderId: order4._id,
+    details: `${displayId("INV", invoice3._id)} sent to ${customers[1].fullName}`,
+  });
+
+  console.log(`[seed] invoices: 3, payments: ${payments.length}`);
+  return { invoice1, invoice2, invoice3 };
+}
+
+async function seedParts() {
+  const parts = await PartModel.insertMany([
+    { name: "Front Brake Pad Set", sku: "BRK-PAD-001", unitPrice: 65000, stockQuantity: 42 },
+    { name: "Brake Rotor (Front, Vented)", sku: "BRK-ROT-002", unitPrice: 120000, stockQuantity: 18 },
+    { name: "Ignition Coil", sku: "IGN-COIL-010", unitPrice: 85000, stockQuantity: 25 },
+    { name: "NGK Spark Plug (4-pack)", sku: "ENG-SPK-004", unitPrice: 32000, stockQuantity: 60 },
+    { name: "Synthetic Engine Oil 5W-30 (4L)", sku: "OIL-SYN-5W30", unitPrice: 55000, stockQuantity: 80 },
+    { name: "Oil Filter", sku: "OIL-FLT-001", unitPrice: 12000, stockQuantity: 95 },
+    { name: "Cabin Air Filter", sku: "AC-FLT-003", unitPrice: 18000, stockQuantity: 50 },
+    { name: "12V Car Battery (60Ah)", sku: "ELE-BAT-060", unitPrice: 175000, stockQuantity: 12 },
+    { name: "Wheel Bearing Kit (Front)", sku: "SUS-BRG-007", unitPrice: 95000, stockQuantity: 16 },
+    { name: "All-Season Tire 215/55R17", sku: "TIR-215-55R17", unitPrice: 210000, stockQuantity: 28 },
+    { name: "Wiper Blade Set", sku: "EXT-WPR-002", unitPrice: 15000, stockQuantity: 70 },
+    { name: "Coolant / Antifreeze (4L)", sku: "FLU-CLT-004", unitPrice: 28000, stockQuantity: 40 },
+  ]);
+  console.log(`[seed] parts: ${parts.length}`);
+  return parts;
 }
 
 async function seedNotificationsReviews({ customers, advisors, technicians, order1, order2, bookings }) {
@@ -639,7 +877,8 @@ async function main() {
     bookings,
   });
   await seedSchedules({ technicians, repairOrders });
-  await seedInvoicesPayments({ order1, order2, accountants, customers, walkIns });
+  await seedInvoicesPayments({ order1, order2, order4, accountants, customers, walkIns });
+  await seedParts();
   await seedNotificationsReviews({ customers, advisors, technicians, order1, order2, bookings });
 
   console.log("\n[seed] done. Login with any seeded account, password: Password123!");

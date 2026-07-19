@@ -1,3 +1,5 @@
+import { apiRequest } from '../../../../shared/lib/api-client'
+
 export type PartRecord = {
   _id: string
   name: string
@@ -8,33 +10,33 @@ export type PartRecord = {
 
 export type PartPayload = Omit<PartRecord, '_id'>
 
-/**
- * No Part model or API exists on the backend yet. This holds parts in memory
- * for the session (resets on reload) so the CRUD UI can be built and used
- * now, then swapped for real requests once the backend ships.
- */
-let mockParts: PartRecord[] = []
-
-export async function fetchParts(): Promise<{ parts: PartRecord[] }> {
-  return { parts: mockParts }
+export function fetchParts(token: string, query?: string) {
+  const search = query?.trim() ? `?q=${encodeURIComponent(query.trim())}` : ''
+  return apiRequest<{ parts: PartRecord[] }>(`/api/admin/parts${search}`, {
+    method: 'GET',
+    token,
+  })
 }
 
-export async function createPart(payload: PartPayload): Promise<{ part: PartRecord }> {
-  const part: PartRecord = { _id: `part-${Date.now()}`, ...payload }
-  mockParts = [part, ...mockParts]
-  return { part }
+export function createPart(token: string, payload: PartPayload) {
+  return apiRequest<{ part: PartRecord }>('/api/admin/parts', {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload),
+  })
 }
 
-export async function updatePart(id: string, payload: PartPayload): Promise<{ part: PartRecord }> {
-  mockParts = mockParts.map((part) => (part._id === id ? { ...part, ...payload } : part))
-  const part = mockParts.find((item) => item._id === id)
-  if (!part) {
-    throw new Error('Part not found')
-  }
-  return { part }
+export function updatePart(token: string, id: string, payload: PartPayload) {
+  return apiRequest<{ part: PartRecord }>(`/api/admin/parts/${id}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(payload),
+  })
 }
 
-export async function deletePart(id: string): Promise<{ message: string }> {
-  mockParts = mockParts.filter((part) => part._id !== id)
-  return { message: 'Part removed' }
+export function deletePart(token: string, id: string) {
+  return apiRequest<{ message: string }>(`/api/admin/parts/${id}`, {
+    method: 'DELETE',
+    token,
+  })
 }

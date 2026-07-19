@@ -5,12 +5,14 @@ import { useEffect, useMemo, useState } from 'react'
 import { createPart, deletePart, fetchParts, updatePart, type PartPayload, type PartRecord } from '../api/partsApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
 import { InlineBanner } from '../../../../widgets/backoffice-shell'
+import { useAuth } from '../../../../shared/auth'
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
 }
 
 export default function AdminPartsPage() {
+  const { token } = useAuth()
   const [parts, setParts] = useState<PartRecord[]>([])
   const [query, setQuery] = useState('')
   const [isLoading, setIsLoading] = useState(false)
@@ -22,13 +24,14 @@ export default function AdminPartsPage() {
   const [form] = Form.useForm<PartPayload>()
 
   useEffect(() => {
+    if (!token) return
     let cancelled = false
 
     const load = async () => {
       setIsLoading(true)
       setRequestError('')
       try {
-        const response = await fetchParts()
+        const response = await fetchParts(token)
         if (cancelled) return
         setParts(response.parts)
       } catch (error) {
@@ -44,7 +47,7 @@ export default function AdminPartsPage() {
     return () => {
       cancelled = true
     }
-  }, [])
+  }, [token])
 
   const filteredParts = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -69,14 +72,15 @@ export default function AdminPartsPage() {
   }
 
   async function handleSubmit(values: PartPayload) {
+    if (!token) return
     setSaving(true)
     setRequestError('')
     try {
       if (editingPart) {
-        const response = await updatePart(editingPart._id, values)
+        const response = await updatePart(token, editingPart._id, values)
         setParts((current) => current.map((part) => (part._id === editingPart._id ? response.part : part)))
       } else {
-        const response = await createPart(values)
+        const response = await createPart(token, values)
         setParts((current) => [response.part, ...current])
       }
       setModalOpen(false)
@@ -88,9 +92,10 @@ export default function AdminPartsPage() {
   }
 
   async function handleDelete(part: PartRecord) {
+    if (!token) return
     setDeletingId(part._id)
     try {
-      await deletePart(part._id)
+      await deletePart(token, part._id)
       setParts((current) => current.filter((item) => item._id !== part._id))
     } catch (error) {
       setRequestError(error instanceof Error ? error.message : 'Unable to remove this part.')

@@ -18,6 +18,7 @@ import { receptionRouter } from "./reception.routes.js";
 import { quotationRouter } from "./quotation.routes.js";
 import { additionalServiceRouter } from "./additional-service.routes.js";
 import { auditLogRouter } from "./audit-log.routes.js";
+import { partRouter } from "./part.routes.js";
 
 /** Mounts every domain router under its API path. Gathered here so app.js
  *  only needs to know about one router. */
@@ -44,6 +45,7 @@ export function createApiRouter() {
   router.use("/quotations", quotationRouter);
   router.use("/additional-service-proposals", additionalServiceRouter);
   router.use("/audit-logs", auditLogRouter);
+  router.use("/admin/parts", partRouter);
 
   return router;
 }

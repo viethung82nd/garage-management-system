@@ -117,6 +117,96 @@ async function sumAmount(repository, match, field) {
 }
 
 /**
+ * Money still owed: total − amountPaid, summed across every open invoice
+ * (unpaid AND partiallyPaid — a partially-paid invoice's remaining balance is
+ * still outstanding, not just fully-unpaid ones).
+ */
+async function sumOutstanding() {
+  const [row] = await invoiceRepository.aggregate([
+    { $match: { status: { $in: ["unpaid", "partiallyPaid"] } } },
+    { $group: { _id: null, total: { $sum: { $subtract: ["$total", { $ifNull: ["$amountPaid", 0] }] } } } },
+  ]);
+  return row?.total ?? 0;
+}
+
+/**
+ * Attributes each succeeded payment in [start, end] back to the service
+ * lines and technician it paid for, so byService/byTechnician revenue is
+ * money actually collected — not the completed order's raw pre-discount/tax
+ * value — and therefore reconciles exactly with totalRevenue (both are
+ * built from the same succeeded-payments-in-period set). This is what keeps
+ * the admin revenue report internally consistent instead of silently mixing
+ * "cash collected" and "value of work done" under one "revenue" label.
+ */
+async function attributeCollectedRevenue(start, end) {
+  const payments = await paymentRepository.model
+    .find({ status: "succeeded", paidAt: { $gte: start, $lte: end } }, { amount: 1, invoiceId: 1 })
+    .lean();
+
+  const collectedByInvoice = new Map();
+  for (const payment of payments) {
+    const key = String(payment.invoiceId);
+    collectedByInvoice.set(key, (collectedByInvoice.get(key) || 0) + payment.amount);
+  }
+
+  const byService = new Map(); // key -> { serviceId, serviceName, orderCount, revenue }
+  const byTechnician = new Map(); // key -> revenue
+
+  if (collectedByInvoice.size === 0) {
+    return { byService, byTechnician };
+  }
+
+  const invoices = await invoiceRepository.model
+    .find({ _id: { $in: [...collectedByInvoice.keys()] } }, { lineItems: 1, total: 1, repairOrderId: 1 })
+    .populate({
+      path: "repairOrderId",
+      select: "technicianId services",
+      populate: { path: "services.serviceId", select: "name" },
+    })
+    .lean();
+
+  for (const invoice of invoices) {
+    const collected = collectedByInvoice.get(String(invoice._id)) || 0;
+    if (collected <= 0) continue;
+
+    const order = invoice.repairOrderId;
+    if (order?.technicianId) {
+      const techKey = String(order.technicianId);
+      byTechnician.set(techKey, (byTechnician.get(techKey) || 0) + collected);
+    }
+
+    const lineItems = invoice.lineItems || [];
+    if (lineItems.length > 0 && invoice.total > 0) {
+      let allocatedSoFar = 0;
+      lineItems.forEach((item, index) => {
+        const orderService = order?.services?.[index];
+        const serviceRef = orderService?.serviceId; // populated { _id, name } or undefined
+        const key = serviceRef ? String(serviceRef._id) : `unassigned:${item.description}`;
+        const isLast = index === lineItems.length - 1;
+        // The last line takes whatever remains, so per-line rounding never
+        // leaves this invoice's collected amount short of fully allocated.
+        const share = isLast
+          ? collected - allocatedSoFar
+          : Math.round((item.unitPrice * item.quantity * collected) / invoice.total);
+        allocatedSoFar += share;
+
+        const existing = byService.get(key) || {
+          serviceId: serviceRef?._id || null,
+          serviceName: serviceRef?.name || item.description,
+          orderCount: 0,
+          revenue: 0,
+        };
+        existing.orderCount += item.quantity;
+        existing.revenue += share;
+        byService.set(key, existing);
+      });
+    }
+  }
+
+  return { byService, byTechnician };
+}
+
+/**
  * Read-only dashboard figures for admins and accountants. Aggregates booking
  * counts and revenue in a handful of grouped queries; safe to call frequently.
  */
@@ -128,7 +218,7 @@ export async function getStatsSummary() {
     bookingRepository.countDocuments({ bookingDate: today }),
     bookingRepository.aggregate([{ $group: { _id: "$status", count: { $sum: 1 } } }]),
     sumAmount(paymentRepository, { status: "succeeded" }, "amount"),
-    sumAmount(invoiceRepository, { status: "unpaid" }, "total"),
+    sumOutstanding(),
   ]);
 
   // Zero-fill every known status so the shape is stable regardless of the data.
@@ -159,7 +249,7 @@ export async function getRevenueReport({ startDate, endDate, period = "monthly",
   }
 
   const paidRange = { $gte: start, $lte: end };
-  const [payTotals, methodRows, totalInvoices, completedOrders, serviceRows] = await Promise.all([
+  const [payTotals, methodRows, totalInvoices, completedOrders, attributed, workload] = await Promise.all([
     paymentRepository.aggregate([
       { $match: { status: "succeeded", paidAt: paidRange } },
       { $group: { _id: null, total: { $sum: "$amount" } } },
@@ -171,22 +261,33 @@ export async function getRevenueReport({ startDate, endDate, period = "monthly",
     ]),
     invoiceRepository.countDocuments({ status: "paid", issuedAt: paidRange }),
     repairOrderRepository.countDocuments({ status: "completed", completedAt: paidRange }),
-    repairOrderRepository.aggregate([
-      { $match: { status: "completed", completedAt: paidRange } },
-      { $unwind: "$services" },
-      {
-        $group: {
-          _id: "$services.serviceId",
-          serviceName: { $first: "$services.name" },
-          orderCount: { $sum: "$services.quantity" },
-          revenue: { $sum: { $multiply: ["$services.priceAtTime", "$services.quantity"] } },
-        },
-      },
-      { $sort: { revenue: -1 } },
-    ]),
+    // Money actually collected in this period, attributed back to the
+    // services/technicians it paid for — see attributeCollectedRevenue's
+    // doc comment for why this (not raw completed-order value) is used.
+    attributeCollectedRevenue(start, end),
+    // Workload metrics (orderCount/completionRate/avgTime) are still based on
+    // completed orders in the period — a legitimate, separate "how busy was
+    // this technician" measure, not a money figure, so it keeps its own basis.
+    technicianBreakdown(start, end),
   ]);
 
-  const byTechnician = await technicianBreakdown(start, end);
+  const technicianNameById = new Map(workload.map((t) => [String(t.technicianId), t.technicianName]));
+  const byTechnician = workload.map((t) => ({
+    ...t,
+    revenue: attributed.byTechnician.get(String(t.technicianId)) || 0,
+  }));
+  // Include technicians who collected money in this period but have no
+  // completed-order row above (e.g. their order completed before the
+  // period but the customer paid during it) — otherwise their revenue would
+  // silently vanish from the breakdown while still counting toward totalRevenue.
+  for (const [techId, revenue] of attributed.byTechnician) {
+    if (!technicianNameById.has(techId)) {
+      byTechnician.push({ technicianId: techId, technicianName: null, orderCount: 0, completionRate: 0, avgTime: 0, revenue });
+    }
+  }
+  byTechnician.sort((a, b) => b.revenue - a.revenue);
+
+  const byService = [...attributed.byService.values()].sort((a, b) => b.revenue - a.revenue);
 
   const report = {
     period,
@@ -195,12 +296,7 @@ export async function getRevenueReport({ startDate, endDate, period = "monthly",
     totalRevenue: payTotals[0]?.total ?? 0,
     totalOrders: completedOrders,
     totalInvoices,
-    byService: serviceRows.map((r) => ({
-      serviceId: r._id,
-      serviceName: r.serviceName,
-      orderCount: r.orderCount,
-      revenue: r.revenue,
-    })),
+    byService,
     byPaymentMethod: methodRows.map((r) => ({ method: r._id, count: r.count, amount: r.amount })),
     byTechnician,
     currency: "VND",
