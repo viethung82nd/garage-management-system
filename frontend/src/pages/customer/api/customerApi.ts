@@ -98,7 +98,10 @@ export type CustomerInvoiceApiRecord = {
   issuedAt: string
   subtotal: number
   discount: number
+  taxAmount: number
   total: number
+  amountPaid: number
+  balanceDue: number
   lineItems: Array<{
     id: string
     description: string
@@ -143,6 +146,7 @@ export type CustomerInvoiceApiRecord = {
     color?: string
     chassisNumber?: string
     engineNumber?: string
+    lastKnownMileage?: number | null
   } | null
   serviceAdvisor: {
     id: string

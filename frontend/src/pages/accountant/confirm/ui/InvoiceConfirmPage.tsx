@@ -222,12 +222,16 @@ export default function InvoiceConfirmPage() {
         status: 'Ready to bill',
         customer: order.vehicleId?.customerId?.fullName || 'Walk-in customer',
         contact: order.vehicleId?.customerId?.phone || 'Updating',
+        email: order.vehicleId?.customerId?.email || null,
         vehicle: formatVehicleLabel({
           brand: order.vehicleId?.brand,
           model: order.vehicleId?.model,
           year: order.vehicleId?.year,
           licensePlate: order.vehicleId?.licensePlate,
         }),
+        plate: order.vehicleId?.licensePlate || null,
+        vin: order.vehicleId?.chassisNumber || order.vehicleId?.engineNumber || null,
+        mileage: order.vehicleId?.lastKnownMileage ?? null,
         issuedAt: formatDateTime(order.completedAt),
         dueAt: null as string | null,
         paymentMethod: 'Direct payment at service desk',
@@ -277,12 +281,16 @@ export default function InvoiceConfirmPage() {
       status,
       customer: invoice.customer?.fullName || 'Customer updating',
       contact: invoice.customer?.phone || invoice.customer?.email || 'Updating',
+      email: invoice.customer?.email || null,
       vehicle: formatVehicleLabel({
         brand: invoice.vehicle?.brand,
         model: invoice.vehicle?.model,
         year: invoice.vehicle?.year ?? null,
         licensePlate: invoice.vehicle?.licensePlate,
       }),
+      plate: invoice.vehicle?.licensePlate || null,
+      vin: invoice.vehicle?.chassisNumber || invoice.vehicle?.engineNumber || null,
+      mileage: invoice.vehicle?.lastKnownMileage ?? null,
       issuedAt: formatDateTime(invoice.issuedAt),
       dueAt: invoice.dueAt || null,
       paymentMethod: paymentMethodLabel(invoice.latestPayment?.method),
@@ -439,14 +447,17 @@ export default function InvoiceConfirmPage() {
             >
             {detailMeta ? (
               <>
-                {/* Letterhead */}
+                {/* Letterhead — matches the customer-facing invoice sheet so both
+                    sides read as the same document. */}
                 <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-5" style={{ borderColor: accountantPalette.border }}>
                   <div>
                     <div className="text-[15px] font-bold uppercase tracking-[0.06em]" style={{ color: '#1e3a5f' }}>
-                      Kapa Auto Service
+                      Kapa Auto Care Center
                     </div>
-                    <div className="mt-1 text-xs" style={{ color: accountantPalette.textMuted }}>
-                      Automotive repair &amp; maintenance workshop
+                    <div className="mt-1 text-xs leading-5" style={{ color: accountantPalette.textMuted }}>
+                      7011 Vermont Ave, Los Angeles, CA 90044
+                      <br />
+                      support@kapa-garage.com · +1 (323) 750-1234
                     </div>
                   </div>
                   <div className="text-right">
@@ -473,8 +484,9 @@ export default function InvoiceConfirmPage() {
                   </Tag>
                 </div>
 
-                {/* Bill-to / service details */}
-                <div className="mt-4 grid gap-6 sm:grid-cols-2">
+                {/* Billed to / Vehicle details / Service details — same three
+                    facts the customer sees on their copy of this invoice. */}
+                <div className="mt-4 grid gap-6 sm:grid-cols-3">
                   <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
                       Billed to
@@ -485,11 +497,27 @@ export default function InvoiceConfirmPage() {
                     <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
                       {detailMeta.contact}
                     </div>
-                    <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
+                    {detailMeta.email ? (
+                      <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
+                        {detailMeta.email}
+                      </div>
+                    ) : null}
+                  </div>
+                  <div>
+                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
+                      Vehicle details
+                    </div>
+                    <div className="mt-1.5 text-sm font-semibold" style={{ color: accountantPalette.ink }}>
                       {detailMeta.vehicle}
                     </div>
+                    <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
+                      VIN: {detailMeta.vin || 'Not recorded'}
+                    </div>
+                    <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
+                      Odometer: {detailMeta.mileage != null ? `${new Intl.NumberFormat('en-US').format(detailMeta.mileage)} km` : 'Not recorded'}
+                    </div>
                   </div>
-                  <div className="sm:text-right">
+                  <div>
                     <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
                       Service details
                     </div>
@@ -592,7 +620,7 @@ export default function InvoiceConfirmPage() {
                 </div>
 
                 <div className="mt-6 border-t pt-4 text-xs" style={{ borderColor: accountantPalette.border, color: accountantPalette.textMuted }}>
-                  Thank you for servicing your vehicle with us. This document is generated by Kapa Auto Service and reflects work completed under repair order {detailMeta.displayId}.
+                  Thank you for servicing your vehicle with us. This document is generated by Kapa Auto Care Center and reflects work completed under repair order {detailMeta.displayId}.
                 </div>
               </>
             ) : null}

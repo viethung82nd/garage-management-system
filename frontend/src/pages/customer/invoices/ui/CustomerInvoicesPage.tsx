@@ -25,10 +25,6 @@ import type { CustomerInvoiceRecord, CustomerInvoiceStatus } from '../../model/m
 
 const GARAGE_NAME = 'Kapa Auto Care Center'
 
-function parseMoney(value: string) {
-  return Number(value.replace(/[^0-9.-]+/g, ''))
-}
-
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
 }
@@ -109,6 +105,9 @@ function mapInvoiceStatus(invoice: CustomerInvoiceApiRecord): {
   if (invoice.status === 'cancelled') {
     return { label: 'Cancelled', tone: 'ready' as const }
   }
+  if (invoice.status === 'partiallyPaid') {
+    return { label: 'Partially paid', tone: 'in-progress' as const }
+  }
   return { label: 'Awaiting payment', tone: 'pending' as const }
 }
 
@@ -173,7 +172,7 @@ export default function CustomerInvoicesPage() {
         vehicle: [invoice.vehicle?.brand, invoice.vehicle?.model, invoice.vehicle?.year].filter(Boolean).join(' ') || 'Vehicle updating',
         plate: invoice.vehicle?.licensePlate || 'Not recorded',
         vin: invoice.vehicle?.chassisNumber || invoice.vehicle?.engineNumber || 'Not recorded',
-        mileage: 'Not recorded',
+        mileage: invoice.vehicle?.lastKnownMileage != null ? `${new Intl.NumberFormat('en-US').format(invoice.vehicle.lastKnownMileage)} km` : 'Not recorded',
         advisor: invoice.serviceAdvisor?.fullName || 'Service advisor updating',
         technician: invoice.technician?.fullName || 'Technician updating',
         customerName: invoice.customer?.fullName || user?.fullName || 'Customer',
@@ -186,9 +185,11 @@ export default function CustomerInvoicesPage() {
         paymentMethod: paymentMethodLabel(invoice.latestPayment?.method),
         paymentNote: paymentNote(invoice),
         subtotal: formatMoney(invoice.subtotal),
-        tax: formatMoney(0),
+        tax: formatMoney(invoice.taxAmount || 0),
         discount: formatMoney(invoice.discount),
         total: formatMoney(invoice.total),
+        amountPaid: formatMoney(invoice.amountPaid || 0),
+        balanceDue: formatMoney(invoice.balanceDue ?? invoice.total),
         serviceItems: invoice.lineItems.map((item, index) => ({
           item: `SRV-${String(index + 1).padStart(2, '0')}`,
           label: item.description,
@@ -224,6 +225,7 @@ export default function CustomerInvoicesPage() {
   const summary = useMemo(
     () => ({
       paid: customerInvoices.filter((invoice) => invoice.statusTone === 'completed').length,
+      partiallyPaid: customerInvoices.filter((invoice) => invoice.statusTone === 'in-progress').length,
       awaiting: customerInvoices.filter((invoice) => invoice.statusTone === 'pending').length,
       updated: customerInvoices.filter((invoice) => invoice.statusTone === 'ready').length,
     }),
@@ -249,8 +251,9 @@ export default function CustomerInvoicesPage() {
         <CustomerAccountNav />
         <CustomerSectionHeading eyebrow="Billing Records" title="Your invoices" description="Direct invoices uploaded by Kapa accounting." compact />
 
-        <div className="customer-metric-strip customer-metric-strip--three">
+        <div className="customer-metric-strip customer-metric-strip--four">
           <CustomerMetricCard label="Paid" value={summary.paid} />
+          <CustomerMetricCard label="Partially Paid" value={summary.partiallyPaid} accent />
           <CustomerMetricCard label="Awaiting Payment" value={summary.awaiting} accent />
           <CustomerMetricCard label="Adjusted / Updated" value={summary.updated} />
         </div>
@@ -273,6 +276,7 @@ export default function CustomerInvoicesPage() {
               <CustomerSelect id="invoice-status" name="invoice-status" value={status} onChange={(event) => setStatus(event.target.value)}>
                 <option value="all">All statuses</option>
                 <option value="completed">Paid</option>
+                <option value="in-progress">Partially paid</option>
                 <option value="pending">Awaiting payment</option>
                 <option value="ready">Adjusted / updated</option>
               </CustomerSelect>
@@ -466,29 +470,22 @@ export default function CustomerInvoicesPage() {
                         <th>Description</th>
                         <th>Quantity</th>
                         <th>Unit Price</th>
-                        <th>GST</th>
                         <th>Total</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {selectedInvoice.serviceItems.map((item) => {
-                        const gstAmount = 0
-                        const lineGrandTotal = parseMoney(item.lineTotal) + gstAmount
-
-                        return (
-                          <tr key={`${selectedInvoice.id}-${item.item}`}>
-                            <td>{item.item}</td>
-                            <td>
-                              <strong>{item.label}</strong>
-                              <span>{item.description}</span>
-                            </td>
-                            <td className="customer-invoice-sheet__table-number">{item.quantity}</td>
-                            <td className="customer-invoice-sheet__table-number">{item.unitPrice}</td>
-                            <td className="customer-invoice-sheet__table-number">{formatMoney(gstAmount)}</td>
-                            <td className="customer-invoice-sheet__table-number">{formatMoney(lineGrandTotal)}</td>
-                          </tr>
-                        )
-                      })}
+                      {selectedInvoice.serviceItems.map((item) => (
+                        <tr key={`${selectedInvoice.id}-${item.item}`}>
+                          <td>{item.item}</td>
+                          <td>
+                            <strong>{item.label}</strong>
+                            <span>{item.description}</span>
+                          </td>
+                          <td className="customer-invoice-sheet__table-number">{item.quantity}</td>
+                          <td className="customer-invoice-sheet__table-number">{item.unitPrice}</td>
+                          <td className="customer-invoice-sheet__table-number">{item.lineTotal}</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
                 </div>
@@ -507,17 +504,34 @@ export default function CustomerInvoicesPage() {
                         <td>{selectedInvoice.subtotal}</td>
                       </tr>
                       <tr>
+                        <td>Discount</td>
+                        <td>{selectedInvoice.discount}</td>
+                      </tr>
+                      <tr>
                         <td>Tax</td>
                         <td>{selectedInvoice.tax}</td>
                       </tr>
                       <tr>
-                        <td>Discount</td>
-                        <td>{selectedInvoice.discount}</td>
-                      </tr>
-                      <tr className="customer-invoice-sheet__grand-total">
-                        <td>Balance Due</td>
+                        <td>Total</td>
                         <td>{selectedInvoice.total}</td>
                       </tr>
+                      {selectedInvoice.invoiceStatus === 'Partially paid' ? (
+                        <tr>
+                          <td>Paid so far</td>
+                          <td>{selectedInvoice.amountPaid}</td>
+                        </tr>
+                      ) : null}
+                      {selectedInvoice.invoiceStatus !== 'Paid' ? (
+                        <tr className="customer-invoice-sheet__grand-total">
+                          <td>Balance Due</td>
+                          <td>{selectedInvoice.balanceDue}</td>
+                        </tr>
+                      ) : (
+                        <tr className="customer-invoice-sheet__grand-total">
+                          <td>Balance Due</td>
+                          <td>{formatMoney(0)}</td>
+                        </tr>
+                      )}
                     </tbody>
                   </table>
                 </div>

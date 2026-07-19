@@ -14,6 +14,9 @@ export type RepairOrderApiRecord = {
     brand?: string
     model?: string
     year?: number
+    chassisNumber?: string
+    engineNumber?: string
+    lastKnownMileage?: number | null
     customerId?: {
       _id: string
       fullName: string
@@ -98,6 +101,9 @@ export type InvoiceApiRecord = {
     model?: string
     year?: number | null
     color?: string
+    chassisNumber?: string
+    engineNumber?: string
+    lastKnownMileage?: number | null
   } | null
   serviceAdvisor: {
     id: string

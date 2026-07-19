@@ -145,7 +145,7 @@ export type BookingHistoryRecord = {
   additionalProposal?: string
 }
 
-export type CustomerInvoiceStatus = 'Paid' | 'Awaiting payment' | 'Updated' | 'Cancelled'
+export type CustomerInvoiceStatus = 'Paid' | 'Partially paid' | 'Awaiting payment' | 'Updated' | 'Cancelled'
 
 export type CustomerInvoiceLineItem = {
   item: string
@@ -174,13 +174,15 @@ export type CustomerInvoiceRecord = {
   customerAddress: string
   accountantName: string
   invoiceStatus: CustomerInvoiceStatus
-  statusTone: 'completed' | 'pending' | 'ready'
+  statusTone: 'completed' | 'in-progress' | 'pending' | 'ready'
   paymentMethod: 'Cash at garage' | 'Card at counter' | 'Bank transfer'
   paymentNote: string
   subtotal: string
   tax: string
   discount: string
   total: string
+  amountPaid: string
+  balanceDue: string
   serviceItems: CustomerInvoiceLineItem[]
   issueImages: string[]
   garageName: string
@@ -311,6 +313,8 @@ export const customerInvoices: CustomerInvoiceRecord[] = [
     tax: '$18.00',
     discount: '$0.00',
     total: '$228.00',
+    amountPaid: '$0.00',
+    balanceDue: '$228.00',
     serviceItems: [
       { item: 'SRV-01', label: 'Engine diagnostics', description: 'Confirmed braking feel issue and scanned engine control system.', quantity: 1, unitPrice: '$78.00', lineTotal: '$78.00' },
       { item: 'SRV-02', label: 'Oil change', description: 'Replaced engine oil and oil filter under scheduled maintenance.', quantity: 1, unitPrice: '$68.00', lineTotal: '$68.00' },
@@ -349,6 +353,8 @@ export const customerInvoices: CustomerInvoiceRecord[] = [
     tax: '$12.00',
     discount: '$0.00',
     total: '$148.00',
+    amountPaid: '$148.00',
+    balanceDue: '$0.00',
     serviceItems: [
       { item: 'SRV-11', label: 'AC inspection', description: 'Checked airflow, cooling efficiency, and compressor response.', quantity: 1, unitPrice: '$64.00', lineTotal: '$64.00' },
       { item: 'SRV-12', label: 'Cabin filter replacement', description: 'Installed new cabin filter after advisor recommendation.', quantity: 1, unitPrice: '$72.00', lineTotal: '$72.00' },
@@ -384,6 +390,8 @@ export const customerInvoices: CustomerInvoiceRecord[] = [
     tax: '$8.00',
     discount: '$0.00',
     total: '$96.00',
+    amountPaid: '$96.00',
+    balanceDue: '$0.00',
     serviceItems: [
       { item: 'SRV-21', label: 'Tire rotation', description: 'Balanced tire wear before highway trip preparation.', quantity: 1, unitPrice: '$38.00', lineTotal: '$38.00' },
       { item: 'SRV-22', label: 'Wheel alignment', description: 'Adjusted alignment after steering drift inspection.', quantity: 1, unitPrice: '$50.00', lineTotal: '$50.00' },

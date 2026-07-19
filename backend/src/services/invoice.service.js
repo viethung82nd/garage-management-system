@@ -17,7 +17,7 @@ const invoicePopulate = [
     populate: [
       {
         path: "vehicleId",
-        select: "licensePlate brand model year color chassisNumber engineNumber customerId",
+        select: "licensePlate brand model year color chassisNumber engineNumber customerId lastKnownMileage",
         populate: { path: "customerId", select: "fullName phone email accountType role" },
       },
       { path: "advisorId", select: "fullName email phone role" },
@@ -126,6 +126,7 @@ function serializeInvoice(invoice, latestPayment) {
           color: vehicle.color || "",
           chassisNumber: vehicle.chassisNumber || "",
           engineNumber: vehicle.engineNumber || "",
+          lastKnownMileage: vehicle.lastKnownMileage ?? null,
         }
       : null,
     serviceAdvisor: order?.advisorId
