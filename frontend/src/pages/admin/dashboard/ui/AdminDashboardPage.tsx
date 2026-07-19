@@ -74,12 +74,12 @@ function channelTone(channel: BookingRecord['channel']) {
   }
 }
 
-function formatCompactCurrency(value: number, currency: string) {
+// Full digit groups, not compact notation ("1,8 Tr ₫") — compact notation
+// abbreviates using Vietnamese words (N = nghìn, Tr = triệu), which reads as
+// a typo/garbled currency to anyone not expecting it.
+function formatCurrency(value: number, currency: string) {
   if (currency === 'VND') {
-    return `${new Intl.NumberFormat('vi-VN', {
-      notation: 'compact',
-      maximumFractionDigits: 1,
-    }).format(value)} ₫`
+    return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
   }
 
   return new Intl.NumberFormat('en-US', {
@@ -439,8 +439,8 @@ export default function AdminDashboardPage() {
       pending: { value: byStatus.pending || 0, delta: `Confirmed ${byStatus.confirmed || 0}` },
       completed: { value: byStatus.completed || 0, delta: `Cancelled ${byStatus.cancelled || 0}` },
       outstanding: {
-        value: formatCompactCurrency(summary.revenue.outstanding, summary.revenue.currency),
-        delta: `Collected ${formatCompactCurrency(summary.revenue.collected, summary.revenue.currency)}`,
+        value: formatCurrency(summary.revenue.outstanding, summary.revenue.currency),
+        delta: `Collected ${formatCurrency(summary.revenue.collected, summary.revenue.currency)}`,
       },
     }
 
@@ -707,7 +707,7 @@ export default function AdminDashboardPage() {
               Revenue by service
             </div>
           </div>
-          <DonutChart data={serviceMixData} centerLabel="Revenue mix" formatValue={(value) => formatCompactCurrency(value, revenueReport?.currency || 'VND')} />
+          <DonutChart data={serviceMixData} centerLabel="Revenue mix" formatValue={(value) => formatCurrency(value, revenueReport?.currency || 'VND')} />
         </Card>
 
         <Card
