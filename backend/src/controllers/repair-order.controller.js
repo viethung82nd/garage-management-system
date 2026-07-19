@@ -94,15 +94,11 @@ export async function deleteStepNote(req, res) {
 }
 
 export async function getRepairOrderStatus(req, res) {
-  try {
-    const result = await repairOrderService.getRepairOrderStatus(req.params.id);
-    if (!result) {
-      return res.status(404).json({ message: "Repair order not found" });
-    }
-    return res.status(200).json(result);
-  } catch (error) {
-    return res.status(500).json({ message: error.message });
+  const result = await repairOrderService.getRepairOrderStatus(req.params.id);
+  if (!result) {
+    return res.status(404).json({ message: "Repair order not found" });
   }
+  return res.status(200).json(result);
 }
 
 export async function getRepairOrderSummary(req, res) {

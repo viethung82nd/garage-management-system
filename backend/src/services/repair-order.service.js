@@ -461,6 +461,10 @@ export async function deleteStepNote(orderId, noteIndex) {
 }
 
 export async function getRepairOrderStatus(id) {
+  if (!id.match(OID_RE)) {
+    throw new ApiError(400, "Invalid repair order ID format");
+  }
+
   const repairOrder = await repairOrderRepository.model
     .findById(id)
     .populate("vehicleId")
