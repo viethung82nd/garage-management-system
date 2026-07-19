@@ -6,6 +6,7 @@ import {
   createBooking,
   listBookings,
   myBookings,
+  getBookingById,
   confirmBooking,
   updateBookingStatus,
   cancelBooking,
@@ -27,6 +28,12 @@ bookingRouter.get(
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
   asyncHandler(listBookings)
+);
+bookingRouter.get(
+  "/:id",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  asyncHandler(getBookingById)
 );
 bookingRouter.patch(
   "/:id/confirm",

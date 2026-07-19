@@ -140,14 +140,11 @@ export async function createInspectionReport(req, res) {
     recommendedServices,
     "recommendedServices",
   ).map((service) => {
-    if (!service?.serviceId || !service?.name) {
-      throw new HttpError(
-        400,
-        "Each recommended service must include serviceId and name",
-      );
+    if (!service?.name) {
+      throw new HttpError(400, "Each recommended service must include a name");
     }
     return {
-      serviceId: service.serviceId,
+      serviceId: service.serviceId || undefined,
       name: service.name,
       price: service.price != null ? Number(service.price) : undefined,
       isRequired: service.isRequired === true || service.isRequired === "true",

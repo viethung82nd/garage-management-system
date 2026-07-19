@@ -6,6 +6,11 @@ import { sendEmail } from "../utils/mailer.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const FE_STATUSES = ["pending", "sent", "approved", "rejected"];
+// Once an SA has approved or rejected a proposal, that decision is final —
+// re-approving would push a duplicate service line onto the repair order
+// (see the "approved" branch below), and re-rejecting an approved proposal
+// would leave a phantom line on the order with no way to remove it.
+const TERMINAL_STATUSES = ["approved", "rejected"];
 
 /** GET /api/additional-service-proposals — SA review queue. */
 export async function listAdditionalServiceProposals(req, res) {
@@ -50,6 +55,8 @@ export async function createAdditionalServiceProposal(req, res) {
     throw new HttpError(400, "serviceName is required");
   }
 
+  const repairOrderForNotify = await RepairOrderModel.findById(repairOrderId).select("advisorId");
+
   const proposal = await ServiceRequestModel.create({
     repairOrderId,
     technicianId: req.user.sub,
@@ -66,6 +73,18 @@ export async function createAdditionalServiceProposal(req, res) {
   });
 
   await proposal.populate("technicianId", "fullName email phone role");
+
+  if (repairOrderForNotify?.advisorId) {
+    await createNotification({
+      userId: repairOrderForNotify.advisorId,
+      type: "additionalServiceProposed",
+      title: "New additional service proposal",
+      message: `${proposal.technicianId?.fullName || "A technician"} flagged extra work: ${proposal.serviceName}.`,
+      refId: proposal.repairOrderId,
+      refModel: "RepairOrder",
+    });
+  }
+
   res.status(201).json(proposal);
 }
 
@@ -88,6 +107,12 @@ export async function updateAdditionalServiceProposal(req, res) {
   if (!proposal) {
     throw new HttpError(404, "Proposal not found");
   }
+  if (TERMINAL_STATUSES.includes(proposal.status)) {
+    throw new HttpError(
+      409,
+      `This proposal was already ${proposal.status} and can no longer be changed`,
+    );
+  }
 
   proposal.status = status;
   proposal.reviewedBy = req.user.sub;
@@ -96,6 +121,25 @@ export async function updateAdditionalServiceProposal(req, res) {
   }
   await proposal.save();
   await proposal.populate("technicianId", "fullName email phone role");
+
+  // Approved extra work must actually land on the order, or it's invisible
+  // on the eventual invoice (which is derived purely from RepairOrder.services).
+  if (status === "approved") {
+    const order = await RepairOrderModel.findById(proposal.repairOrderId);
+    if (order) {
+      order.services.push({
+        serviceId: proposal.serviceId || undefined,
+        name: proposal.serviceName,
+        priceAtTime: (proposal.laborCost || 0) + (proposal.partsCost || 0),
+        quantity: 1,
+      });
+      order.totalCost = order.services.reduce(
+        (sum, service) => sum + service.priceAtTime * (service.quantity || 1),
+        0,
+      );
+      await order.save();
+    }
+  }
 
   if (status === "sent") {
     const order = await RepairOrderModel.findById(proposal.repairOrderId);

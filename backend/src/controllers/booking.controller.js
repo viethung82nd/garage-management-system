@@ -333,6 +333,16 @@ export async function listBookings(req, res) {
   res.json({ bookings });
 }
 
+/**
+ * GET /api/bookings/:id — a single booking, staff-only. Used by the SA
+ * reception flow to pre-fill the reception form when arriving from a
+ * "Confirm" action via ?bookingId= instead of a blind plate search.
+ */
+export async function getBookingById(req, res) {
+  const booking = await loadBooking(req.params.id);
+  res.json({ booking: await populateBooking(booking) });
+}
+
 /** GET /api/bookings/mine — the authenticated customer's own bookings. */
 export async function myBookings(req, res) {
   const bookings = await BookingModel.find({ customerId: req.user.sub })

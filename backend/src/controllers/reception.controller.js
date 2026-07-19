@@ -1,17 +1,21 @@
-import { RepairOrderModel, VehicleModel } from "../models/index.js";
+import { BookingModel, RepairOrderModel, VehicleModel } from "../models/index.js";
 import { resolveCustomer, resolveVehicle } from "./booking.controller.js";
 import { HttpError } from "../middleware/error.js";
 
+const OID_RE = /^[0-9a-fA-F]{24}$/;
+
 /**
- * POST /api/receptions — Service Advisor registers a walk-in customer +
- * vehicle at the front desk (no prior booking). Reuses the same
- * find-or-create logic as public booking creation. Doesn't create a Booking
- * (the appointment/slot system is for scheduling future capacity, not a
- * customer already standing at the desk) — the SA continues straight to
- * /advisor/work-orders to open a real RepairOrder for this vehicle.
+ * POST /api/receptions — Service Advisor receives a vehicle at the front
+ * desk, either from a confirmed booking (bookingId provided) or as a walk-in
+ * (no bookingId). Reuses the same find-or-create logic as public booking
+ * creation for the customer/vehicle, then always opens a RepairOrder "shell"
+ * (no services yet) — this is the single spine record every later stage
+ * (inspection, quotation, assignment, quality check, invoicing) attaches to
+ * via its repairOrderId, carried through the SA UI as a ?orderId= param.
  */
 export async function createReception(req, res) {
   const {
+    bookingId,
     customerName,
     phone,
     customerEmail,
@@ -20,13 +24,42 @@ export async function createReception(req, res) {
     vin,
     engineNo,
     mileage,
+    issueDescription,
+    promisedAt,
   } = req.body ?? {};
+
+  let booking = null;
+  if (bookingId !== undefined && bookingId !== null && bookingId !== "") {
+    if (!OID_RE.test(bookingId)) {
+      throw new HttpError(400, "Invalid bookingId format");
+    }
+    booking = await BookingModel.findById(bookingId);
+    if (!booking) {
+      throw new HttpError(404, "Booking not found");
+    }
+    if (booking.repairOrderId) {
+      throw new HttpError(409, "This booking has already been received");
+    }
+  }
 
   if (!customerName?.trim() || !phone?.trim()) {
     throw new HttpError(400, "customerName and phone are required");
   }
   if (!plate?.trim()) {
     throw new HttpError(400, "plate is required");
+  }
+
+  let parsedPromisedAt;
+  if (promisedAt) {
+    parsedPromisedAt = new Date(promisedAt);
+    if (Number.isNaN(parsedPromisedAt.getTime())) {
+      throw new HttpError(400, "Invalid promisedAt date");
+    }
+    const startOfToday = new Date();
+    startOfToday.setHours(0, 0, 0, 0);
+    if (parsedPromisedAt < startOfToday) {
+      throw new HttpError(400, "promisedAt cannot be in the past");
+    }
   }
 
   const customer = await resolveCustomer({
@@ -47,7 +80,25 @@ export async function createReception(req, res) {
   }
   await vehicle.save();
 
-  res.status(201).json({ customer, vehicle });
+  const repairOrder = await RepairOrderModel.create({
+    vehicleId: vehicle._id,
+    advisorId: req.user.sub,
+    services: [],
+    status: "pending",
+    issueDescription: issueDescription?.trim() || undefined,
+    promisedAt: parsedPromisedAt,
+  });
+
+  if (booking) {
+    booking.repairOrderId = repairOrder._id;
+    if (booking.status === "pending") {
+      booking.status = "confirmed";
+      booking.advisorId = req.user.sub;
+    }
+    await booking.save();
+  }
+
+  res.status(201).json({ customer, vehicle, repairOrder, booking });
 }
 
 /**

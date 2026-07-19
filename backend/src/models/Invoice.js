@@ -28,6 +28,7 @@ const invoiceSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "RepairOrder",
       required: true,
+      unique: true,
     },
     accountantId: {
       type: Schema.Types.ObjectId,

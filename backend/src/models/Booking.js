@@ -30,6 +30,13 @@ const bookingSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    // Set once the SA receives this booking's vehicle at the front desk —
+    // see reception.controller.js#createReception. Lets a booking be traced
+    // forward into the repair-order chain it produced.
+    repairOrderId: {
+      type: Schema.Types.ObjectId,
+      ref: "RepairOrder",
+    },
     bookingDate: {
       type: Date,
       required: true,

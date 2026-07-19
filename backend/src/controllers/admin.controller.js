@@ -250,6 +250,41 @@ export async function getRevenueReport(req, res) {
 }
 
 /**
+ * GET /api/admin/stats/daily-intake — booking counts per calendar day for the
+ * last `days` days (default 7, max 31), oldest first. Powers the admin
+ * dashboard's daily reception volume chart.
+ */
+export async function getDailyIntake(req, res) {
+  const days = Math.min(Math.max(Number(req.query.days) || 7, 1), 31);
+  const today = todayUtc();
+  const start = new Date(today);
+  start.setUTCDate(start.getUTCDate() - (days - 1));
+  const rangeEnd = new Date(today);
+  rangeEnd.setUTCHours(23, 59, 59, 999); // bookingDate isn't guaranteed to be midnight-normalized (e.g. seeded data), so bound by end-of-day rather than exact midnight.
+
+  const rows = await BookingModel.aggregate([
+    { $match: { bookingDate: { $gte: start, $lte: rangeEnd } } },
+    {
+      $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$bookingDate" } },
+        count: { $sum: 1 },
+      },
+    },
+  ]);
+  const countByDate = new Map(rows.map((r) => [r._id, r.count]));
+
+  const series = [];
+  for (let i = 0; i < days; i += 1) {
+    const date = new Date(start);
+    date.setUTCDate(date.getUTCDate() + i);
+    const key = date.toISOString().slice(0, 10);
+    series.push({ date: key, count: countByDate.get(key) || 0 });
+  }
+
+  res.json({ days: series });
+}
+
+/**
  * GET /api/admin/reports/technicians — technician performance over a period.
  * Query: startDate, endDate (YYYY-MM-DD, required)
  */

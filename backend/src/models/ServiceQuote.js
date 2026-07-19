@@ -9,6 +9,10 @@ export const QUOTE_LINE_KINDS = ["service", "part", "labor"];
 
 const quoteLineSchema = new Schema(
   {
+    // Set when the SA added this line from the service catalog; left unset
+    // for a hand-typed custom line. Lets confirmQuotation carry a real
+    // service reference through to RepairOrder.services instead of losing it.
+    serviceId: { type: Schema.Types.ObjectId, ref: "Service" },
     description: { type: String, trim: true },
     kind: { type: String, enum: QUOTE_LINE_KINDS, default: "service" },
     quantity: { type: Number, default: 1, min: 0 },
@@ -26,6 +30,12 @@ const serviceQuoteSchema = new Schema(
     repairOrderId: {
       type: Schema.Types.ObjectId,
       ref: "RepairOrder",
+      required: true,
+    },
+    vehicleId: {
+      type: Schema.Types.ObjectId,
+      ref: "Vehicle",
+      required: true,
     },
     customerId: {
       type: Schema.Types.ObjectId,

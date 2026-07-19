@@ -3,6 +3,7 @@ import { requireAuth, requireRole } from "../middleware/auth.js";
 import { asyncHandler } from "../middleware/error.js";
 import {
   getStatsSummary,
+  getDailyIntake,
   getRevenueReport,
   getTechnicianPerformance,
   listUsers,
@@ -34,6 +35,12 @@ adminRouter.get(
   requireAuth,
   requireRole("admin", "accountant"),
   asyncHandler(getStatsSummary)
+);
+adminRouter.get(
+  "/stats/daily-intake",
+  requireAuth,
+  requireRole("admin", "accountant"),
+  asyncHandler(getDailyIntake)
 );
 
 // Detailed reports: admins and accountants.

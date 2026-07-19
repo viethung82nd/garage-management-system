@@ -4,8 +4,9 @@ import {
   UserModel,
   VehicleModel,
 } from "../models/index.js";
-import { REPAIR_ORDER_STATUSES } from "../models/RepairOrder.js";
+import { REPAIR_ORDER_STATUSES, ORDER_SERVICE_STATUSES } from "../models/RepairOrder.js";
 import { HttpError } from "../middleware/error.js";
+import { createNotification, notifyRole } from "../utils/notify.js";
 
 // ============= REPAIR ORDER CONTROLLERS =============
 
@@ -223,17 +224,21 @@ export async function updateRepairOrder(req, res) {
   }
 
   // Validate and update technician
+  const previousTechnicianId = order.technicianId ? String(order.technicianId) : null;
+  let technicianChanged = false;
   if (technicianId !== undefined) {
     if (technicianId && !technicianId.match(/^[0-9a-fA-F]{24}$/)) {
       throw new HttpError(400, "Invalid technician ID format");
     }
     if (technicianId) {
       const technician = await UserModel.findById(technicianId);
-      if (!technician) {
+      if (!technician || technician.role !== "technician") {
         throw new HttpError(404, "Technician not found");
       }
     }
-    order.technicianId = technicianId || null;
+    const nextTechnicianId = technicianId || null;
+    technicianChanged = String(nextTechnicianId) !== String(previousTechnicianId);
+    order.technicianId = nextTechnicianId;
   }
 
   // Validate and update services if provided
@@ -281,6 +286,20 @@ export async function updateRepairOrder(req, res) {
     ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),
   ]);
 
+  if (technicianChanged && order.technicianId) {
+    const vehicleLabel = order.vehicleId?.licensePlate
+      ? `${order.vehicleId.licensePlate}${order.vehicleId.model ? ` (${order.vehicleId.model})` : ""}`
+      : "a vehicle";
+    await createNotification({
+      userId: order.technicianId._id || order.technicianId,
+      type: "repairOrderAssigned",
+      title: "New repair order assigned",
+      message: `You've been assigned to a repair order for ${vehicleLabel}.`,
+      refId: order._id,
+      refModel: "RepairOrder",
+    });
+  }
+
   res.json(order);
 }
 
@@ -290,7 +309,7 @@ export async function updateRepairOrder(req, res) {
  */
 export async function updateRepairProgress(req, res) {
   const { id } = req.params;
-  const { status, notes, technicianId } = req.body ?? {};
+  const { status, notes, technicianId, stepIndex } = req.body ?? {};
 
   if (!id.match(/^[0-9a-fA-F]{24}$/)) {
     throw new HttpError(400, "Invalid repair order ID format");
@@ -298,14 +317,6 @@ export async function updateRepairProgress(req, res) {
 
   if (!status) {
     throw new HttpError(400, "Status is required");
-  }
-
-  const validStatuses = REPAIR_ORDER_STATUSES;
-  if (!validStatuses.includes(status)) {
-    throw new HttpError(
-      400,
-      `Invalid status. Must be one of: ${validStatuses.join(", ")}`,
-    );
   }
 
   const order = await RepairOrderModel.findById(id);
@@ -329,28 +340,63 @@ export async function updateRepairProgress(req, res) {
   }
 
   // Validate technician if provided
-  let technicianDoc = null;
   if (technicianId) {
     if (!technicianId.match(/^[0-9a-fA-F]{24}$/)) {
       throw new HttpError(400, "Invalid technician ID format");
     }
-    technicianDoc = await UserModel.findById(technicianId);
+    const technicianDoc = await UserModel.findById(technicianId);
     if (!technicianDoc) {
       throw new HttpError(404, "Technician not found");
     }
     order.technicianId = technicianId;
   }
 
-  // Update status
   const previousStatus = order.status;
-  order.status = status;
+  const hasStepIndex = stepIndex !== undefined && stepIndex !== null;
+
+  if (hasStepIndex) {
+    // Per-line update — a technician working one service on a multi-line
+    // order shouldn't be able to mark the whole order (and therefore the
+    // whole job) complete by finishing just one line. The order's own
+    // status is derived from the aggregate of its lines below, never set
+    // directly from the request in this branch.
+    const index = Number(stepIndex);
+    if (!Number.isInteger(index) || index < 0 || index >= order.services.length) {
+      throw new HttpError(400, "Invalid stepIndex");
+    }
+    if (!ORDER_SERVICE_STATUSES.includes(status)) {
+      throw new HttpError(
+        400,
+        `A step's status must be one of: ${ORDER_SERVICE_STATUSES.join(", ")}`,
+      );
+    }
+
+    order.services[index].status = status;
+
+    const serviceStatuses = order.services.map((service) => service.status || "pending");
+    if (serviceStatuses.every((value) => value === "completed")) {
+      order.status = "completed";
+    } else if (serviceStatuses.some((value) => value === "inProgress" || value === "completed")) {
+      order.status = "inProgress";
+    } else {
+      order.status = "pending";
+    }
+  } else {
+    if (!REPAIR_ORDER_STATUSES.includes(status)) {
+      throw new HttpError(
+        400,
+        `Invalid status. Must be one of: ${REPAIR_ORDER_STATUSES.join(", ")}`,
+      );
+    }
+    order.status = status;
+  }
 
   // Set timestamps
-  if (status === "inProgress" && !order.startedAt) {
+  if (order.status === "inProgress" && !order.startedAt) {
     order.startedAt = new Date();
   }
 
-  if (status === "completed" && !order.completedAt) {
+  if (order.status === "completed" && !order.completedAt) {
     order.completedAt = new Date();
   }
 
@@ -366,10 +412,11 @@ export async function updateRepairProgress(req, res) {
     }
 
     const newNote = {
-      content: `[${previousStatus} → ${status}] ${notes.trim()}`,
+      content: `[${previousStatus} → ${order.status}] ${notes.trim()}`,
       technicianId: techId,
       createdAt: new Date(),
     };
+    if (hasStepIndex) newNote.stepIndex = Number(stepIndex);
 
     order.stepNotes.push(newNote);
   }
@@ -381,7 +428,7 @@ export async function updateRepairProgress(req, res) {
   ]);
 
   res.json({
-    message: `Repair order status updated from ${previousStatus} to ${status}`,
+    message: `Repair order status updated from ${previousStatus} to ${order.status}`,
     order,
   });
 }
@@ -423,7 +470,18 @@ export async function deleteRepairOrder(req, res) {
  */
 export async function addStepNote(req, res) {
   const { id } = req.params;
-  const { content, technicianId } = req.body ?? {};
+  const { content, stepIndex } = req.body ?? {};
+
+  // The note author is always the authenticated caller, not a value the
+  // client asserts — a technician calling this always leaves a note as
+  // themselves; only an admin adding a note on someone else's behalf may
+  // override it. (Previously this required the client to supply
+  // technicianId at all, which the technician UI never did, so every save
+  // failed with a 400.)
+  const technicianId =
+    req.user.role === "admin" && req.body?.technicianId
+      ? req.body.technicianId
+      : req.user.sub;
 
   if (!id.match(/^[0-9a-fA-F]{24}$/)) {
     throw new HttpError(400, "Invalid repair order ID format");
@@ -433,8 +491,8 @@ export async function addStepNote(req, res) {
     throw new HttpError(400, "Note content is required");
   }
 
-  if (!technicianId) {
-    throw new HttpError(400, "Technician ID is required");
+  if (!technicianId.match(/^[0-9a-fA-F]{24}$/)) {
+    throw new HttpError(400, "Invalid technician ID format");
   }
 
   // Verify technician exists
@@ -448,11 +506,20 @@ export async function addStepNote(req, res) {
     throw new HttpError(404, "Repair order not found");
   }
 
+  let normalizedStepIndex;
+  if (stepIndex !== undefined && stepIndex !== null) {
+    normalizedStepIndex = Number(stepIndex);
+    if (!Number.isInteger(normalizedStepIndex) || normalizedStepIndex < 0 || normalizedStepIndex >= order.services.length) {
+      throw new HttpError(400, "Invalid stepIndex");
+    }
+  }
+
   const newNote = {
     content: content.trim(),
     technicianId,
     createdAt: new Date(),
   };
+  if (normalizedStepIndex !== undefined) newNote.stepIndex = normalizedStepIndex;
 
   order.stepNotes.push(newNote);
   await order.save();
@@ -644,8 +711,72 @@ export async function submitQualityCheck(req, res) {
 
   await order.save();
 
+  if (order.technicianId) {
+    await createNotification({
+      userId: order.technicianId,
+      type: passed ? "qualityCheckPassed" : "qualityCheckFailed",
+      title: passed ? "Repair order passed quality check" : "Repair order sent back for rework",
+      message: passed
+        ? "Your work passed quality check and is ready for handover."
+        : summary.replace(/^\[QC fail\]\s*/, ""),
+      refId: order._id,
+      refModel: "RepairOrder",
+    });
+  }
+
   res.json({
     message: passed ? "Repair order passed quality check" : "Repair order sent back for rework",
     order,
   });
+}
+
+/**
+ * POST /api/repair-orders/:id/forward-to-accountant
+ * The real "end of the SA's part of the job" action: only available once QC
+ * has passed (status "completed"). Notifies every accountant that an order is
+ * ready to invoice — the missing push signal that made this step a pure
+ * manual-discovery gap before. Idempotent-ish: forwardedToAccountantAt is set
+ * once and the endpoint refuses to re-forward, so the frontend can hide the
+ * button afterward instead of risking duplicate accountant notifications.
+ */
+export async function forwardToAccountant(req, res) {
+  const { id } = req.params;
+
+  if (!id.match(/^[0-9a-fA-F]{24}$/)) {
+    throw new HttpError(400, "Invalid repair order ID format");
+  }
+
+  const order = await RepairOrderModel.findById(id).populate(
+    "vehicleId",
+    "licensePlate brand model",
+  );
+  if (!order) {
+    throw new HttpError(404, "Repair order not found");
+  }
+  if (order.status !== "completed") {
+    throw new HttpError(
+      400,
+      "Only a repair order that passed quality check (status completed) can be forwarded",
+    );
+  }
+  if (order.forwardedToAccountantAt) {
+    throw new HttpError(409, "This repair order has already been forwarded to accounting");
+  }
+
+  order.forwardedToAccountantAt = new Date();
+  await order.save();
+
+  const vehicleLabel = order.vehicleId
+    ? [order.vehicleId.brand, order.vehicleId.model, order.vehicleId.licensePlate].filter(Boolean).join(" ")
+    : "a vehicle";
+
+  await notifyRole("accountant", {
+    type: "repairOrderReadyToInvoice",
+    title: "Repair order ready to invoice",
+    message: `Repair order for ${vehicleLabel} passed quality check and is ready to invoice.`,
+    refId: order._id,
+    refModel: "RepairOrder",
+  });
+
+  res.json({ message: "Repair order forwarded to accounting", order });
 }

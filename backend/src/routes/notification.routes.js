@@ -6,6 +6,8 @@ import {
   unreadCount,
   markRead,
   markAllRead,
+  clearReadNotifications,
+  deleteNotification,
 } from "../controllers/notification.controller.js";
 
 export const notificationRouter = Router();
@@ -15,3 +17,6 @@ notificationRouter.get("/", requireAuth, asyncHandler(listNotifications));
 notificationRouter.get("/unread-count", requireAuth, asyncHandler(unreadCount));
 notificationRouter.patch("/read-all", requireAuth, asyncHandler(markAllRead));
 notificationRouter.patch("/:id/read", requireAuth, asyncHandler(markRead));
+// Static "/read" path must be registered before the "/:id" wildcard below.
+notificationRouter.delete("/read", requireAuth, asyncHandler(clearReadNotifications));
+notificationRouter.delete("/:id", requireAuth, asyncHandler(deleteNotification));

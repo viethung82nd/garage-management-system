@@ -56,3 +56,28 @@ export async function markAllRead(req, res) {
   );
   res.json({ updated: result.modifiedCount });
 }
+
+/** DELETE /api/notifications/read — remove all of the user's already-read notifications. */
+export async function clearReadNotifications(req, res) {
+  const result = await NotificationModel.deleteMany({
+    userId: req.user.sub,
+    isRead: true,
+  });
+  res.json({ deleted: result.deletedCount });
+}
+
+/** DELETE /api/notifications/:id — remove one of the user's notifications. */
+export async function deleteNotification(req, res) {
+  if (!OID_RE.test(String(req.params.id))) {
+    throw new HttpError(400, "Invalid notification ID format");
+  }
+  // Scope by userId so a user can never touch another user's notification.
+  const notification = await NotificationModel.findOneAndDelete({
+    _id: req.params.id,
+    userId: req.user.sub,
+  });
+  if (!notification) {
+    throw new HttpError(404, "Notification not found");
+  }
+  res.json({ notification });
+}

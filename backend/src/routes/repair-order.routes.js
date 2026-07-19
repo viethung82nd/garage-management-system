@@ -15,6 +15,7 @@ import {
   getRepairOrderStatus,
   getRepairOrderSummary,
   submitQualityCheck,
+  forwardToAccountant,
 } from "../controllers/repair-order.controller.js";
 
 export const repairOrderRouter = Router();
@@ -123,4 +124,12 @@ repairOrderRouter.post(
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
   asyncHandler(submitQualityCheck),
+);
+
+// Forward a QC-passed order to accounting for invoicing.
+repairOrderRouter.post(
+  "/:id/forward-to-accountant",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  asyncHandler(forwardToAccountant),
 );

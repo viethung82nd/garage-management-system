@@ -5,6 +5,7 @@ import {
 } from "../models/index.js";
 import { HttpError } from "../middleware/error.js";
 import { TRANSFER_REQUEST_STATUSES } from "../models/TransferRequest.js";
+import { createNotification } from "../utils/notify.js";
 
 /** GET /api/transfer-requests — SA review queue for technician transfer requests. */
 export async function listTransferRequests(req, res) {
@@ -67,6 +68,13 @@ export async function createTransferRequest(req, res) {
     );
   }
 
+  if (repairOrder.status === "completed" || repairOrder.status === "cancelled") {
+    throw new HttpError(
+      409,
+      `Cannot request a transfer for a ${repairOrder.status} repair order`,
+    );
+  }
+
   const toTechnician = await UserModel.findById(toTechnicianId);
   if (!toTechnician || toTechnician.role !== "technician") {
     throw new HttpError(404, "Target technician not found");
@@ -95,6 +103,18 @@ export async function createTransferRequest(req, res) {
   });
 
   await transferRequest.save();
+
+  if (repairOrder.advisorId) {
+    const toTechnicianDoc = toTechnician;
+    await createNotification({
+      userId: repairOrder.advisorId,
+      type: "transferRequested",
+      title: "Technician transfer requested",
+      message: `A technician requested to hand this repair order off to ${toTechnicianDoc.fullName || "another technician"}.`,
+      refId: repairOrder._id,
+      refModel: "RepairOrder",
+    });
+  }
 
   res.status(201).json(transferRequest);
 }
@@ -144,6 +164,29 @@ async function resolveTransferRequest(req, res, newStatus) {
   transferRequest.resolveNote = resolveNote?.trim();
   transferRequest.resolvedAt = new Date();
   await transferRequest.save();
+
+  await createNotification({
+    userId: transferRequest.fromTechnicianId,
+    type: newStatus === "approved" ? "transferApproved" : "transferRejected",
+    title: newStatus === "approved" ? "Transfer request approved" : "Transfer request rejected",
+    message:
+      newStatus === "approved"
+        ? "Your transfer request was approved — the order has moved to the other technician."
+        : "Your transfer request was rejected — this order is still yours.",
+    refId: repairOrder._id,
+    refModel: "RepairOrder",
+  });
+
+  if (newStatus === "approved") {
+    await createNotification({
+      userId: transferRequest.toTechnicianId,
+      type: "repairOrderAssigned",
+      title: "Repair order transferred to you",
+      message: "A colleague transferred a repair order to you.",
+      refId: repairOrder._id,
+      refModel: "RepairOrder",
+    });
+  }
 
   res.json(transferRequest);
 }

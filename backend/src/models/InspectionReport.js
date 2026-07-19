@@ -4,10 +4,12 @@ export const INSPECTION_STATUSES = ["pending", "completed"];
 
 const recommendedServiceSchema = new Schema(
   {
+    // Optional: inspection checklist items are free-text ("Front brake
+    // pads"), not catalog entries, so a recommended service carried over
+    // from the checklist usually has no matching Service document.
     serviceId: {
       type: Schema.Types.ObjectId,
       ref: "Service",
-      required: true,
     },
     name: {
       type: String,
