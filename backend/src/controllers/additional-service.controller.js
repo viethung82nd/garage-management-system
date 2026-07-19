@@ -18,12 +18,14 @@ export async function createAdditionalServiceProposal(req, res) {
   res.status(201).json(proposal);
 }
 
-/** PATCH /api/additional-service-proposals/:id — SA sends/approves/rejects. */
+/** PATCH /api/additional-service-proposals/:id — SA sends/approves/rejects, optionally adjusting the price. */
 export async function updateAdditionalServiceProposal(req, res) {
+  const { status, laborCost, partsCost } = req.body ?? {};
   const proposal = await additionalServiceService.updateAdditionalServiceProposal(
     req.params.id,
-    (req.body ?? {}).status,
+    status,
     req.user.sub,
+    { laborCost, partsCost },
   );
   res.json(proposal);
 }

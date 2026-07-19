@@ -1,6 +1,7 @@
 import { serviceRequestRepository } from "../repositories/service-request.repository.js";
 import { repairOrderRepository } from "../repositories/repair-order.repository.js";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
+import { serviceRepository } from "../repositories/service.repository.js";
 import { SERVICE_REQUEST_STATUSES } from "../models/service-request.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
@@ -32,16 +33,20 @@ export async function listAdditionalServiceProposals({ repairOrderId }) {
   return { proposals };
 }
 
-/** Technician flags extra work found mid-repair for SA review. */
+/**
+ * Technician flags extra work found mid-repair for SA review. Deliberately
+ * takes no laborCost/partsCost — pricing extra work is the service advisor's
+ * call (see updateAdditionalServiceProposal), not the technician's, so this
+ * never accepts a price even if one is sent.
+ */
 export async function createAdditionalServiceProposal(
   {
     repairOrderId,
+    serviceId,
     serviceName,
     affectedPart,
     reason,
     customerImpact,
-    laborCost,
-    partsCost,
     estimateMinutes,
     evidenceCount,
     priority,
@@ -55,6 +60,21 @@ export async function createAdditionalServiceProposal(
     throw new ApiError(400, "serviceName is required");
   }
 
+  // Optional: the technician picked this from the SA's service catalog
+  // instead of (or in addition to) typing a custom name — carries the real
+  // catalog link through to the order line if the proposal is approved.
+  let catalogServiceId;
+  if (serviceId) {
+    if (!OID_RE.test(serviceId)) {
+      throw new ApiError(400, "Invalid serviceId format");
+    }
+    const catalogService = await serviceRepository.findById(serviceId);
+    if (!catalogService) {
+      throw new ApiError(404, "Service not found in the catalog");
+    }
+    catalogServiceId = catalogService._id;
+  }
+
   const repairOrderForNotify = await repairOrderRepository.model
     .findById(repairOrderId)
     .select("advisorId");
@@ -62,12 +82,11 @@ export async function createAdditionalServiceProposal(
   const proposal = await serviceRequestRepository.create({
     repairOrderId,
     technicianId,
+    serviceId: catalogServiceId,
     serviceName: serviceName.trim(),
     affectedPart,
     reason,
     customerImpact,
-    laborCost,
-    partsCost,
     estimateMinutes,
     evidenceCount,
     priority: ["high", "medium", "low"].includes(priority) ? priority : "medium",
@@ -90,8 +109,13 @@ export async function createAdditionalServiceProposal(
   return proposal;
 }
 
-/** SA sends/approves/rejects a proposal. */
-export async function updateAdditionalServiceProposal(id, status, reviewedBy) {
+/**
+ * SA sends/approves/rejects a proposal. `overrides` lets the SA set the
+ * final price before it goes anywhere — the technician's labor/parts cost is
+ * only ever an estimate; pricing what the customer actually gets billed is
+ * the SA's call, not the technician's.
+ */
+export async function updateAdditionalServiceProposal(id, status, reviewedBy, overrides = {}) {
   if (!OID_RE.test(id)) {
     throw new ApiError(400, "Invalid proposal ID format");
   }
@@ -108,6 +132,22 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy) {
   }
   if (TERMINAL_STATUSES.includes(proposal.status)) {
     throw new ApiError(409, `This proposal was already ${proposal.status} and can no longer be changed`);
+  }
+
+  const { laborCost, partsCost } = overrides;
+  if (laborCost !== undefined) {
+    const parsedLaborCost = Number(laborCost);
+    if (Number.isNaN(parsedLaborCost) || parsedLaborCost < 0) {
+      throw new ApiError(400, "laborCost must be a non-negative number");
+    }
+    proposal.laborCost = parsedLaborCost;
+  }
+  if (partsCost !== undefined) {
+    const parsedPartsCost = Number(partsCost);
+    if (Number.isNaN(parsedPartsCost) || parsedPartsCost < 0) {
+      throw new ApiError(400, "partsCost must be a non-negative number");
+    }
+    proposal.partsCost = parsedPartsCost;
   }
 
   proposal.status = status;

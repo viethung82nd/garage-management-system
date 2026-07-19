@@ -1,5 +1,6 @@
 import { ArrowLeftOutlined, CheckOutlined, PictureOutlined, PlusOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Image, Input, InputNumber, Select, Steps, Tag } from 'antd'
+import { Button, Card, Empty, Image, Input, InputNumber, Select, Steps, Tag, Upload } from 'antd'
+import type { UploadFile } from 'antd/es/upload/interface'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../shared/auth'
@@ -11,6 +12,7 @@ import {
   fetchInspectionReports,
   fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
+  fetchWorkshopServices,
   fetchWorkshopTechnicians,
   orderId,
   personName,
@@ -20,6 +22,7 @@ import {
   vehiclePlate,
   type ApiInspectionReport,
   type ApiRepairOrder,
+  type ApiService,
   type ApiTechnician,
 } from '../../shared/api/workshop'
 import { InlineBanner, useApiMessage } from '../../widgets/backoffice-shell'
@@ -34,6 +37,7 @@ type RepairStep = {
   estimate: string
   status: RepairStepStatus
   summary: string
+  photos: string[]
   title: string
 }
 
@@ -53,6 +57,7 @@ function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
       status,
       stepIndex: index,
       summary: latestNote?.content || '',
+      photos: latestNote?.photos || [],
       title: apiService?.name || service.name || 'Repair item',
     }
   })
@@ -74,6 +79,26 @@ function extractOrder(response: { order?: ApiRepairOrder } | ApiRepairOrder): Ap
   return response && typeof response === 'object' && 'order' in response && response.order ? response.order : (response as ApiRepairOrder)
 }
 
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
+}
+
+function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <div style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6, textTransform: 'uppercase' }}>
+        {label}
+      </div>
+      {children}
+    </div>
+  )
+}
+
 export function TechnicianRepairNotesPage() {
   const { token, user } = useAuth()
   const navigate = useNavigate()
@@ -86,16 +111,19 @@ export function TechnicianRepairNotesPage() {
   const [steps, setSteps] = useState<RepairStep[]>([])
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
   const [note, setNote] = useState('')
+  const [stepPhotos, setStepPhotos] = useState<UploadFile[]>([])
+  const [previewImage, setPreviewImage] = useState('')
+  const [previewOpen, setPreviewOpen] = useState(false)
   const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
 
   // Secondary: additional-service proposal
   const [proposalOpen, setProposalOpen] = useState(false)
+  const [services, setServices] = useState<ApiService[]>([])
+  const [proposalServiceId, setProposalServiceId] = useState('')
   const [proposalServiceName, setProposalServiceName] = useState('')
   const [proposalAffectedPart, setProposalAffectedPart] = useState('')
   const [proposalReason, setProposalReason] = useState('')
-  const [proposalLaborCost, setProposalLaborCost] = useState(0)
-  const [proposalPartsCost, setProposalPartsCost] = useState(0)
   const [proposalEstimateMinutes, setProposalEstimateMinutes] = useState(30)
   const [proposalPriority, setProposalPriority] = useState<'high' | 'medium' | 'low'>('medium')
   const [proposalErrors, setProposalErrors] = useState<Record<string, string>>({})
@@ -200,6 +228,24 @@ export function TechnicianRepairNotesPage() {
     }
   }, [token, transferOpen, technicians.length, user?._id, user?.id])
 
+  // Service catalog for the extra-work picker — only fetched when the panel opens.
+  useEffect(() => {
+    if (!token || !proposalOpen || services.length) return
+    const authToken = token
+    let cancelled = false
+    void (async () => {
+      try {
+        const catalog = await fetchWorkshopServices(authToken)
+        if (!cancelled) setServices(Array.isArray(catalog) ? catalog : [])
+      } catch {
+        /* best-effort */
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [token, proposalOpen, services.length])
+
   const selectedStep = steps.find((step) => step.stepIndex === selectedStepIndex)
   const completedCount = steps.filter((step) => step.status === 'completed').length
   const progressPct = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
@@ -223,6 +269,7 @@ export function TechnicianRepairNotesPage() {
   function selectStep(index: number) {
     setSelectedStepIndex(index)
     setNote('')
+    setStepPhotos([])
   }
 
   function applyUpdatedOrder(updated: ApiRepairOrder | undefined, advanceFrom?: number) {
@@ -258,12 +305,17 @@ export function TechnicianRepairNotesPage() {
     setSaving(true)
     clearApiMessage()
     try {
-      if (note.trim()) {
-        await addWorkshopStepNote(token, repairOrderId, { content: note.trim(), stepIndex: selectedStep.stepIndex })
+      if (note.trim() || stepPhotos.length) {
+        await addWorkshopStepNote(token, repairOrderId, {
+          content: note.trim() || 'Step completed.',
+          stepIndex: selectedStep.stepIndex,
+          photos: stepPhotos.map((file) => file.originFileObj as File).filter(Boolean),
+        })
       }
       const response = await updateWorkshopRepairProgress(token, repairOrderId, { status: 'completed', stepIndex: selectedStep.stepIndex })
       applyUpdatedOrder(extractOrder(response), selectedStep.stepIndex)
       setNote('')
+      setStepPhotos([])
       showSuccess('Step completed.')
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Unable to complete this step')
@@ -275,14 +327,18 @@ export function TechnicianRepairNotesPage() {
   async function saveNoteOnly() {
     const repairOrderId = repairOrder?._id || repairOrder?.id
     if (!repairOrderId || !selectedStep || !token) return
-    if (!note.trim()) {
-      showError('Write a note before saving.')
+    if (!note.trim() && !stepPhotos.length) {
+      showError('Write a note or attach a photo before saving.')
       return
     }
     setSaving(true)
     clearApiMessage()
     try {
-      const response = await addWorkshopStepNote(token, repairOrderId, { content: note.trim(), stepIndex: selectedStep.stepIndex })
+      const response = await addWorkshopStepNote(token, repairOrderId, {
+        content: note.trim() || 'Photo attached.',
+        stepIndex: selectedStep.stepIndex,
+        photos: stepPhotos.map((file) => file.originFileObj as File).filter(Boolean),
+      })
       if (response.stepNotes) {
         setRepairOrder((current) => {
           if (!current) return current
@@ -292,6 +348,7 @@ export function TechnicianRepairNotesPage() {
         })
       }
       setNote('')
+      setStepPhotos([])
       showSuccess('Note saved.')
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Unable to save the note')
@@ -320,7 +377,6 @@ export function TechnicianRepairNotesPage() {
     const errors: Record<string, string> = {}
     if (!proposalServiceName.trim()) errors.serviceName = 'Service name is required.'
     if (!proposalReason.trim()) errors.reason = 'Explain why this work is needed.'
-    if (proposalLaborCost + proposalPartsCost <= 0) errors.cost = 'Add a labour or parts cost.'
     if (proposalEstimateMinutes < 1) errors.estimate = 'Estimate must be at least 1 minute.'
     return errors
   }
@@ -335,23 +391,23 @@ export function TechnicianRepairNotesPage() {
     setSubmittingProposal(true)
     clearApiMessage()
     try {
+      // No cost fields here on purpose — pricing extra work is the service
+      // advisor's call, not the technician's; see AdditionalServiceSuggestionPage.
       await createAdditionalServiceProposal(token, {
         affectedPart: proposalAffectedPart.trim() || undefined,
         estimateMinutes: proposalEstimateMinutes,
-        laborCost: proposalLaborCost,
-        partsCost: proposalPartsCost,
         priority: proposalPriority,
         reason: proposalReason.trim(),
         repairOrderId,
+        serviceId: proposalServiceId || undefined,
         serviceName: proposalServiceName.trim(),
       })
       showSuccess('Additional service proposal sent to the service advisor.')
       setProposalOpen(false)
+      setProposalServiceId('')
       setProposalServiceName('')
       setProposalAffectedPart('')
       setProposalReason('')
-      setProposalLaborCost(0)
-      setProposalPartsCost(0)
       setProposalEstimateMinutes(30)
       setProposalPriority('medium')
       setProposalErrors({})
@@ -573,14 +629,34 @@ export function TechnicianRepairNotesPage() {
                 </div>
 
                 {orderIsTerminal ? (
-                  <div className="mt-4" style={{ background: technicianPalette.panelAlt, borderRadius: 12, color: technicianPalette.inkSoft, fontSize: 13, padding: 14 }}>
-                    {selectedStep.summary || 'No note was recorded for this step.'}
+                  <div className="mt-4 flex flex-col gap-3">
+                    <div style={{ background: technicianPalette.panelAlt, borderRadius: 12, color: technicianPalette.inkSoft, fontSize: 13, padding: 14 }}>
+                      {selectedStep.summary || 'No note was recorded for this step.'}
+                    </div>
+                    {selectedStep.photos.length ? (
+                      <Image.PreviewGroup>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedStep.photos.map((url, index) => (
+                            <Image key={`${url}-${index}`} src={resolveApiAssetUrl(url)} width={64} height={64} style={{ borderRadius: 8, objectFit: 'cover' }} />
+                          ))}
+                        </div>
+                      </Image.PreviewGroup>
+                    ) : null}
                   </div>
                 ) : selectedStep.status === 'completed' ? (
                   <div className="mt-4 flex flex-col gap-3">
                     <div style={{ background: technicianPalette.panelAlt, borderRadius: 12, color: technicianPalette.inkSoft, fontSize: 13, padding: 14 }}>
                       {selectedStep.summary || 'This step is marked complete.'}
                     </div>
+                    {selectedStep.photos.length ? (
+                      <Image.PreviewGroup>
+                        <div className="flex flex-wrap gap-2">
+                          {selectedStep.photos.map((url, index) => (
+                            <Image key={`${url}-${index}`} src={resolveApiAssetUrl(url)} width={64} height={64} style={{ borderRadius: 8, objectFit: 'cover' }} />
+                          ))}
+                        </div>
+                      </Image.PreviewGroup>
+                    ) : null}
                     <Button block disabled={saving} icon={<ThunderboltOutlined />} onClick={reopenStep} size="large">
                       Reopen this step
                     </Button>
@@ -592,6 +668,34 @@ export function TechnicianRepairNotesPage() {
                       <TextArea onChange={(event) => setNote(event.target.value)} placeholder="What did you find or do for this item?" rows={5} value={note} />
                     </div>
 
+                    <div>
+                      <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Photos (optional)</div>
+                      <Upload
+                        beforeUpload={() => false}
+                        fileList={stepPhotos}
+                        listType="picture-card"
+                        onChange={({ fileList }) => setStepPhotos(fileList)}
+                        onPreview={async (file) => {
+                          const src = file.url || file.preview || (file.originFileObj ? await fileToDataUrl(file.originFileObj as File) : '')
+                          if (!src) return
+                          setPreviewImage(src)
+                          setPreviewOpen(true)
+                        }}
+                        accept="image/*"
+                        multiple
+                      >
+                        {stepPhotos.length >= 10 ? null : (
+                          <div>
+                            <PlusOutlined />
+                            <div style={{ marginTop: 8 }}>Upload</div>
+                          </div>
+                        )}
+                      </Upload>
+                      {previewImage ? (
+                        <Image style={{ display: 'none' }} src={previewImage} preview={{ visible: previewOpen, onVisibleChange: setPreviewOpen }} />
+                      ) : null}
+                    </div>
+
                     {selectedStep.status === 'waiting' ? (
                       <Button block disabled={saving} icon={<ThunderboltOutlined />} onClick={startStep} size="large" type="primary">
                         Start this step
@@ -601,7 +705,7 @@ export function TechnicianRepairNotesPage() {
                         <Button block disabled={saving} icon={<CheckOutlined />} onClick={completeStep} size="large" type="primary">
                           Mark step complete
                         </Button>
-                        <Button block disabled={saving || !note.trim()} onClick={saveNoteOnly} type="text" style={{ color: technicianPalette.textMuted }}>
+                        <Button block disabled={saving || (!note.trim() && !stepPhotos.length)} onClick={saveNoteOnly} type="text" style={{ color: technicianPalette.textMuted }}>
                           Save note without completing
                         </Button>
                       </>
@@ -618,37 +722,64 @@ export function TechnicianRepairNotesPage() {
               <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Found extra work?">
                 {proposalOpen ? (
                   <div className="flex flex-col gap-3">
-                    <div>
-                      <Input onChange={(event) => setProposalServiceName(event.target.value)} placeholder="Service name" status={proposalErrors.serviceName ? 'error' : undefined} value={proposalServiceName} />
+                    <LabeledField label="Pick from catalog (optional)">
+                      <Select
+                        allowClear
+                        filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                        onChange={(value) => {
+                          setProposalServiceId(value || '')
+                          const picked = services.find((service) => (service._id || service.id) === value)
+                          if (picked?.name) setProposalServiceName(picked.name)
+                        }}
+                        options={services.map((service) => ({ label: service.name, value: service._id || service.id }))}
+                        placeholder="Search the service catalog..."
+                        showSearch
+                        style={{ width: '100%' }}
+                        value={proposalServiceId || undefined}
+                      />
+                    </LabeledField>
+                    <LabeledField label="Service name">
+                      <Input
+                        onChange={(event) => {
+                          setProposalServiceName(event.target.value)
+                          // Once the tech edits the text, it may no longer match the
+                          // catalog entry they picked — treat it as a custom line.
+                          setProposalServiceId('')
+                        }}
+                        placeholder="e.g. Rear brake pad replacement, or pick from catalog above"
+                        status={proposalErrors.serviceName ? 'error' : undefined}
+                        value={proposalServiceName}
+                      />
                       {fieldError(proposalErrors.serviceName)}
-                    </div>
-                    <Input onChange={(event) => setProposalAffectedPart(event.target.value)} placeholder="Affected part (optional)" value={proposalAffectedPart} />
-                    <div>
-                      <Input onChange={(event) => setProposalReason(event.target.value)} placeholder="Why is it needed?" status={proposalErrors.reason ? 'error' : undefined} value={proposalReason} />
+                    </LabeledField>
+                    <LabeledField label="Affected part (optional)">
+                      <Input onChange={(event) => setProposalAffectedPart(event.target.value)} placeholder="e.g. Rear brake pads" value={proposalAffectedPart} />
+                    </LabeledField>
+                    <LabeledField label="Why is it needed?">
+                      <Input onChange={(event) => setProposalReason(event.target.value)} placeholder="What you found and why it needs attention" status={proposalErrors.reason ? 'error' : undefined} value={proposalReason} />
                       {fieldError(proposalErrors.reason)}
-                    </div>
-                    <div>
-                      <div className="grid grid-cols-3 gap-2">
-                        <InputNumber addonBefore="Labour" min={0} onChange={(value) => setProposalLaborCost(Math.max(0, Number(value) || 0))} status={proposalErrors.cost ? 'error' : undefined} style={{ width: '100%' }} value={proposalLaborCost} />
-                        <InputNumber addonBefore="Parts" min={0} onChange={(value) => setProposalPartsCost(Math.max(0, Number(value) || 0))} status={proposalErrors.cost ? 'error' : undefined} style={{ width: '100%' }} value={proposalPartsCost} />
-                        <InputNumber addonBefore="Min" min={1} onChange={(value) => setProposalEstimateMinutes(Math.max(0, Number(value) || 0))} status={proposalErrors.estimate ? 'error' : undefined} style={{ width: '100%' }} value={proposalEstimateMinutes} />
-                      </div>
-                      {fieldError(proposalErrors.cost || proposalErrors.estimate)}
-                    </div>
-                    <Select
-                      onChange={setProposalPriority}
-                      options={[
-                        { label: 'High priority', value: 'high' },
-                        { label: 'Recommended', value: 'medium' },
-                        { label: 'Monitor', value: 'low' },
-                      ]}
-                      value={proposalPriority}
-                    />
+                    </LabeledField>
+                    <LabeledField label="Time estimate (minutes)">
+                      <InputNumber min={1} onChange={(value) => setProposalEstimateMinutes(Math.max(0, Number(value) || 0))} status={proposalErrors.estimate ? 'error' : undefined} style={{ width: '100%' }} value={proposalEstimateMinutes} />
+                      {fieldError(proposalErrors.estimate)}
+                    </LabeledField>
+                    <LabeledField label="Priority">
+                      <Select
+                        onChange={setProposalPriority}
+                        options={[
+                          { label: 'High priority', value: 'high' },
+                          { label: 'Recommended', value: 'medium' },
+                          { label: 'Monitor', value: 'low' },
+                        ]}
+                        style={{ width: '100%' }}
+                        value={proposalPriority}
+                      />
+                    </LabeledField>
                     <div className="flex gap-2">
                       <Button block icon={<PlusOutlined />} loading={submittingProposal} onClick={submitProposal} type="primary">
                         Send to advisor
                       </Button>
-                      <Button onClick={() => { setProposalOpen(false); setProposalErrors({}) }}>Cancel</Button>
+                      <Button onClick={() => { setProposalOpen(false); setProposalServiceId(''); setProposalErrors({}) }}>Cancel</Button>
                     </div>
                   </div>
                 ) : (
@@ -662,23 +793,23 @@ export function TechnicianRepairNotesPage() {
               <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Hand this order off?">
                 {transferOpen ? (
                   <div className="flex flex-col gap-3">
-                    <div>
+                    <LabeledField label="Transfer to">
                       <Select
                         filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                         onChange={setTransferTechnicianId}
                         options={technicians.map((technician) => ({ label: technician.fullName || technician.email, value: technician._id || technician.id }))}
-                        placeholder="Transfer to technician..."
+                        placeholder="Select a technician..."
                         showSearch
                         status={transferErrors.technician ? 'error' : undefined}
                         style={{ width: '100%' }}
                         value={transferTechnicianId || undefined}
                       />
                       {fieldError(transferErrors.technician)}
-                    </div>
-                    <div>
-                      <Input onChange={(event) => setTransferReason(event.target.value)} placeholder="Reason for the transfer" status={transferErrors.reason ? 'error' : undefined} value={transferReason} />
+                    </LabeledField>
+                    <LabeledField label="Reason for the transfer">
+                      <Input onChange={(event) => setTransferReason(event.target.value)} placeholder="e.g. Shift ending, handing off to the next technician" status={transferErrors.reason ? 'error' : undefined} value={transferReason} />
                       {fieldError(transferErrors.reason)}
-                    </div>
+                    </LabeledField>
                     <div className="flex gap-2">
                       <Button block icon={<SwapOutlined />} loading={requestingTransfer} onClick={submitTransfer} type="primary">
                         Send request

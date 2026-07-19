@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
 import { catchAsync } from "../utils/catchAsync.js";
+import { imageUpload } from "../middlewares/upload.middleware.js";
 import {
   getAllRepairOrders,
   getMyRepairOrders,
@@ -87,11 +88,14 @@ repairOrderRouter.get(
   catchAsync(getStepNotes),
 );
 
-// Add a step note to a repair order (technician or admin only)
+// Add a step note to a repair order (technician or admin only). Multipart so
+// evidence photos of the actual work done can ride along with the note text.
+const stepNotePhotoUpload = imageUpload();
 repairOrderRouter.post(
   "/:id/step-notes",
   requireAuth,
   requireRole("technician", "admin"),
+  stepNotePhotoUpload.array("photos", 10),
   catchAsync(addStepNote),
 );
 

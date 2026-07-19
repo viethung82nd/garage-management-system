@@ -14,6 +14,7 @@ export type ApiVehicle = {
   vin?: string
   chassisNumber?: string
   engineNumber?: string
+  lastKnownMileage?: number
 }
 
 export type ApiService = {
@@ -59,7 +60,7 @@ export type ApiRepairOrder = {
   inspectionId?: string
   issueDescription?: string
   services?: Array<{ serviceId?: ApiService | string; name?: string; quantity?: number; priceAtTime?: number; status?: 'pending' | 'inProgress' | 'completed' }>
-  stepNotes?: Array<{ content?: string; technicianId?: AuthUser | string; stepIndex?: number; createdAt?: string }>
+  stepNotes?: Array<{ content?: string; technicianId?: AuthUser | string; stepIndex?: number; photos?: string[]; createdAt?: string }>
   status?: string
   totalCost?: number
   startedAt?: string
@@ -81,6 +82,7 @@ export type ApiAdditionalServiceProposal = {
   _id?: string
   id?: string
   repairOrderId?: string
+  serviceId?: string
   serviceName?: string
   affectedPart?: string
   reason?: string
@@ -215,8 +217,20 @@ export function updateWorkshopRepairProgress(token: string, id: string, payload:
   return apiRequest<{ order?: ApiRepairOrder } | ApiRepairOrder>(`/api/repair-orders/${id}/progress`, { method: 'PATCH', token, body: JSON.stringify(payload) })
 }
 
-export function addWorkshopStepNote(token: string, id: string, payload: unknown) {
-  return apiRequest<{ message?: string; stepNotes?: ApiRepairOrder['stepNotes'] }>(`/api/repair-orders/${id}/step-notes`, { method: 'POST', token, body: JSON.stringify(payload) })
+export type AddStepNotePayload = {
+  content: string
+  stepIndex?: number
+  photos?: File[]
+}
+
+/** Sent as multipart so evidence photos of the actual work done can ride
+ * along with the note text — same pattern as createInspectionReport. */
+export function addWorkshopStepNote(token: string, id: string, payload: AddStepNotePayload) {
+  const formData = new FormData()
+  formData.append('content', payload.content)
+  if (payload.stepIndex != null) formData.append('stepIndex', String(payload.stepIndex))
+  payload.photos?.forEach((file) => formData.append('photos', file))
+  return apiRequest<{ message?: string; stepNotes?: ApiRepairOrder['stepNotes'] }>(`/api/repair-orders/${id}/step-notes`, { method: 'POST', token, body: formData })
 }
 
 export function fetchWorkshopServices(token: string) {
@@ -244,12 +258,30 @@ export function fetchAdditionalServiceProposals(token: string) {
   return apiRequest<{ proposals?: ApiAdditionalServiceProposal[] } | ApiAdditionalServiceProposal[]>('/api/additional-service-proposals', { token })
 }
 
-export function updateAdditionalServiceProposal(token: string, id: string, status: string) {
-  return apiRequest<ApiAdditionalServiceProposal>(`/api/additional-service-proposals/${id}`, { method: 'PATCH', token, body: JSON.stringify({ status }) })
+export type UpdateAdditionalServiceProposalOverrides = {
+  laborCost?: number
+  partsCost?: number
+}
+
+/** `overrides` lets the SA adjust the price before sending/approving — the
+ * technician's cost is only ever an estimate; the SA decides what actually
+ * gets quoted to the customer. */
+export function updateAdditionalServiceProposal(
+  token: string,
+  id: string,
+  status: string,
+  overrides?: UpdateAdditionalServiceProposalOverrides,
+) {
+  return apiRequest<ApiAdditionalServiceProposal>(`/api/additional-service-proposals/${id}`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ status, ...overrides }),
+  })
 }
 
 export type CreateAdditionalServiceProposalPayload = {
   repairOrderId: string
+  serviceId?: string
   serviceName: string
   affectedPart?: string
   reason?: string

@@ -41,6 +41,9 @@ type OrderView = {
   customer: string
   completedAt: string
   forwardedToAccountantAt?: string
+  /** Photos the technician attached to their step notes — evidence of the
+   * actual repair work, distinct from the advisor's pre-repair inspection photos. */
+  stepPhotos: string[]
 }
 
 const checklistSeed = [
@@ -81,6 +84,7 @@ function mapOrder(order: ApiRepairOrder): OrderView {
     plate: vehiclePlate(vehicle),
     technician: personName(order.technicianId || order.technician, 'Unassigned'),
     vehicle: vehicleName(vehicle),
+    stepPhotos: (order.stepNotes || []).flatMap((note) => note.photos || []),
   }
 }
 
@@ -158,7 +162,13 @@ export function QualityVerificationPage() {
     }
   }, [token, selectedOrder?.id])
 
-  const evidencePhotos = useMemo(() => evidenceReports.flatMap((report) => report.photos || []), [evidenceReports])
+  // Combines the advisor's pre-repair inspection photos with the
+  // technician's own step-note photos — the latter is what actually shows
+  // the completed work, which is what QC is verifying.
+  const evidencePhotos = useMemo(
+    () => [...evidenceReports.flatMap((report) => report.photos || []), ...(selectedOrder?.stepPhotos || [])],
+    [evidenceReports, selectedOrder?.stepPhotos],
+  )
   const checklist = (selectedOrder && checklistByOrder[selectedOrder.id]) || []
   const passCount = checklist.filter((item) => item.result === 'pass').length
   const failCount = checklist.filter((item) => item.result === 'fail').length
@@ -376,23 +386,38 @@ export function QualityVerificationPage() {
               </Card>
 
               <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Verification notes">
-                <TextArea onChange={(event) => setReworkNote(event.target.value)} placeholder="Result notes or reason for returning to the technician..." rows={4} value={reworkNote} />
-                <div className="mt-4 flex flex-col gap-3">
-                  <Button block disabled={saving || !allDecided} icon={<CheckOutlined />} onClick={() => submitVerdict(true)} type="primary">
-                    Pass · move to handover
-                  </Button>
-                  <Button block disabled={saving} icon={<ToolOutlined />} onClick={() => submitVerdict(false)}>
-                    Return to technician
-                  </Button>
-                  {!allDecided ? (
-                    <p style={{ color: advisorPalette.red, fontSize: 12, fontWeight: 700 }}>Some items are still failing — only return to technician is available.</p>
-                  ) : null}
-                </div>
+                {verdictByOrder[selectedOrder.id] ? (
+                  <div className="flex flex-col items-start gap-2">
+                    <Tag color={verdictByOrder[selectedOrder.id] === 'passed' ? 'green' : 'red'} icon={verdictByOrder[selectedOrder.id] === 'passed' ? <CheckOutlined /> : <ToolOutlined />}>
+                      {verdictByOrder[selectedOrder.id] === 'passed' ? 'Passed — moved to handover' : 'Returned to technician for rework'}
+                    </Tag>
+                    <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>A verdict was already recorded for this order.</span>
+                  </div>
+                ) : (
+                  <>
+                    <TextArea onChange={(event) => setReworkNote(event.target.value)} placeholder="Result notes or reason for returning to the technician..." rows={4} value={reworkNote} />
+                    <div className="mt-4 flex flex-col gap-3">
+                      <Button block disabled={saving || !allDecided} icon={<CheckOutlined />} onClick={() => submitVerdict(true)} type="primary">
+                        Pass · move to handover
+                      </Button>
+                      <Button block disabled={saving} icon={<ToolOutlined />} onClick={() => submitVerdict(false)}>
+                        Return to technician
+                      </Button>
+                      {!allDecided ? (
+                        <p style={{ color: advisorPalette.red, fontSize: 12, fontWeight: 700 }}>Some items are still failing — only return to technician is available.</p>
+                      ) : null}
+                    </div>
+                  </>
+                )}
               </Card>
 
               <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Handover">
                 {selectedOrder.forwardedToAccountantAt ? (
                   <Tag color="green">Forwarded to accounting</Tag>
+                ) : verdictByOrder[selectedOrder.id] === 'rework' ? (
+                  <p style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
+                    This order was returned to the technician for rework — it can be forwarded to accounting once it passes quality check.
+                  </p>
                 ) : (
                   <>
                     <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginBottom: 12 }}>

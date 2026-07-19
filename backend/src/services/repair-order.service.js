@@ -5,6 +5,7 @@ import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { REPAIR_ORDER_STATUSES, ORDER_SERVICE_STATUSES } from "../models/repair-order.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification, notifyRole } from "../utils/notify.js";
+import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 
@@ -16,7 +17,7 @@ const vehicleCustomerPopulate = {
 const repairOrderPopulate = [
   {
     path: "vehicleId",
-    select: "licensePlate brand model year color chassisNumber engineNumber customerId",
+    select: "licensePlate brand model year color chassisNumber engineNumber customerId lastKnownMileage",
     populate: vehicleCustomerPopulate,
   },
   { path: "inspectionId" },
@@ -364,7 +365,7 @@ export async function deleteRepairOrder(id) {
 // ============= STEP NOTES =============
 
 /** Add a step note to a repair order. */
-export async function addStepNote(id, { content, stepIndex, technicianId: overrideTechnicianId }, requester) {
+export async function addStepNote(id, { content, stepIndex, technicianId: overrideTechnicianId }, requester, files) {
   // The note author is always the authenticated caller, not a value the
   // client asserts — a technician calling this always leaves a note as
   // themselves; only an admin adding a note on someone else's behalf may
@@ -406,12 +407,17 @@ export async function addStepNote(id, { content, stepIndex, technicianId: overri
     }
   }
 
+  const uploadedPhotos = await Promise.all(
+    (files ?? []).map((file) => uploadBufferToCloudinary(file.buffer, "step-note-photos")),
+  );
+
   const newNote = {
     content: content.trim(),
     technicianId,
     createdAt: new Date(),
   };
   if (normalizedStepIndex !== undefined) newNote.stepIndex = normalizedStepIndex;
+  if (uploadedPhotos.length) newNote.photos = uploadedPhotos.map((result) => result.secure_url);
 
   order.stepNotes.push(newNote);
   await order.save();

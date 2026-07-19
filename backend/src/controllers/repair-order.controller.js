@@ -71,7 +71,7 @@ export async function deleteRepairOrder(req, res) {
  * Add a step note to a repair order
  */
 export async function addStepNote(req, res) {
-  const result = await repairOrderService.addStepNote(req.params.id, req.body ?? {}, req.user);
+  const result = await repairOrderService.addStepNote(req.params.id, req.body ?? {}, req.user, req.files);
   res.status(201).json(result);
 }
 

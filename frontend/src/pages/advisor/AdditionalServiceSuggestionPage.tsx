@@ -1,5 +1,5 @@
 import { CheckOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Empty, Tag } from 'antd'
+import { Avatar, Button, Card, Empty, InputNumber, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
@@ -85,7 +85,10 @@ function statusAccent(status: ProposalStatus) {
 }
 
 function ProposalRow({ proposal, selected, onSelect }: { proposal: ExtraServiceProposal; selected: boolean; onSelect: () => void }) {
-  const total = proposal.laborCost + proposal.partsCost
+  // A pending proposal has no SA-set price yet — show the technician's time
+  // estimate instead of a misleading "0 ₫". Once the SA has priced it (sent
+  // or approved), the real total is meaningful.
+  const isPriced = proposal.status !== 'pending'
   const accent = statusAccent(proposal.status)
   return (
     <button
@@ -115,7 +118,11 @@ function ProposalRow({ proposal, selected, onSelect }: { proposal: ExtraServiceP
           <Avatar size={18} style={{ background: advisorPalette.ink, fontSize: 9 }}>{getUserInitials(proposal.technician)}</Avatar>
           {proposal.technician}
         </span>
-        <span style={{ color: advisorPalette.ink, fontSize: 14, fontWeight: 700 }}>{formatMoney(total)}</span>
+        {isPriced ? (
+          <span style={{ color: advisorPalette.ink, fontSize: 14, fontWeight: 700 }}>{formatMoney(proposal.laborCost + proposal.partsCost)}</span>
+        ) : (
+          <span style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 600 }}>+{proposal.estimateMinutes} min · not priced yet</span>
+        )}
       </div>
     </button>
   )
@@ -125,6 +132,8 @@ export function AdditionalServiceSuggestionPage() {
   const { token } = useAuth()
   const [proposals, setProposals] = useState<ExtraServiceProposal[]>([])
   const [selectedId, setSelectedId] = useState('')
+  const [editedLaborCost, setEditedLaborCost] = useState(0)
+  const [editedPartsCost, setEditedPartsCost] = useState(0)
   const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
 
@@ -156,10 +165,20 @@ export function AdditionalServiceSuggestionPage() {
   }, [token])
 
   const selectedProposal = proposals.find((proposal) => proposal.id === selectedId)
+
+  // Reset the editable price to the technician's estimate whenever the
+  // selected proposal changes — the SA's edit is per-proposal, not sticky.
+  useEffect(() => {
+    setEditedLaborCost(selectedProposal?.laborCost || 0)
+    setEditedPartsCost(selectedProposal?.partsCost || 0)
+  }, [selectedProposal?.id])
+
   const pendingCount = proposals.filter((proposal) => proposal.status === 'pending').length
   const sentCount = proposals.filter((proposal) => proposal.status === 'sent').length
-  const totalPendingValue = useMemo(
-    () => proposals.filter((proposal) => proposal.status === 'pending').reduce((sum, proposal) => sum + proposal.partsCost + proposal.laborCost, 0),
+  // Total of what's actively quoted to customers awaiting their decision —
+  // pending proposals have no SA-set price yet, so they contribute nothing here.
+  const totalQuotedValue = useMemo(
+    () => proposals.filter((proposal) => proposal.status === 'sent').reduce((sum, proposal) => sum + proposal.partsCost + proposal.laborCost, 0),
     [proposals],
   )
   const isResolved = selectedProposal?.status === 'approved' || selectedProposal?.status === 'rejected'
@@ -175,7 +194,13 @@ export function AdditionalServiceSuggestionPage() {
     clearApiMessage()
 
     try {
-      const updated = await updateAdditionalServiceProposal(token, selectedProposal.id, status)
+      // The technician's labor/parts cost is only an estimate — this is the
+      // price the SA actually confirms, whether sending the quote to the
+      // customer or approving the line straight onto the work order.
+      const updated = await updateAdditionalServiceProposal(token, selectedProposal.id, status, {
+        laborCost: editedLaborCost,
+        partsCost: editedPartsCost,
+      })
       const mapped = mapProposal(updated)
       setProposals((current) => current.map((proposal) => (proposal.id === selectedProposal.id ? { ...proposal, ...mapped, status } : proposal)))
       showSuccess(status === 'sent' ? 'Quote sent to the customer.' : status === 'approved' ? 'Approved and added to the work order.' : 'Proposal rejected.')
@@ -193,7 +218,7 @@ export function AdditionalServiceSuggestionPage() {
       <div className="flex flex-wrap gap-4">
         <StatCard label="Pending review" palette={advisorPalette} value={pendingCount} enterDelay={1} />
         <StatCard label="Sent to customer" palette={advisorPalette} value={sentCount} enterDelay={2} />
-        <StatCard label="Pending value" palette={advisorPalette} value={formatMoney(totalPendingValue)} enterDelay={3} />
+        <StatCard label="Quoted to customers" palette={advisorPalette} value={formatMoney(totalQuotedValue)} enterDelay={3} />
       </div>
 
       <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
@@ -230,24 +255,15 @@ export function AdditionalServiceSuggestionPage() {
                 <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 12, marginTop: 6 }}>Customer impact: {selectedProposal.customerImpact}</p>
               ) : null}
 
-              <div className="mt-5 grid grid-cols-2 gap-3">
-                <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 12 }}>
-                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Parts</p>
-                  <p style={{ color: 'white', fontSize: 16, fontWeight: 700, marginTop: 4 }}>{formatMoney(selectedProposal.partsCost)}</p>
-                </div>
-                <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 14, padding: 12 }}>
-                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Labour</p>
-                  <p style={{ color: 'white', fontSize: 16, fontWeight: 700, marginTop: 4 }}>{formatMoney(selectedProposal.laborCost)}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between" style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 16, paddingTop: 14 }}>
+              <div className="flex items-center justify-between" style={{ marginTop: 20 }}>
                 <div>
-                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Total to customer</p>
-                  <p style={{ color: '#ffb4ab', fontSize: 24, fontWeight: 700, marginTop: 4 }}>{formatMoney(selectedProposal.laborCost + selectedProposal.partsCost)}</p>
+                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Price</p>
+                  <p style={{ color: '#ffb4ab', fontSize: 24, fontWeight: 700, marginTop: 4 }}>
+                    {selectedProposal.status === 'pending' ? 'Not set yet' : formatMoney(selectedProposal.laborCost + selectedProposal.partsCost)}
+                  </p>
                 </div>
                 <div className="text-right">
-                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Est. time</p>
+                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Technician's time estimate</p>
                   <p style={{ color: 'white', fontSize: 16, fontWeight: 700, marginTop: 4 }}>+{selectedProposal.estimateMinutes} min</p>
                 </div>
               </div>
@@ -266,6 +282,24 @@ export function AdditionalServiceSuggestionPage() {
                 </p>
               ) : (
                 <div className="flex flex-col gap-3">
+                  <p style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 600, margin: 0 }}>
+                    The technician only flags the work needed — set the price before sending it to the customer or approving it.
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>Labour</div>
+                      <InputNumber min={0} onChange={(value) => setEditedLaborCost(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={editedLaborCost} />
+                    </div>
+                    <div>
+                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>Parts</div>
+                      <InputNumber min={0} onChange={(value) => setEditedPartsCost(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={editedPartsCost} />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-between" style={{ background: advisorPalette.panelAlt, borderRadius: 12, padding: '10px 14px' }}>
+                    <span style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Price to quote</span>
+                    <span style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700 }}>{formatMoney(editedLaborCost + editedPartsCost)}</span>
+                  </div>
+
                   <Button block disabled={saving} icon={<FileTextOutlined />} onClick={() => updateStatus('sent')} size="large" type="primary">
                     Send quote to customer
                   </Button>

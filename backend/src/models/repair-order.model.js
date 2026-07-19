@@ -82,6 +82,13 @@ const stepNoteSchema = new Schema(
       type: Number,
       min: 0,
     },
+    // Photos the technician attached to this note — evidence of the actual
+    // repair work performed, distinct from the advisor's pre-repair
+    // inspection photos. Surfaced alongside them on the QC evidence view.
+    photos: {
+      type: [String],
+      default: [],
+    },
     createdAt: {
       type: Date,
       default: Date.now,

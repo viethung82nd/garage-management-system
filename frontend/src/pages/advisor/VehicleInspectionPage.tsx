@@ -78,7 +78,7 @@ function seedItems(): InspectionItemRow[] {
   )
 }
 
-type SubjectOption = { label: string; value: string; vehicleId?: string }
+type SubjectOption = { label: string; value: string; vehicleId?: string; lastKnownMileage?: number }
 
 export function VehicleInspectionPage() {
   const { token } = useAuth()
@@ -133,6 +133,7 @@ export function VehicleInspectionPage() {
           label: `${personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer')} — ${vehicleName(vehicle)} (${vehiclePlate(vehicle)}) · ${orderId(order)}`,
           value: order._id || order.id || '',
           vehicleId: vehicle?._id || vehicle?.id,
+          lastKnownMileage: vehicle?.lastKnownMileage,
         }
       }),
     [repairOrders],
@@ -145,6 +146,18 @@ export function VehicleInspectionPage() {
       setSubjectKey(orderIdParam)
     }
   }, [orderIdParam, subjectKey, subjectOptions])
+
+  // Reception already captured this vehicle's mileage — start the odometer
+  // field from that instead of making the advisor type the same number
+  // again. Only runs when the selected order changes, so an edit the
+  // advisor makes afterward (a fresh reading may differ) is never clobbered.
+  useEffect(() => {
+    const subject = subjectOptions.find((option) => option.value === subjectKey)
+    if (subject?.lastKnownMileage != null) {
+      setOdometer(String(subject.lastKnownMileage))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [subjectKey])
 
   const selectedSubject = subjectOptions.find((option) => option.value === subjectKey)
 

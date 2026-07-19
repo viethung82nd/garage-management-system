@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { fetchWorkshopBookings, formatApiDate, personName, rejectWorkshopBooking, unwrapArray, vehicleName, vehiclePlate, type ApiBooking } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
-import { InlineBanner, advisorPalette } from '../../widgets/backoffice-shell'
+import { InlineBanner, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected'
@@ -81,7 +81,8 @@ export function BookingRequestsPage() {
   const navigate = useNavigate()
   const [bookings, setBookings] = useState<BookingRequest[]>([])
   const [loading, setLoading] = useState(true)
-  const [apiMessage, setApiMessage] = useState<string>()
+  const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
+  const [rejectingId, setRejectingId] = useState<string>()
   const [query, setQuery] = useState('')
   const [service, setService] = useState('all')
   const [activeTab, setActiveTab] = useState<'pending' | 'processed'>('pending')
@@ -94,13 +95,13 @@ export function BookingRequestsPage() {
 
     async function loadBookings() {
       setLoading(true)
-      setApiMessage(undefined)
+      clearApiMessage()
       try {
         const response = await fetchWorkshopBookings(authToken)
         const nextBookings = unwrapArray<ApiBooking>(response, ['bookings']).map(mapBooking)
         if (!cancelled) setBookings(nextBookings)
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load bookings from the API')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load bookings from the API')
       } finally {
         if (!cancelled) setLoading(false)
       }
@@ -141,15 +142,22 @@ export function BookingRequestsPage() {
   }
 
   async function rejectBookingRequest(id: string) {
-    if (!token) return
+    // Guards against a double-click firing the same reject twice — the second
+    // call would hit the booking after its status already changed and the
+    // backend throws a 409 ("Cannot cancel a X booking") for it.
+    if (!token || rejectingId) return
 
-    setApiMessage(undefined)
+    setRejectingId(id)
+    clearApiMessage()
     try {
       const response = await rejectWorkshopBooking(token, id)
       const booking = ('booking' in response && response.booking ? response.booking : response) as ApiBooking
       setBookings((current) => current.map((item) => (item.id === id ? mapBooking(booking) : item)))
+      showSuccess('Booking request rejected.')
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Unable to update the booking status')
+      showError(err instanceof Error ? err.message : 'Unable to update the booking status')
+    } finally {
+      setRejectingId(undefined)
     }
   }
 
@@ -210,10 +218,12 @@ export function BookingRequestsPage() {
             width: 220,
             render: (_: unknown, booking: BookingRequest) => (
               <div className="flex gap-2">
-                <Button icon={<CarOutlined />} onClick={() => receiveBooking(booking.id)} type="primary">
+                <Button disabled={Boolean(rejectingId)} icon={<CarOutlined />} onClick={() => receiveBooking(booking.id)} type="primary">
                   Receive
                 </Button>
-                <Button onClick={() => rejectBookingRequest(booking.id)}>Reject</Button>
+                <Button disabled={Boolean(rejectingId) && rejectingId !== booking.id} loading={rejectingId === booking.id} onClick={() => rejectBookingRequest(booking.id)}>
+                  Reject
+                </Button>
               </div>
             ),
           },
@@ -223,7 +233,7 @@ export function BookingRequestsPage() {
 
   return (
     <ServiceAdvisorShell title="Booking requests">
-      {apiMessage ? <InlineBanner tone="error">{apiMessage}</InlineBanner> : null}
+      {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
       <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
         <Tabs

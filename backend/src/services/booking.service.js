@@ -148,6 +148,22 @@ export async function resolveVehicle({ licensePlate, brand, model }, customerId)
   const plate = licensePlate.toUpperCase().trim();
   const existing = await vehicleRepository.findOne({ licensePlate: plate });
   if (existing) {
+    // A vehicle record from an earlier visit shouldn't freeze its
+    // brand/model forever — apply whatever the front desk just typed
+    // (e.g. it was blank before, or was corrected) instead of silently
+    // discarding it because the plate already matched something on file.
+    let changed = false;
+    if (brand?.trim() && brand.trim() !== existing.brand) {
+      existing.brand = brand.trim();
+      changed = true;
+    }
+    if (model?.trim() && model.trim() !== existing.model) {
+      existing.model = model.trim();
+      changed = true;
+    }
+    if (changed) {
+      await existing.save();
+    }
     return existing;
   }
   return vehicleRepository.create({ licensePlate: plate, brand, model, customerId });
