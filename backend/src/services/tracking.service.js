@@ -168,7 +168,8 @@ export async function trackRepairOrder({ plate, orderId, phone }) {
         populate: { path: "customerId", select: "fullName phone accountType" },
       })
       .populate("advisorId", "fullName")
-      .populate("technicianId", "fullName");
+      .populate("technicianId", "fullName")
+      .populate("inspectionId", "photos");
 
     if (!order || !order.vehicleId || order.vehicleId.licensePlate !== normalizedPlate) {
       throw new ApiError(404, "Repair order not found");
@@ -194,7 +195,8 @@ export async function trackRepairOrder({ plate, orderId, phone }) {
         populate: { path: "customerId", select: "fullName phone accountType" },
       })
       .populate("advisorId", "fullName")
-      .populate("technicianId", "fullName");
+      .populate("technicianId", "fullName")
+      .populate("inspectionId", "photos");
 
     if (!order) {
       throw new ApiError(404, "Repair order not found");
@@ -242,6 +244,9 @@ export async function trackRepairOrder({ plate, orderId, phone }) {
     technician: order.technicianId?.fullName || "Assigning technician",
     services,
     approvedServices: services.map((service) => service.name),
+    // Real inspection photos taken for this order, if any were recorded —
+    // never a stand-in stock image unrelated to the actual vehicle/repair.
+    photos: order.inspectionId?.photos || [],
     invoice: {
       id: invoice?._id || null,
       displayId: displayInvoiceId,

@@ -48,6 +48,11 @@ export type CustomerRepairOrderApiRecord = {
     content: string
     createdAt?: string
   }>
+  inspectionId?: {
+    _id: string
+    findings?: string
+    photos?: string[]
+  } | null
   vehicleId?: {
     _id: string
     licensePlate: string

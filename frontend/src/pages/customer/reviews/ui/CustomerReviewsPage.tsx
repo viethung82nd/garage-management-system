@@ -134,34 +134,31 @@ export default function CustomerReviewsPage() {
 
   return (
     <CustomerPageLayout title="Service Reviews" breadcrumb="Reviews">
-      <div className="row">
-        <div className="col-lg-3">
-          <CustomerAccountNav />
-        </div>
-        <div className="col-lg-9">
-          <CustomerSectionHeading
-            eyebrow="Your feedback"
-            title="Leave a review"
-            description="Rate and comment on repair orders that have been completed."
+      <section className="customer-section">
+        <CustomerAccountNav />
+        <CustomerSectionHeading
+          eyebrow="Your feedback"
+          title="Leave a review"
+          description="Rate and comment on repair orders that have been completed."
+          compact
+        />
+
+        {loading ? <CustomerPanel>Loading your completed repair orders...</CustomerPanel> : null}
+        {error ? <CustomerPanel className="customer-panel--error">{error}</CustomerPanel> : null}
+
+        {!loading && !error && completedOrders.length === 0 ? (
+          <CustomerEmptyState
+            title="No completed repair orders yet"
+            description="Once a repair order is marked completed, it will show up here so you can leave a review."
           />
+        ) : null}
 
-          {loading ? <CustomerPanel>Loading your completed repair orders...</CustomerPanel> : null}
-          {error ? <CustomerPanel className="customer-panel--error">{error}</CustomerPanel> : null}
-
-          {!loading && !error && completedOrders.length === 0 ? (
-            <CustomerEmptyState
-              title="No completed repair orders yet"
-              description="Once a repair order is marked completed, it will show up here so you can leave a review."
-            />
-          ) : null}
-
-          {token
-            ? completedOrders.map((order) => (
-                <ReviewFormCard key={order._id} order={order} token={token} existingReview={reviewsByOrderId.get(order._id)} />
-              ))
-            : null}
-        </div>
-      </div>
+        {token
+          ? completedOrders.map((order) => (
+              <ReviewFormCard key={order._id} order={order} token={token} existingReview={reviewsByOrderId.get(order._id)} />
+            ))
+          : null}
+      </section>
     </CustomerPageLayout>
   )
 }

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import type { AuthUser } from '../../../shared/auth'
 import {
   AppointmentApiError,
@@ -64,6 +64,21 @@ function formatSubmitMessage(bookingId: string, bookingDate: string, timeSlot: s
   return `Appointment request ${bookingId.slice(-6).toUpperCase()} was sent for ${bookingDate} at ${timeSlot}.`
 }
 
+/** Field-by-field check with a specific message per field, instead of relying
+ * solely on the browser's native `required` validation — that silently blocks
+ * the submit handler from running at all, so our own success/error feedback
+ * never gets a chance to appear and it looks like the button did nothing. */
+function findMissingFieldMessage(formState: AppointmentFormState) {
+  if (!formState.fullName.trim()) return 'Please enter your name.'
+  if (!formState.email.trim()) return 'Please enter your email.'
+  if (!formState.phone.trim()) return 'Please enter your phone number.'
+  if (!formState.licensePlate.trim()) return 'Please enter your license plate.'
+  if (!formState.bookingDate) return 'Please select a date.'
+  if (!formState.timeSlot) return 'Please select a time slot.'
+  if (!formState.serviceId) return 'Please select a service.'
+  return null
+}
+
 export default function AppointmentBookingForm({ user }: AppointmentBookingFormProps) {
   const [formState, setFormState] = useState<AppointmentFormState>(() =>
     buildInitialState(user?.fullName || '', user?.email || '', user?.phone || ''),
@@ -74,6 +89,13 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
   const [isLoadingSlots, setIsLoadingSlots] = useState(false)
   const [submitState, setSubmitState] = useState<SubmitState>({ type: 'idle', message: '' })
   const minimumDate = useMemo(() => getTodayInputValue(), [])
+  const feedbackRef = useRef<HTMLDivElement | null>(null)
+
+  useEffect(() => {
+    if (submitState.type !== 'idle' && submitState.message) {
+      feedbackRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+    }
+  }, [submitState])
 
   useEffect(() => {
     setFormState((current) => ({
@@ -142,6 +164,13 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+
+    const missingFieldMessage = findMissingFieldMessage(formState)
+    if (missingFieldMessage) {
+      setSubmitState({ type: 'error', message: missingFieldMessage })
+      return
+    }
+
     setSubmitState({ type: 'loading', message: 'Sending your appointment request...' })
 
     try {
@@ -187,7 +216,7 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
         <p role="status" aria-live="polite" aria-atomic="true" />
         <ul />
       </div>
-      <form className="wpcf7-form init appointment-booking-form" onSubmit={handleSubmit} aria-label="Appointment form">
+      <form className="wpcf7-form init appointment-booking-form" onSubmit={handleSubmit} aria-label="Appointment form" noValidate>
         <div className="row">
           <div className="col-lg-6 col-md-6">
             <div className="form-group">
@@ -353,6 +382,7 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
         </div>
 
         <div
+          ref={feedbackRef}
           className={`wpcf7-response-output appointment-booking-feedback appointment-booking-feedback--${submitState.type}`}
           aria-live="polite"
         >

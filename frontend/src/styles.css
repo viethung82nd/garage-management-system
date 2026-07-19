@@ -336,21 +336,38 @@ select {
 
 .appointment-booking-feedback {
   display: block;
-  margin-top: 8px;
-  min-height: 28px;
+  margin-top: 14px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  border-left: 4px solid transparent;
+  font-weight: 500;
   color: rgba(15, 14, 14, 0.74);
+  background: rgba(15, 14, 14, 0.04);
+  border-left-color: rgba(15, 14, 14, 0.2);
 }
 
 .appointment-booking-feedback:empty {
   display: none;
+  margin-top: 0;
+  padding: 0;
+}
+
+.appointment-booking-feedback--loading {
+  color: rgba(15, 14, 14, 0.74);
+  background: rgba(15, 14, 14, 0.04);
+  border-left-color: rgba(15, 14, 14, 0.2);
 }
 
 .appointment-booking-feedback--success {
   color: #188754;
+  background: rgba(24, 135, 84, 0.08);
+  border-left-color: #188754;
 }
 
 .appointment-booking-feedback--error {
   color: var(--color-primary);
+  background: rgba(245, 19, 4, 0.06);
+  border-left-color: var(--color-primary);
 }
 
 .home-five-estimate-panel .funfact-card {
@@ -1358,6 +1375,18 @@ select {
   display: block;
 }
 
+/* No media sidebar here — the status panel's own photo card handles images,
+   so this modal is single-column like --invoice rather than the default
+   media+content grid. */
+.customer-modal--tracking {
+  width: min(1180px, 100%);
+  display: block;
+}
+
+.customer-modal__content--tracking {
+  padding: 34px;
+}
+
 .customer-modal::-webkit-scrollbar {
   width: 8px;
 }
@@ -1390,6 +1419,17 @@ select {
 .customer-modal__media {
   padding: 22px 22px 0;
   background: rgba(15, 14, 14, 0.02);
+}
+
+/* Used when the gallery sits inside a CustomerInfoCard instead of the modal
+   shell — the card already provides the panel background/padding. */
+.customer-modal__media--inline {
+  padding: 0;
+  background: transparent;
+}
+
+.customer-modal__media--inline .customer-modal__media-main {
+  aspect-ratio: 16 / 9;
 }
 
 .customer-modal__media-main {

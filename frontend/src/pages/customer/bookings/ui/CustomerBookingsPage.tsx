@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import { asset } from '../../../../shared/lib/asset'
 import {
   CustomerAccountNav,
   CustomerEmptyState,
@@ -8,6 +7,7 @@ import {
   CustomerMetricCard,
   CustomerPageLayout,
   CustomerPanel,
+  CustomerRepairStatusPanel,
   CustomerSectionHeading,
   CustomerSelect,
   CustomerStatusBadge,
@@ -20,15 +20,12 @@ import {
   type CustomerInvoiceApiRecord,
   type CustomerRepairOrderApiRecord,
 } from '../../api/customerApi'
-import type { BookingHistoryRecord } from '../../model/mock'
+import type { TrackingRecord } from '../../model/mock'
+import { fetchTrackingRecord, TrackingApiError } from '../../tracking/api/trackingApi'
+import { mapTrackingRecord } from '../../tracking/lib/mapTrackingRecord'
 import { useAuth } from '../../../../shared/auth'
 
 const GARAGE_NAME = 'Kapa Auto Care Center'
-const DETAIL_IMAGES = [
-  '/wp-content/uploads/2024/12/service1.jpg',
-  '/wp-content/uploads/2022/11/choose.webp',
-  '/wp-content/uploads/2024/12/banner-bg2.jpg',
-]
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
@@ -98,12 +95,33 @@ function findMatchingBooking(order: CustomerRepairOrderApiRecord, bookings: Cust
   return bookings.find((booking) => booking.vehicleId?._id === order.vehicleId?._id) || null
 }
 
+type BookingRow = {
+  key: string
+  orderId: string
+  displayId: string
+  invoiceId: string
+  dateTime: string
+  vehicle: string
+  plate: string
+  intakeType: 'Appointment' | 'Walk-in'
+  advisor: string
+  technician: string
+  garageName: string
+  amount: string
+  paymentMethod: string
+  invoiceStatus: string
+  statusLabel: string
+  statusTone: 'completed' | 'in-progress' | 'pending' | 'ready'
+}
+
 export default function CustomerBookingsPage() {
-  const { token } = useAuth()
+  const { token, user } = useAuth()
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('all')
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
-  const [selectedImageIndex, setSelectedImageIndex] = useState(0)
+  const [trackingResult, setTrackingResult] = useState<TrackingRecord | null>(null)
+  const [trackingLoading, setTrackingLoading] = useState(false)
+  const [trackingError, setTrackingError] = useState('')
   const [repairOrders, setRepairOrders] = useState<CustomerRepairOrderApiRecord[]>([])
   const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
@@ -147,18 +165,20 @@ export default function CustomerBookingsPage() {
     }
   }, [token])
 
-  const bookingHistory = useMemo<BookingHistoryRecord[]>(() => {
+  const bookingHistory = useMemo<BookingRow[]>(() => {
     return repairOrders.map((order) => {
       const invoice = invoices.find((item) => item.repairOrder?.id === order._id) || null
       const linkedBooking = findMatchingBooking(order, bookings)
       const visualStatus = mapStatus(order, invoice)
 
       return {
-        id: toDisplayOrderId(order._id),
+        key: order._id,
+        orderId: order._id,
+        displayId: toDisplayOrderId(order._id),
         invoiceId: invoice?.displayId || 'Invoice pending',
         dateTime: formatDateTime(order.startedAt || order.completedAt),
         vehicle: formatVehicle(order),
-        plate: order.vehicleId?.licensePlate || 'Not recorded',
+        plate: order.vehicleId?.licensePlate || '',
         intakeType: linkedBooking?.source === 'walkIn' ? 'Walk-in' : 'Appointment',
         advisor: order.advisorId?.fullName || 'Service advisor updating',
         technician: order.technicianId?.fullName || 'Technician updating',
@@ -175,15 +195,6 @@ export default function CustomerBookingsPage() {
                 : 'Invoice not issued',
         statusLabel: visualStatus.statusLabel,
         statusTone: visualStatus.statusTone,
-        primaryService: order.services[0]?.name || 'Service advisor intake',
-        approvedServices: order.services.map((service) => service.name),
-        detailImages: DETAIL_IMAGES,
-        issueSummary:
-          order.stepNotes[0]?.content ||
-          (order.services.length > 0
-            ? `Approved services: ${order.services.map((service) => service.name).join(', ')}.`
-            : 'Repair order recorded and awaiting more service notes.'),
-        additionalProposal: undefined,
       }
     })
   }, [bookings, invoices, repairOrders])
@@ -194,7 +205,7 @@ export default function CustomerBookingsPage() {
     return bookingHistory.filter((booking) => {
       const matchesQuery =
         normalizedQuery.length === 0 ||
-        booking.id.toLowerCase().includes(normalizedQuery) ||
+        booking.displayId.toLowerCase().includes(normalizedQuery) ||
         booking.vehicle.toLowerCase().includes(normalizedQuery) ||
         booking.plate.toLowerCase().includes(normalizedQuery)
 
@@ -214,9 +225,36 @@ export default function CustomerBookingsPage() {
   )
 
   const selectedBooking = useMemo(
-    () => bookingHistory.find((booking) => booking.id === selectedBookingId) ?? null,
+    () => bookingHistory.find((booking) => booking.displayId === selectedBookingId) ?? null,
     [bookingHistory, selectedBookingId],
   )
+
+  async function openBookingDetail(booking: BookingRow) {
+    setSelectedBookingId(booking.displayId)
+    setTrackingResult(null)
+    setTrackingError('')
+
+    if (!user?.phone || !booking.plate) {
+      setTrackingError('Unable to load live repair status — no phone on file for this account.')
+      return
+    }
+
+    setTrackingLoading(true)
+    try {
+      const response = await fetchTrackingRecord({ plate: booking.plate, orderId: booking.orderId })
+      setTrackingResult(mapTrackingRecord(response))
+    } catch (error) {
+      setTrackingError(error instanceof TrackingApiError ? error.message : 'Unable to load repair status right now.')
+    } finally {
+      setTrackingLoading(false)
+    }
+  }
+
+  function closeBookingDetail() {
+    setSelectedBookingId(null)
+    setTrackingResult(null)
+    setTrackingError('')
+  }
 
   return (
     <CustomerPageLayout title="Booking History" breadcrumb="Booking History">
@@ -284,15 +322,15 @@ export default function CustomerBookingsPage() {
                 </thead>
                 <tbody>
                   {filteredBookings.map((booking) => (
-                    <tr key={booking.id}>
+                    <tr key={booking.key}>
                       <td>
-                        <strong>{booking.id}</strong>
+                        <strong>{booking.displayId}</strong>
                         <span>{booking.invoiceId}</span>
                       </td>
                       <td>{booking.dateTime}</td>
                       <td>
                         <strong>{booking.vehicle}</strong>
-                        <span>{booking.plate}</span>
+                        <span>{booking.plate || 'Not recorded'}</span>
                       </td>
                       <td>{booking.intakeType}</td>
                       <td>
@@ -301,14 +339,7 @@ export default function CustomerBookingsPage() {
                       <td>{booking.invoiceStatus}</td>
                       <td className="customer-bookings-table__amount">{booking.amount}</td>
                       <td>
-                        <button
-                          type="button"
-                          className="customer-table-link"
-                          onClick={() => {
-                            setSelectedImageIndex(0)
-                            setSelectedBookingId(booking.id)
-                          }}
-                        >
+                        <button type="button" className="customer-table-link" onClick={() => void openBookingDetail(booking)}>
                           View detail
                         </button>
                       </td>
@@ -322,95 +353,36 @@ export default function CustomerBookingsPage() {
       </section>
 
       {selectedBooking ? (
-        <div className="customer-modal-backdrop" role="presentation" onClick={() => setSelectedBookingId(null)}>
-          <div className="customer-modal" role="dialog" aria-modal="true" aria-labelledby="booking-detail-title" onClick={(event) => event.stopPropagation()}>
-            <button type="button" className="customer-modal__close" aria-label="Close detail" onClick={() => setSelectedBookingId(null)}>
+        <div className="customer-modal-backdrop" role="presentation" onClick={closeBookingDetail}>
+          <div
+            className="customer-modal customer-modal--tracking"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="booking-detail-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button type="button" className="customer-modal__close" aria-label="Close detail" onClick={closeBookingDetail}>
               ×
             </button>
 
-            <div className="customer-modal__media">
-              <div className="customer-modal__media-main">
-                <img src={asset(selectedBooking.detailImages[selectedImageIndex])} alt={selectedBooking.vehicle} />
-              </div>
-              <div className="customer-modal__thumbs">
-                {selectedBooking.detailImages.map((image, index) => (
-                  <button
-                    key={`${selectedBooking.id}-${image}`}
-                    type="button"
-                    className={`customer-modal__thumb${selectedImageIndex === index ? ' customer-modal__thumb--active' : ''}`}
-                    onClick={() => setSelectedImageIndex(index)}
-                  >
-                    <img src={asset(image)} alt={`${selectedBooking.vehicle} issue ${index + 1}`} />
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            <div className="customer-modal__content">
+            <div className="customer-modal__content customer-modal__content--tracking">
               <div className="customer-modal__header">
                 <div>
                   <span className="customer-booking-card__eyebrow">Repair Order Detail</span>
-                  <h3 id="booking-detail-title">{selectedBooking.id}</h3>
-                  <p>{selectedBooking.vehicle} • {selectedBooking.plate}</p>
+                  <h3 id="booking-detail-title">{selectedBooking.displayId}</h3>
+                  <p>
+                    {selectedBooking.vehicle} • {selectedBooking.plate || 'Plate not recorded'}
+                  </p>
                 </div>
                 <CustomerStatusBadge tone={selectedBooking.statusTone}>{selectedBooking.statusLabel}</CustomerStatusBadge>
               </div>
 
-              <div className="customer-modal__grid">
-                <div>
-                  <span className="customer-booking-card__label">Garage</span>
-                  <strong>{selectedBooking.garageName}</strong>
-                </div>
-                <div>
-                  <span className="customer-booking-card__label">Intake</span>
-                  <strong>{selectedBooking.intakeType}</strong>
-                </div>
-                <div>
-                  <span className="customer-booking-card__label">Service advisor</span>
-                  <strong>{selectedBooking.advisor}</strong>
-                </div>
-                <div>
-                  <span className="customer-booking-card__label">Technician</span>
-                  <strong>{selectedBooking.technician}</strong>
-                </div>
-                <div>
-                  <span className="customer-booking-card__label">Payment method</span>
-                  <strong>{selectedBooking.paymentMethod}</strong>
-                </div>
-                <div>
-                  <span className="customer-booking-card__label">Invoice</span>
-                  <strong>{selectedBooking.invoiceId}</strong>
-                  <p>{selectedBooking.invoiceStatus}</p>
-                </div>
-              </div>
-
-              <div className="customer-modal__section">
-                <span className="customer-booking-card__label">Issue summary</span>
-                <p>{selectedBooking.issueSummary}</p>
-              </div>
-
-              <div className="customer-modal__section">
-                <span className="customer-booking-card__label">Approved services</span>
-                <div className="customer-service-tags">
-                  {selectedBooking.approvedServices.map((service) => (
-                    <span key={service}>{service}</span>
-                  ))}
-                </div>
-              </div>
-
-              {selectedBooking.additionalProposal ? (
-                <div className="customer-modal__section">
-                  <span className="customer-booking-card__label">Additional proposal</span>
-                  <p>{selectedBooking.additionalProposal}</p>
-                </div>
-              ) : null}
+              {trackingLoading ? <CustomerPanel>Loading live repair status...</CustomerPanel> : null}
+              {trackingError ? <CustomerPanel className="customer-panel--error">{trackingError}</CustomerPanel> : null}
+              {trackingResult ? <CustomerRepairStatusPanel result={trackingResult} /> : null}
 
               <div className="customer-modal__footer">
-                <div className="customer-modal__total">
-                  <span className="customer-booking-card__label">Quoted total</span>
-                  <strong>{selectedBooking.amount}</strong>
-                </div>
-                <button type="button" className="default-btn customer-primary-btn customer-primary-btn--ghost" onClick={() => setSelectedBookingId(null)}>
+                <button type="button" className="default-btn customer-primary-btn customer-primary-btn--ghost" onClick={closeBookingDetail}>
                   Close
                   <span />
                 </button>

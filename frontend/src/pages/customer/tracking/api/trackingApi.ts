@@ -44,6 +44,7 @@ export type TrackingApiResponse = {
     quantity: number
   }>
   approvedServices: string[]
+  photos: string[]
   invoice: {
     id: string | null
     displayId: string
@@ -104,11 +105,17 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
   }
 }
 
-export async function fetchTrackingRecord(plate: string, phone: string) {
-  const query = new URLSearchParams({
-    plate,
-    phone,
-  })
+/**
+ * Looks up a repair order's live status. Either `phone` (public plate+phone
+ * lookup, used by the standalone Track Repair page) or `orderId` (used when
+ * the caller already knows exactly which order — e.g. Booking History's
+ * "View detail" — so it doesn't fall back to "this vehicle's most recent
+ * order" when a vehicle has more than one).
+ */
+export async function fetchTrackingRecord(params: { plate: string; phone?: string; orderId?: string }) {
+  const query = new URLSearchParams({ plate: params.plate })
+  if (params.phone) query.set('phone', params.phone)
+  if (params.orderId) query.set('orderId', params.orderId)
 
   return requestJson<TrackingApiResponse>(`/api/tracking?${query.toString()}`, {
     method: 'GET',

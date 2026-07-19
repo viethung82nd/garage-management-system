@@ -17,6 +17,7 @@ export type TrackingRecord = {
   serviceAdvisor: string
   technician: string
   approvedServices: string[]
+  photos: string[]
   additionalProposal?: string
   invoiceId: string
   quotedTotal: string
@@ -45,6 +46,7 @@ export const trackingRecords: TrackingRecord[] = [
     serviceAdvisor: 'Tran Hoang',
     technician: 'Le Duc',
     approvedServices: ['Engine diagnostics', 'Oil change', 'Brake fluid flush'],
+    photos: [],
     additionalProposal: 'Front brake pad replacement awaiting customer approval.',
     invoiceId: 'INV-240611-08',
     quotedTotal: '$228.00',

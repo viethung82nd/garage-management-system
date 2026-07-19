@@ -1,17 +1,16 @@
 import { NavLink } from 'react-router-dom'
-import { useAuth } from '../../auth'
 
 const links = [
   { to: '/customer/profile', label: 'Profile' },
   { to: '/customer/bookings', label: 'Booking History' },
   { to: '/customer/invoices', label: 'Invoices' },
-  { to: '/tracking', label: 'Track Repair' },
   { to: '/customer/reviews', label: 'Reviews' },
 ]
 
+// "Track Repair" and "Logout" are deliberately not repeated here — both
+// already live in the global header (KapaNavbar), so this sub-nav only
+// covers account-specific pages the header doesn't link to.
 export function CustomerAccountNav() {
-  const { logout } = useAuth()
-
   return (
     <div className="customer-account-nav">
       {links.map((link) => (
@@ -23,9 +22,6 @@ export function CustomerAccountNav() {
           {link.label}
         </NavLink>
       ))}
-      <button type="button" className="customer-account-nav__link customer-account-nav__button" onClick={logout}>
-        Logout
-      </button>
     </div>
   )
 }
