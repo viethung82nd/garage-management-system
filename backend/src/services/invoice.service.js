@@ -22,6 +22,10 @@ const invoicePopulate = [
       },
       { path: "advisorId", select: "fullName email phone role" },
       { path: "technicianId", select: "fullName email phone role" },
+      // Needed so serializeInvoice() can read service.serviceId.category —
+      // without this, serviceId stays an unpopulated ObjectId and every
+      // line silently falls back to "no category".
+      { path: "services.serviceId", select: "name category" },
     ],
   },
 ];
