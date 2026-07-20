@@ -140,10 +140,20 @@ export function useClonedKapaPage({
 
     let cancelled = false
 
-    const loadScripts = async () => {
-      for (const spec of pageSpec.scripts) {
-        if (cancelled) return
+    // Every cloned Kapa page ships ~40 external scripts (jQuery, its
+    // plugins, GSAP/ScrollMagic, etc.). Appending them one at a time and
+    // awaiting each onload before even starting the next request turns that
+    // into a fully serial waterfall — the dominant cause of the page
+    // looking stuck (hero content stays hidden until AOS/ScrollMagic init,
+    // which waits for every script). Appending them all up front instead
+    // lets the browser fetch them in parallel; `async = false` on each
+    // still guarantees they execute in original document order once
+    // downloaded, so plugin-before-jQuery ordering is preserved exactly as
+    // before — only the network waterfall is gone.
+    const loadScripts = () => {
+      const pending: Promise<void>[] = []
 
+      for (const spec of pageSpec.scripts) {
         const scriptEl = document.createElement('script')
         scriptEl.dataset.kapaTemplateScript = 'true'
         scriptEl.async = false
@@ -152,19 +162,21 @@ export function useClonedKapaPage({
 
         if (spec.src) {
           scriptEl.src = new URL(spec.src, originBase).href
-          await new Promise<void>((resolve) => {
-            scriptEl.onload = () => resolve()
-            scriptEl.onerror = () => resolve()
-            document.head.appendChild(scriptEl)
-            scriptNodes.push(scriptEl)
-          })
-          continue
+          pending.push(
+            new Promise<void>((resolve) => {
+              scriptEl.onload = () => resolve()
+              scriptEl.onerror = () => resolve()
+            }),
+          )
+        } else if (spec.text) {
+          scriptEl.textContent = spec.text
         }
 
-        if (spec.text) scriptEl.textContent = spec.text
         document.head.appendChild(scriptEl)
         scriptNodes.push(scriptEl)
       }
+
+      return Promise.all(pending).then(() => undefined)
     }
 
     const initAnimations = () => {
