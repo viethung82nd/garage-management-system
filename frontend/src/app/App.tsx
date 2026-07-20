@@ -45,9 +45,6 @@ const AdditionalServiceSuggestionPage = lazy(() =>
 const QualityVerificationPage = lazy(() =>
   import('../pages/advisor/QualityVerificationPage').then((module) => ({ default: module.QualityVerificationPage })),
 )
-const RepairProgressTimelinePage = lazy(() =>
-  import('../pages/advisor/RepairProgressTimelinePage').then((module) => ({ default: module.RepairProgressTimelinePage })),
-)
 const VehicleInspectionPage = lazy(() =>
   import('../pages/advisor/VehicleInspectionPage').then((module) => ({ default: module.VehicleInspectionPage })),
 )
@@ -378,18 +375,6 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['serviceAdvisor']}>
                 <QualityVerificationPage />
-              </RequireRole>
-            </RequireAuth>
-          </Suspense>
-        }
-      />
-      <Route
-        path="/advisor/repair-timeline"
-        element={
-          <Suspense fallback={<RouteFallback />}>
-            <RequireAuth>
-              <RequireRole roles={['serviceAdvisor']}>
-                <RepairProgressTimelinePage />
               </RequireRole>
             </RequireAuth>
           </Suspense>

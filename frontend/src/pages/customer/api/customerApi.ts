@@ -108,6 +108,8 @@ export type CustomerInvoiceApiRecord = {
     quantity: number
     unitPrice: number
     lineTotal: number
+    kind: 'service' | 'part' | 'labor'
+    source: 'quote' | 'additionalService'
   }>
   accountant: {
     id: string

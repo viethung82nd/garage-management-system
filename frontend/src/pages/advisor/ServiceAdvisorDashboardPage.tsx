@@ -48,7 +48,7 @@ function mapOrderQueue(order: ApiRepairOrder): QueueItem {
     customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer'),
     meta: `${vehicleName(vehicle)} - ${vehiclePlate(vehicle)}`,
     status: order.status === 'inProgress' ? 'In progress' : order.technicianId ? 'Assigned' : 'Awaiting technician',
-    to: `/advisor/repair-timeline?orderId=${id}`,
+    to: `/advisor/quality-check?orderId=${id}`,
   }
 }
 

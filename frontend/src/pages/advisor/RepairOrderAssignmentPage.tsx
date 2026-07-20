@@ -178,9 +178,9 @@ export function RepairOrderAssignmentPage() {
     try {
       await updateWorkshopRepairOrder(token, orderIdParam, { technicianId: selectedTechnicianId })
       setSaved(true)
-      // The technician takes it from here — the SA's next checkpoint is
-      // watching progress, not re-creating the order.
-      navigate(`/advisor/repair-timeline?orderId=${orderIdParam}`)
+      // The technician takes it from here — back to the queue of orders
+      // still waiting on an assignment.
+      navigate('/advisor/work-orders')
     } catch (err) {
       setApiMessage(err instanceof Error ? err.message : 'Unable to assign a technician to this order')
     } finally {

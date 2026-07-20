@@ -3,7 +3,6 @@ import {
   CarOutlined,
   CheckCircleOutlined,
   DashboardOutlined,
-  FieldTimeOutlined,
   FileSearchOutlined,
   FileTextOutlined,
   PlusCircleOutlined,
@@ -26,7 +25,6 @@ function activeMenuKey(pathname: string) {
   if (pathname.startsWith('/advisor/quotation')) return 'quotation'
   if (pathname.startsWith('/advisor/additional-services')) return 'additional-services'
   if (pathname.startsWith('/advisor/quality-check')) return 'quality-check'
-  if (pathname.startsWith('/advisor/repair-timeline')) return 'repair-timeline'
   if (pathname.startsWith('/advisor/transfer-requests')) return 'transfer-requests'
   if (pathname.startsWith('/advisor/dashboard')) return 'dashboard'
   return ''
@@ -74,7 +72,6 @@ export function ServiceAdvisorShell({ title, eyebrow = 'Service Advisor', childr
           { key: 'work-orders', icon: <ToolOutlined />, label: <Link to="/advisor/work-orders">Work orders</Link> },
           { key: 'additional-services', icon: <PlusCircleOutlined />, label: <Link to="/advisor/additional-services">Additional services</Link> },
           { key: 'quality-check', icon: <CheckCircleOutlined />, label: <Link to="/advisor/quality-check">Quality check</Link> },
-          { key: 'repair-timeline', icon: <FieldTimeOutlined />, label: <Link to="/advisor/repair-timeline">Repair timeline</Link> },
           { key: 'transfer-requests', icon: <SwapOutlined />, label: <Link to="/advisor/transfer-requests">Transfer requests</Link> },
         ]}
       >

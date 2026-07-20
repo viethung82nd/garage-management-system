@@ -5,7 +5,6 @@ import {
   CustomerFormField,
   CustomerInfoCard,
   CustomerInput,
-  CustomerMetricCard,
   CustomerPageLayout,
   CustomerPrimaryButton,
   CustomerRepairStatusPanel,
@@ -33,28 +32,8 @@ export default function CustomerTrackingPage() {
             <CustomerSectionHeading
               eyebrow="Track Your Repair"
               title="Check repair progress fast"
-              description="Check online booking or walk-in repair."
               compact
             />
-
-            <div className="customer-metric-strip customer-metric-strip--three">
-              <CustomerMetricCard
-                label="Input"
-                value="2 fields"
-                note="Plate + phone"
-              />
-              <CustomerMetricCard
-                label="Covers"
-                value="Walk-in / online"
-                note="One repair flow"
-              />
-              <CustomerMetricCard
-                label="Focus"
-                value="ETA"
-                note="See ready time fast"
-                accent
-              />
-            </div>
           </div>
 
           <div className="col-lg-6">

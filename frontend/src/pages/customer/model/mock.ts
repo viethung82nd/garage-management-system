@@ -154,6 +154,8 @@ export type CustomerInvoiceLineItem = {
   quantity: number
   unitPrice: string
   lineTotal: string
+  kindLabel?: string | null
+  addedMidRepair?: boolean
 }
 
 export type CustomerInvoiceRecord = {

@@ -1,9 +1,10 @@
 import { CheckCircleOutlined, FileSearchOutlined, PrinterOutlined, SelectOutlined, SendOutlined } from '@ant-design/icons'
-import { Button, Card, Divider, Empty, Input, InputNumber, Modal, Select, Space, Tag } from 'antd'
+import { Button, Card, Divider, Empty, Input, InputNumber, Modal, Select, Space } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../../../../shared/auth'
 import { exportNodeToPdf } from '../../../../shared/lib/pdf-export'
+import { InvoiceDocument, type InvoiceDocumentStatusTone } from '../../../../shared/ui/invoice/InvoiceDocument'
 import { InlineBanner } from '../../../../widgets/backoffice-shell'
 import {
   fetchInvoiceDetail,
@@ -60,23 +61,37 @@ function formatVehicleLabel(record: { brand?: string; model?: string; year?: num
   return main || record.licensePlate || 'Vehicle updating'
 }
 
-// Semantic status colors for a finance/billing tool: green = settled, amber = pending
-// action, navy = informational/ready, grey = void. Kept distinct from the brand red
-// (which stays reserved for primary actions) so status never reads as "alert".
-function statusTone(label: string) {
+function formatDateOnly(value?: string | null) {
+  if (!value) {
+    return 'Updating'
+  }
+
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
+}
+
+// Maps the accountant's finance-tool status vocabulary onto the shared
+// InvoiceDocument's four tones (the same ones the customer's copy uses), so
+// the badge itself is pixel-identical even though the label set differs.
+function statusDocumentTone(label: string): InvoiceDocumentStatusTone {
   switch (label) {
     case 'Paid':
-      return { bg: '#d1fae5', color: '#047857' }
+      return 'completed'
     case 'Partially paid':
-      return { bg: '#ede9fe', color: '#6d28d9' }
-    case 'Awaiting payment':
-      return { bg: '#fef3c7', color: '#92400e' }
-    case 'Overdue':
-      return { bg: '#fee2e2', color: '#dc2626' }
+      return 'in-progress'
     case 'Ready to bill':
-      return { bg: '#dbeafe', color: '#1e3a5f' }
+    case 'Cancelled':
+      return 'ready'
     default:
-      return { bg: '#f3f4f6', color: '#6b7280' }
+      return 'pending'
   }
 }
 
@@ -211,7 +226,6 @@ export default function InvoiceConfirmPage() {
     if (viewState.kind === 'repairOrder') {
       const order = viewState.detail
       return {
-        eyebrow: 'Ready for billing',
         displayId: repairOrderDisplayId(order._id),
         subtitle: formatVehicleLabel({
           brand: order.vehicleId?.brand,
@@ -232,7 +246,9 @@ export default function InvoiceConfirmPage() {
         plate: order.vehicleId?.licensePlate || null,
         vin: order.vehicleId?.chassisNumber || order.vehicleId?.engineNumber || null,
         mileage: order.vehicleId?.lastKnownMileage ?? null,
+        repairOrderId: repairOrderDisplayId(order._id),
         issuedAt: formatDateTime(order.completedAt),
+        serviceDate: formatDateOnly(order.completedAt || order.startedAt),
         dueAt: null as string | null,
         paymentMethod: 'Direct payment at service desk',
         paymentReference: null as string | null,
@@ -270,7 +286,6 @@ export default function InvoiceConfirmPage() {
             ? 'Partially paid'
             : 'Awaiting payment'
     return {
-      eyebrow: 'Invoice detail',
       displayId: invoice.displayId,
       subtitle: formatVehicleLabel({
         brand: invoice.vehicle?.brand,
@@ -291,7 +306,9 @@ export default function InvoiceConfirmPage() {
       plate: invoice.vehicle?.licensePlate || null,
       vin: invoice.vehicle?.chassisNumber || invoice.vehicle?.engineNumber || null,
       mileage: invoice.vehicle?.lastKnownMileage ?? null,
+      repairOrderId: invoice.repairOrder?.displayId || 'Repair order pending',
       issuedAt: formatDateTime(invoice.issuedAt),
+      serviceDate: formatDateOnly(invoice.repairOrder?.completedAt || invoice.repairOrder?.startedAt || invoice.issuedAt),
       dueAt: invoice.dueAt || null,
       paymentMethod: paymentMethodLabel(invoice.latestPayment?.method),
       paymentReference: invoice.latestPayment?.reference || null,
@@ -437,8 +454,19 @@ export default function InvoiceConfirmPage() {
                 </Button>
               </div>
             ) : null}
+            {detailMeta ? (
+              <div className="rounded-2xl px-1 py-0.5 text-xs" style={{ color: accountantPalette.textMuted }}>
+                Advisor: <span className="font-semibold" style={{ color: accountantPalette.inkSoft }}>{detailMeta.serviceAdvisor}</span>
+                {' · '}
+                Technician: <span className="font-semibold" style={{ color: accountantPalette.inkSoft }}>{detailMeta.technician}</span>
+                {detailMeta.paymentReference ? (
+                  <>
+                    {' · '}Payment ref: <span className="font-semibold" style={{ color: accountantPalette.inkSoft }}>{detailMeta.paymentReference}</span>
+                  </>
+                ) : null}
+              </div>
+            ) : null}
             <Card
-              ref={printableRef}
               bordered={false}
               className="bo-enter rounded-2xl"
               loading={isLoading}
@@ -446,183 +474,50 @@ export default function InvoiceConfirmPage() {
               style={{ background: accountantPalette.panel, boxShadow: accountantPalette.shadow, border: `1px solid ${accountantPalette.border}` }}
             >
             {detailMeta ? (
-              <>
-                {/* Letterhead — matches the customer-facing invoice sheet so both
-                    sides read as the same document. */}
-                <div className="flex flex-wrap items-start justify-between gap-4 border-b pb-5" style={{ borderColor: accountantPalette.border }}>
-                  <div>
-                    <div className="text-[15px] font-bold uppercase tracking-[0.06em]" style={{ color: '#1e3a5f' }}>
-                      Kapa Auto Care Center
-                    </div>
-                    <div className="mt-1 text-xs leading-5" style={{ color: accountantPalette.textMuted }}>
-                      7011 Vermont Ave, Los Angeles, CA 90044
-                      <br />
-                      support@kapa-garage.com · +1 (323) 750-1234
-                    </div>
-                  </div>
-                  <div className="text-right">
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: accountantPalette.textMuted }}>
-                      {detailMeta.eyebrow}
-                    </div>
-                    <div className="mt-1 text-[22px] leading-none font-bold" style={{ color: accountantPalette.ink }}>
-                      {detailMeta.displayId}
-                    </div>
-                    <div className="mt-1.5 text-xs" style={{ color: accountantPalette.textMuted }}>
-                      Issued {detailMeta.issuedAt}
-                    </div>
-                    {detailMeta.dueAt ? (
-                      <div className="text-xs" style={{ color: detailMeta.status === 'Overdue' ? '#dc2626' : accountantPalette.textMuted, fontWeight: detailMeta.status === 'Overdue' ? 600 : 400 }}>
-                        Due {formatDateTime(detailMeta.dueAt)}
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="mt-4 flex items-center justify-end gap-3">
-                  <Tag bordered={false} className="!rounded-full !px-4 !py-1 !text-[11px] !font-bold !uppercase !tracking-[0.18em]" style={statusTone(detailMeta.status)}>
-                    {detailMeta.status}
-                  </Tag>
-                </div>
-
-                {/* Billed to / Vehicle details / Service details — same three
-                    facts the customer sees on their copy of this invoice. */}
-                <div className="mt-4 grid gap-6 sm:grid-cols-3">
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
-                      Billed to
-                    </div>
-                    <div className="mt-1.5 text-sm font-semibold" style={{ color: accountantPalette.ink }}>
-                      {detailMeta.customer}
-                    </div>
-                    <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
-                      {detailMeta.contact}
-                    </div>
-                    {detailMeta.email ? (
-                      <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
-                        {detailMeta.email}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
-                      Vehicle details
-                    </div>
-                    <div className="mt-1.5 text-sm font-semibold" style={{ color: accountantPalette.ink }}>
-                      {detailMeta.vehicle}
-                    </div>
-                    <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
-                      VIN: {detailMeta.vin || 'Not recorded'}
-                    </div>
-                    <div className="mt-0.5 text-sm" style={{ color: accountantPalette.textMuted }}>
-                      Odometer: {detailMeta.mileage != null ? `${new Intl.NumberFormat('en-US').format(detailMeta.mileage)} km` : 'Not recorded'}
-                    </div>
-                  </div>
-                  <div>
-                    <div className="text-[11px] font-semibold uppercase tracking-[0.16em]" style={{ color: accountantPalette.textMuted }}>
-                      Service details
-                    </div>
-                    <div className="mt-1.5 text-sm" style={{ color: accountantPalette.inkSoft }}>
-                      Advisor: <span className="font-semibold">{detailMeta.serviceAdvisor}</span>
-                    </div>
-                    <div className="mt-0.5 text-sm" style={{ color: accountantPalette.inkSoft }}>
-                      Technician: <span className="font-semibold">{detailMeta.technician}</span>
-                    </div>
-                    <div className="mt-0.5 text-sm" style={{ color: accountantPalette.inkSoft }}>
-                      Payment: <span className="font-semibold">{detailMeta.paymentMethod}</span>
-                      {detailMeta.paymentReference ? <span style={{ color: accountantPalette.textMuted }}> · Ref: {detailMeta.paymentReference}</span> : null}
-                    </div>
-                  </div>
-                </div>
-
-                {/* Itemized table */}
-                <div className="mt-6 overflow-hidden rounded-xl border" style={{ borderColor: accountantPalette.border }}>
-                  <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-sm">
-                    <thead>
-                      <tr style={{ background: accountantPalette.panelAlt }}>
-                        <th className="w-10 px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: accountantPalette.textMuted }}>#</th>
-                        <th className="px-4 py-2.5 text-left text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: accountantPalette.textMuted }}>Description</th>
-                        <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: accountantPalette.textMuted }}>Qty</th>
-                        <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: accountantPalette.textMuted }}>Unit price</th>
-                        <th className="px-4 py-2.5 text-right text-[11px] font-semibold uppercase tracking-[0.12em]" style={{ color: accountantPalette.textMuted }}>Amount</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {detailMeta.items.map((item, index) => (
-                        <tr key={`${item.label}-${index}`} className="border-t" style={{ borderColor: accountantPalette.border }}>
-                          <td className="px-4 py-3 align-top" style={{ color: accountantPalette.textMuted, fontVariantNumeric: 'tabular-nums' }}>{index + 1}</td>
-                          <td className="px-4 py-3 align-top font-medium" style={{ color: accountantPalette.inkSoft }}>
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              <span>{item.label}</span>
-                              {kindLabel(item.kind) ? (
-                                <Tag bordered={false} className="!m-0 !rounded-full !px-2 !py-0 !text-[10px] !font-semibold !uppercase" style={{ background: accountantPalette.panelAlt, color: accountantPalette.textMuted }}>
-                                  {kindLabel(item.kind)}
-                                </Tag>
-                              ) : null}
-                              {item.source === 'additionalService' ? (
-                                <Tag bordered={false} className="!m-0 !rounded-full !px-2 !py-0 !text-[10px] !font-semibold !uppercase" style={{ background: '#fef3c7', color: '#92400e' }}>
-                                  Added mid-repair
-                                </Tag>
-                              ) : null}
-                            </div>
-                          </td>
-                          <td className="px-4 py-3 text-right align-top" style={{ color: accountantPalette.textMuted, fontVariantNumeric: 'tabular-nums' }}>{item.qty}</td>
-                          <td className="px-4 py-3 text-right align-top" style={{ color: accountantPalette.textMuted, fontVariantNumeric: 'tabular-nums' }}>
-                            {formatMoney(item.amount / Math.max(item.qty, 1), currency)}
-                          </td>
-                          <td className="px-4 py-3 text-right align-top font-semibold" style={{ color: accountantPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
-                            {formatMoney(item.amount, currency)}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  </div>
-                </div>
-
-                {/* Totals */}
-                <div className="mt-5 flex justify-end">
-                  <div className="w-full max-w-[300px] space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span style={{ color: accountantPalette.textMuted }}>Subtotal</span>
-                      <span className="font-medium" style={{ color: accountantPalette.inkSoft, fontVariantNumeric: 'tabular-nums' }}>{formatMoney(detailMeta.subtotal, currency)}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span style={{ color: accountantPalette.textMuted }}>Discount</span>
-                      <span className="font-medium" style={{ color: accountantPalette.inkSoft, fontVariantNumeric: 'tabular-nums' }}>{formatMoney(detailMeta.discount, currency)}</span>
-                    </div>
-                    {detailMeta.taxAmount > 0 ? (
-                      <div className="flex items-center justify-between text-sm">
-                        <span style={{ color: accountantPalette.textMuted }}>Tax</span>
-                        <span className="font-medium" style={{ color: accountantPalette.inkSoft, fontVariantNumeric: 'tabular-nums' }}>{formatMoney(detailMeta.taxAmount, currency)}</span>
-                      </div>
-                    ) : null}
-                    <div className="flex items-center justify-between border-t pt-2.5" style={{ borderColor: accountantPalette.border }}>
-                      <span className="text-[13px] font-semibold uppercase tracking-[0.1em]" style={{ color: accountantPalette.ink }}>Total due</span>
-                      <span className="text-[22px] leading-none font-bold" style={{ color: '#1e3a5f', fontVariantNumeric: 'tabular-nums' }}>
-                        {formatMoney(detailMeta.total, currency)}
-                      </span>
-                    </div>
-                    {viewState?.kind === 'invoice' && detailMeta.quotedTotal != null && detailMeta.quotedTotal !== detailMeta.total ? (
-                      <div className="rounded-lg px-3 py-2 text-xs" style={{ background: '#fef3c7', color: '#92400e' }}>
-                        Quoted {formatMoney(detailMeta.quotedTotal, currency)} → Current {formatMoney(detailMeta.total, currency)}
-                        {' '}({detailMeta.total > detailMeta.quotedTotal ? '+' : ''}
-                        {formatMoney(detailMeta.total - detailMeta.quotedTotal, currency)} {detailMeta.total > detailMeta.quotedTotal ? 'added after quote' : 'less than quoted'})
-                      </div>
-                    ) : null}
-                    {detailMeta.amountPaid > 0 ? (
-                      <div className="flex items-center justify-between text-sm">
-                        <span style={{ color: accountantPalette.textMuted }}>Paid so far</span>
-                        <span className="font-medium" style={{ color: '#047857', fontVariantNumeric: 'tabular-nums' }}>−{formatMoney(detailMeta.amountPaid, currency)}</span>
-                      </div>
-                    ) : null}
-                  </div>
-                </div>
-
-                <div className="mt-6 border-t pt-4 text-xs" style={{ borderColor: accountantPalette.border, color: accountantPalette.textMuted }}>
-                  Thank you for servicing your vehicle with us. This document is generated by Kapa Auto Care Center and reflects work completed under repair order {detailMeta.displayId}.
-                </div>
-              </>
+              <InvoiceDocument
+                ref={printableRef}
+                invoiceId={detailMeta.displayId}
+                statusLabel={detailMeta.status}
+                statusTone={statusDocumentTone(detailMeta.status)}
+                tagline={
+                  viewState?.kind === 'repairOrder'
+                    ? 'Draft preview — invoice not yet generated.'
+                    : 'Customer invoice issued by accounting after repair completion.'
+                }
+                issuedAt={detailMeta.issuedAt}
+                serviceDate={detailMeta.serviceDate}
+                repairOrderId={detailMeta.repairOrderId}
+                paymentMethod={detailMeta.paymentMethod}
+                customerName={detailMeta.customer}
+                customerPhone={detailMeta.contact}
+                customerEmail={detailMeta.email ?? undefined}
+                vehicle={detailMeta.vehicle}
+                plate={detailMeta.plate || 'Not recorded'}
+                vin={detailMeta.vin || 'Not recorded'}
+                mileage={detailMeta.mileage != null ? `${new Intl.NumberFormat('en-US').format(detailMeta.mileage)} km` : 'Not recorded'}
+                items={detailMeta.items.map((item, index) => ({
+                  key: `${item.label}-${index}`,
+                  code: String(index + 1),
+                  label: item.label,
+                  kindLabel: kindLabel(item.kind),
+                  addedMidRepair: item.source === 'additionalService',
+                  quantity: item.qty,
+                  unitPrice: formatMoney(item.amount / Math.max(item.qty, 1), currency),
+                  lineTotal: formatMoney(item.amount, currency),
+                }))}
+                subtotal={formatMoney(detailMeta.subtotal, currency)}
+                discount={formatMoney(detailMeta.discount, currency)}
+                tax={formatMoney(detailMeta.taxAmount, currency)}
+                total={formatMoney(detailMeta.total, currency)}
+                quoteBanner={
+                  viewState?.kind === 'invoice' && detailMeta.quotedTotal != null && detailMeta.quotedTotal !== detailMeta.total
+                    ? `Quoted ${formatMoney(detailMeta.quotedTotal, currency)} → Current ${formatMoney(detailMeta.total, currency)} (${detailMeta.total > detailMeta.quotedTotal ? '+' : ''}${formatMoney(detailMeta.total - detailMeta.quotedTotal, currency)} ${detailMeta.total > detailMeta.quotedTotal ? 'added after quote' : 'less than quoted'})`
+                    : null
+                }
+                showAmountPaid={detailMeta.amountPaid > 0}
+                amountPaid={formatMoney(detailMeta.amountPaid, currency)}
+                balanceDue={formatMoney(detailMeta.balanceDue, currency)}
+              />
             ) : null}
             </Card>
           </div>

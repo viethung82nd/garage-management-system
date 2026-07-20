@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { asset } from '../../../../shared/lib/asset'
-import { exportNodeToPdf, PDF_EXPORT_IGNORE_ATTRIBUTE } from '../../../../shared/lib/pdf-export'
+import { exportNodeToPdf } from '../../../../shared/lib/pdf-export'
+import { InvoiceDocument } from '../../../../shared/ui/invoice/InvoiceDocument'
 import {
   CustomerAccountNav,
   CustomerEmptyState,
@@ -63,6 +63,17 @@ function formatDateOnly(value?: string | null) {
     month: 'short',
     year: 'numeric',
   }).format(date)
+}
+
+function kindLabel(kind?: string) {
+  switch (kind) {
+    case 'labor':
+      return 'Labor'
+    case 'part':
+      return 'Part'
+    default:
+      return null
+  }
 }
 
 function paymentMethodLabel(method?: string | null): CustomerInvoiceRecord['paymentMethod'] {
@@ -197,6 +208,8 @@ export default function CustomerInvoicesPage() {
           quantity: item.quantity,
           unitPrice: formatMoney(item.unitPrice),
           lineTotal: formatMoney(item.lineTotal),
+          kindLabel: kindLabel(item.kind),
+          addedMidRepair: item.source === 'additionalService',
         })),
         issueImages: [],
         garageName: GARAGE_NAME,
@@ -379,170 +392,47 @@ export default function CustomerInvoicesPage() {
             </button>
 
             <div className="customer-modal__content customer-modal__content--invoice">
-              <div className="customer-invoice-sheet" ref={invoiceSheetRef}>
-                <div className="customer-invoice-sheet__masthead">
-                  <div className="customer-invoice-sheet__brand">
-                    <img src={asset('/wp-content/uploads/2023/01/Kapa_Logo-1.svg')} alt="Kapa" />
-                    <div>
-                      <span className="customer-invoice-sheet__eyebrow">Kapa Auto Care Center</span>
-                      <p>Customer invoice issued by accounting after repair completion.</p>
-                    </div>
-                  </div>
-
-                  <div className="customer-invoice-sheet__headline">
-                    <span className="customer-invoice-sheet__type">Tax Invoice</span>
-                    <strong id="invoice-detail-title">{selectedInvoice.id}</strong>
-                    <CustomerStatusBadge tone={selectedInvoice.statusTone}>{selectedInvoice.invoiceStatus}</CustomerStatusBadge>
-                  </div>
-                </div>
-
-                <div className="customer-invoice-sheet__topline">
-                  <div className="customer-invoice-sheet__garage">
-                    <strong>Kapa Auto Care Center</strong>
-                    <span>7011 Vermont Ave</span>
-                    <span>Los Angeles, CA 90044</span>
-                    <span>support@kapa-garage.com</span>
-                    <span>+1 (323) 750-1234</span>
-                  </div>
-                  <table className="customer-invoice-sheet__meta-table">
-                    <tbody>
-                      <tr>
-                        <td>Issued date</td>
-                        <td>{selectedInvoice.issuedAt}</td>
-                      </tr>
-                      <tr>
-                        <td>Service date</td>
-                        <td>{selectedInvoice.serviceDate}</td>
-                      </tr>
-                      <tr>
-                        <td>Repair order</td>
-                        <td>{selectedInvoice.repairOrderId}</td>
-                      </tr>
-                      <tr>
-                        <td>Booking</td>
-                        <td>{selectedInvoice.bookingId ?? 'Customer record'}</td>
-                      </tr>
-                      <tr>
-                        <td>Payment method</td>
-                        <td>{selectedInvoice.paymentMethod}</td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="customer-invoice-sheet__parties">
-                  <div className="customer-invoice-sheet__column">
-                    <span className="customer-booking-card__label">Billed to</span>
-                    <strong>{selectedInvoice.customerName}</strong>
-                    <p>{selectedInvoice.customerAddress}</p>
-                    <p>{selectedInvoice.customerPhone}</p>
-                    <p>{selectedInvoice.customerEmail}</p>
-                  </div>
-
-                  <div className="customer-invoice-sheet__column">
-                    <span className="customer-booking-card__label">Vehicle details</span>
-                    <div className="customer-invoice-sheet__facts">
-                      <div>
-                        <span>Make / model</span>
-                        <strong>{selectedInvoice.vehicle}</strong>
-                      </div>
-                      <div>
-                        <span>Plate</span>
-                        <strong>{selectedInvoice.plate}</strong>
-                      </div>
-                      <div>
-                        <span>VIN</span>
-                        <strong>{selectedInvoice.vin}</strong>
-                      </div>
-                      <div>
-                        <span>Odometer</span>
-                        <strong>{selectedInvoice.mileage}</strong>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                <div className="customer-invoice-sheet__table-wrap">
-                  <table className="customer-invoice-sheet__table">
-                    <thead>
-                      <tr>
-                        <th>Item</th>
-                        <th>Description</th>
-                        <th>Quantity</th>
-                        <th>Unit Price</th>
-                        <th>Total</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {selectedInvoice.serviceItems.map((item) => (
-                        <tr key={`${selectedInvoice.id}-${item.item}`}>
-                          <td>{item.item}</td>
-                          <td>
-                            <strong>{item.label}</strong>
-                            <span>{item.description}</span>
-                          </td>
-                          <td className="customer-invoice-sheet__table-number">{item.quantity}</td>
-                          <td className="customer-invoice-sheet__table-number">{item.unitPrice}</td>
-                          <td className="customer-invoice-sheet__table-number">{item.lineTotal}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="customer-invoice-sheet__summary">
-                  <div className="customer-invoice-sheet__note">
-                    <span className="customer-booking-card__label">Payment note</span>
-                    <p>{selectedInvoice.paymentNote}</p>
-                    {selectedInvoice.customerNote ? <p>{selectedInvoice.customerNote}</p> : null}
-                  </div>
-
-                  <table className="customer-invoice-sheet__totals">
-                    <tbody>
-                      <tr>
-                        <td>Subtotal</td>
-                        <td>{selectedInvoice.subtotal}</td>
-                      </tr>
-                      <tr>
-                        <td>Discount</td>
-                        <td>{selectedInvoice.discount}</td>
-                      </tr>
-                      <tr>
-                        <td>Tax</td>
-                        <td>{selectedInvoice.tax}</td>
-                      </tr>
-                      <tr>
-                        <td>Total</td>
-                        <td>{selectedInvoice.total}</td>
-                      </tr>
-                      {selectedInvoice.invoiceStatus === 'Partially paid' ? (
-                        <tr>
-                          <td>Paid so far</td>
-                          <td>{selectedInvoice.amountPaid}</td>
-                        </tr>
-                      ) : null}
-                      {selectedInvoice.invoiceStatus !== 'Paid' ? (
-                        <tr className="customer-invoice-sheet__grand-total">
-                          <td>Balance Due</td>
-                          <td>{selectedInvoice.balanceDue}</td>
-                        </tr>
-                      ) : (
-                        <tr className="customer-invoice-sheet__grand-total">
-                          <td>Balance Due</td>
-                          <td>{formatMoney(0)}</td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-
-                <div className="customer-invoice-sheet__footer">
-                  <div className="customer-invoice-sheet__footer-copy">
-                    <span>Issued by {selectedInvoice.accountantName}</span>
-                    <span>Thank you for choosing Kapa Auto Care Center.</span>
-                  </div>
-
-                  <div className="customer-modal__actions" {...{ [PDF_EXPORT_IGNORE_ATTRIBUTE]: 'true' }}>
+              <InvoiceDocument
+                ref={invoiceSheetRef}
+                invoiceId={selectedInvoice.id}
+                statusLabel={selectedInvoice.invoiceStatus}
+                statusTone={selectedInvoice.statusTone}
+                issuedAt={selectedInvoice.issuedAt}
+                serviceDate={selectedInvoice.serviceDate}
+                repairOrderId={selectedInvoice.repairOrderId}
+                bookingLabel={selectedInvoice.bookingId}
+                paymentMethod={selectedInvoice.paymentMethod}
+                customerName={selectedInvoice.customerName}
+                customerAddress={selectedInvoice.customerAddress}
+                customerPhone={selectedInvoice.customerPhone}
+                customerEmail={selectedInvoice.customerEmail}
+                vehicle={selectedInvoice.vehicle}
+                plate={selectedInvoice.plate}
+                vin={selectedInvoice.vin}
+                mileage={selectedInvoice.mileage}
+                items={selectedInvoice.serviceItems.map((item) => ({
+                  key: item.item,
+                  code: item.item,
+                  label: item.label,
+                  description: item.description,
+                  kindLabel: item.kindLabel,
+                  addedMidRepair: item.addedMidRepair,
+                  quantity: item.quantity,
+                  unitPrice: item.unitPrice,
+                  lineTotal: item.lineTotal,
+                }))}
+                paymentNote={selectedInvoice.paymentNote}
+                notes={selectedInvoice.customerNote ? [selectedInvoice.customerNote] : []}
+                subtotal={selectedInvoice.subtotal}
+                discount={selectedInvoice.discount}
+                tax={selectedInvoice.tax}
+                total={selectedInvoice.total}
+                showAmountPaid={selectedInvoice.invoiceStatus === 'Partially paid'}
+                amountPaid={selectedInvoice.amountPaid}
+                balanceDue={selectedInvoice.invoiceStatus !== 'Paid' ? selectedInvoice.balanceDue : formatMoney(0)}
+                accountantName={selectedInvoice.accountantName}
+                footer={
+                  <>
                     <button
                       type="button"
                       className="default-btn customer-primary-btn customer-primary-btn--ghost"
@@ -564,9 +454,9 @@ export default function CustomerInvoicesPage() {
                       Close
                       <span />
                     </button>
-                  </div>
-                </div>
-              </div>
+                  </>
+                }
+              />
             </div>
           </div>
         </div>
