@@ -487,6 +487,7 @@ export default function AdminReportsPage() {
                       pagination={false}
                       rowKey="serviceId"
                       className="bo-table"
+                      scroll={{ x: 640 }}
                       summary={(rows) => {
                         const orders = rows.reduce((sum, row) => sum + row.orderCount, 0)
                         const revenue = rows.reduce((sum, row) => sum + row.revenue, 0)
@@ -534,6 +535,7 @@ export default function AdminReportsPage() {
                       pagination={false}
                       rowKey="method"
                       className="bo-table"
+                      scroll={{ x: 480 }}
                     />
                   </TableCard>
                 </div>
@@ -567,6 +569,7 @@ export default function AdminReportsPage() {
                       pagination={false}
                       rowKey="technicianId"
                       className="bo-table"
+                      scroll={{ x: 640 }}
                     />
                   </TableCard>
                 </div>

@@ -693,7 +693,7 @@ export default function InvoiceConfirmPage() {
           <div className="py-8 text-center text-sm" style={{ color: accountantPalette.textMuted }}>Loading quote…</div>
         ) : quote ? (
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
                 <div className="text-[11px] font-semibold uppercase tracking-[0.14em]" style={{ color: accountantPalette.textMuted }}>Customer</div>
                 <div className="mt-0.5 font-medium">{quote.customerName || 'Updating'}</div>

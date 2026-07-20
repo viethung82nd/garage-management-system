@@ -162,6 +162,7 @@ export default function AdminPartsPage() {
           pagination={{ pageSize: 8, showTotal: (total) => `${total} parts` }}
           locale={{ emptyText: 'No parts in the catalog yet.' }}
           className="bo-table"
+          scroll={{ x: 680 }}
         />
       </Card>
 

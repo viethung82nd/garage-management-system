@@ -185,6 +185,7 @@ export default function AdminUsersPage() {
           pagination={{ pageSize: 8, showTotal: (total) => `${total} accounts` }}
           locale={{ emptyText: 'No staff accounts yet.' }}
           className="bo-table"
+          scroll={{ x: 760 }}
         />
       </Card>
 

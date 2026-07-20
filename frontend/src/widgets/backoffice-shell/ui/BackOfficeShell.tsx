@@ -1,4 +1,4 @@
-import { CloseOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
+import { CloseOutlined, LogoutOutlined, MenuFoldOutlined, MenuUnfoldOutlined } from '@ant-design/icons'
 import { Avatar, Badge, Button, Empty, List, Menu, Popover, Space, Typography } from 'antd'
 import type { MenuProps } from 'antd'
 import { useEffect, useState, type ReactNode } from 'react'
@@ -65,10 +65,22 @@ export function BackOfficeShell({
   const { token, user } = useAuth()
   const navigate = useNavigate()
   const [collapsed, setCollapsed] = useState(false)
+  // Below the `lg` breakpoint the sidebar is an off-canvas drawer instead of
+  // a pushed column — `collapsed` (icon-only rail) only makes sense once
+  // there's room beside the content, so mobile gets its own open/close flag.
+  const [mobileOpen, setMobileOpen] = useState(false)
   const [notifOpen, setNotifOpen] = useState(false)
   const [unreadCount, setUnreadCount] = useState(0)
   const [recentNotifications, setRecentNotifications] = useState<ApiNotification[]>([])
   const sidebarWidth = collapsed ? 76 : 288
+
+  function toggleSidebar() {
+    if (typeof window !== 'undefined' && window.innerWidth < 1024) {
+      setMobileOpen((value) => !value)
+    } else {
+      setCollapsed((value) => !value)
+    }
+  }
 
   useEffect(() => {
     if (!token) return
@@ -160,8 +172,18 @@ export function BackOfficeShell({
       }}
     >
       <div className="flex min-h-screen">
+        {mobileOpen && (
+          <div
+            aria-hidden="true"
+            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            onClick={() => setMobileOpen(false)}
+          />
+        )}
+
         <aside
-          className="shrink-0 border-r transition-[width] duration-300"
+          className={`fixed inset-y-0 left-0 z-50 shrink-0 border-r transition-transform duration-300 lg:sticky lg:top-0 lg:z-auto lg:translate-x-0 lg:transition-[width] ${
+            mobileOpen ? 'translate-x-0' : '-translate-x-full'
+          }`}
           style={{
             width: sidebarWidth,
             background: sidebarGradient,
@@ -169,7 +191,7 @@ export function BackOfficeShell({
             boxShadow: '4px 0 24px rgba(15, 23, 42, 0.10)',
           }}
         >
-          <div className="sticky top-0 flex h-screen flex-col">
+          <div className="sticky top-0 flex h-screen flex-col overflow-y-auto">
             <div className="flex min-h-[140px] flex-col items-center justify-center gap-3 border-b border-white/10 px-4 py-5 text-center">
               <img src={KAPA_LOGO_URL} alt="Kapa" className={collapsed ? 'h-9 w-auto max-w-[52px]' : 'h-14 w-auto max-w-[120px]'} />
               {!collapsed && (
@@ -190,6 +212,7 @@ export function BackOfficeShell({
                 className="!border-0 !bg-transparent"
                 style={{ fontFamily: resolvedBodyFont }}
                 items={menuItems}
+                onClick={() => setMobileOpen(false)}
               />
             </div>
           </div>
@@ -197,38 +220,38 @@ export function BackOfficeShell({
 
         <main className="min-w-0 flex-1">
           <header
-            className="sticky top-0 z-30 flex h-[72px] items-center justify-between border-b px-5 md:px-6 backdrop-blur-xl"
+            className="sticky top-0 z-30 flex h-[72px] items-center justify-between gap-3 border-b px-3 sm:px-5 md:px-6 backdrop-blur-xl"
             style={{
               background: 'rgba(255, 255, 255, 0.86)',
               borderColor: palette.border,
             }}
           >
-            <div className="bo-fade">
-              <div className="flex items-center gap-3">
+            <div className="bo-fade min-w-0">
+              <div className="flex items-center gap-2 sm:gap-3">
                 <Button
                   type="text"
                   icon={collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
-                  onClick={() => setCollapsed((value) => !value)}
-                  className="!inline-flex !h-9 !w-9 !items-center !justify-center !rounded-lg"
+                  onClick={toggleSidebar}
+                  className="!inline-flex !h-9 !w-9 !shrink-0 !items-center !justify-center !rounded-lg"
                   style={{ color: palette.textMuted }}
                 />
-                <span className="text-[11px] font-semibold uppercase tracking-[0.22em]" style={{ color: palette.textMuted }}>
+                <span className="hidden text-[11px] font-semibold uppercase tracking-[0.22em] sm:inline" style={{ color: palette.textMuted }}>
                   {headerEyebrow}
                 </span>
               </div>
               <Title
                 level={2}
-                className="!mb-0 !mt-0.5 !text-[20px] md:!text-[22px] !leading-none !font-semibold"
+                className="!mb-0 !mt-0.5 !truncate !text-[17px] sm:!text-[20px] md:!text-[22px] !leading-none !font-semibold"
                 style={{ color: palette.ink, fontFamily: resolvedDisplayFont }}
               >
                 {headerTitle}
               </Title>
             </div>
 
-            <Space size="middle">
+            <Space size={10} className="shrink-0">
               <Popover
                 content={
-                  <div style={{ width: 320 }}>
+                  <div style={{ width: 'min(320px, 86vw)' }}>
                     <div className="flex items-center justify-between" style={{ marginBottom: 8 }}>
                       <span style={{ color: palette.ink, fontWeight: 700 }}>Notifications</span>
                       <Space size={4}>
@@ -292,10 +315,13 @@ export function BackOfficeShell({
               {(() => {
                 const profileContent = (
                   <>
-                    <Avatar size={30} style={{ background: profileAccent, color: '#fff', fontSize: 13 }}>
+                    <Avatar size={30} style={{ background: profileAccent, color: '#fff', fontSize: 13, flexShrink: 0 }}>
                       {profileInitial}
                     </Avatar>
-                    <div className="leading-tight">
+                    {/* Name/role hidden below `sm` — the avatar alone is enough to identify
+                        the account, and dropping this is what keeps the header from
+                        overflowing next to the bell + logout button on narrow phones. */}
+                    <div className="hidden leading-tight sm:block">
                       <div className="text-sm font-semibold" style={{ color: palette.ink }}>
                         {profileName}
                       </div>
@@ -305,7 +331,8 @@ export function BackOfficeShell({
                     </div>
                   </>
                 )
-                const profileClassName = 'flex items-center gap-3 rounded-full border px-3 py-1.5 transition-colors duration-200 hover:bg-black/3'
+                const profileClassName =
+                  'flex shrink-0 items-center gap-2 sm:gap-3 rounded-full border px-2.5 sm:px-3 py-1.5 transition-colors duration-200 hover:bg-black/3'
                 const profileStyle = { borderColor: palette.border, background: palette.panelAlt }
 
                 return profileHref ? (
@@ -319,8 +346,13 @@ export function BackOfficeShell({
                 )
               })()}
               {onLogout && (
-                <Button onClick={onLogout} className="!rounded-full !font-semibold !transition-colors !duration-200">
-                  Logout
+                <Button
+                  onClick={onLogout}
+                  icon={<LogoutOutlined />}
+                  title="Logout"
+                  className="!rounded-full !font-semibold !transition-colors !duration-200"
+                >
+                  <span className="hidden sm:inline">Logout</span>
                 </Button>
               )}
             </Space>

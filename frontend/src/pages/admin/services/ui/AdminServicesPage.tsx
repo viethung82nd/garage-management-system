@@ -349,6 +349,7 @@ export default function AdminServicesPage() {
           pagination={{ pageSize: 8, showTotal: (total) => `${total} services` }}
           locale={{ emptyText: 'No services in the catalog yet.' }}
           className="bo-table"
+          scroll={{ x: 760 }}
         />
       </Card>
 

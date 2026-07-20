@@ -289,16 +289,21 @@ function VerticalBarChart({ data }: { data: { label: string; value: number }[] }
 
   return (
     <div className="rounded-xl border px-4 pb-3 pt-4" style={{ borderColor: dashboardPalette.border, background: '#fafbfc' }}>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${data.length}, minmax(0, 1fr))`,
-          alignItems: 'end',
-          gap: '12px',
-          height: '220px',
-        }}
-      >
-        {data.map((item) => {
+      {/* Fixed column count squeezes unreadably narrow on small screens once
+          columns drop below ~56px — scroll horizontally instead of shrinking
+          bars/labels past legibility. */}
+      <div className="overflow-x-auto">
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${data.length}, minmax(56px, 1fr))`,
+            alignItems: 'end',
+            gap: '12px',
+            height: '220px',
+            minWidth: data.length * 68,
+          }}
+        >
+          {data.map((item) => {
           const height = `${(item.value / max) * 100}%`
           const isPeak = item.value > 0 && item.value === peakValue
           const accent = isPeak ? dashboardPalette.red : dashboardPalette.navy
@@ -324,7 +329,8 @@ function VerticalBarChart({ data }: { data: { label: string; value: number }[] }
               </div>
             </div>
           )
-        })}
+          })}
+        </div>
       </div>
     </div>
   )
