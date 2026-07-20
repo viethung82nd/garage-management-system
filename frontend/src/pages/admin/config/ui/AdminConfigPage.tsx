@@ -127,7 +127,7 @@ export default function AdminConfigPage() {
       {saved ? <InlineBanner tone="success">Configuration saved.</InlineBanner> : null}
 
       <Form form={form} layout="vertical" onFinish={handleSubmit} onValuesChange={() => setSaved(false)}>
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_380px]">
+        <div className="grid gap-5 *:min-w-0 lg:grid-cols-[minmax(0,1fr)_380px]">
           <div className="flex flex-col gap-5">
             <SectionCard icon={<ClockCircleOutlined />} eyebrow="Schedule" title="Booking window" enterDelay={1}>
               <div className="grid gap-x-4 sm:grid-cols-2">

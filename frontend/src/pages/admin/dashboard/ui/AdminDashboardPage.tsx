@@ -226,7 +226,7 @@ function DonutChart({
   }
 
   return (
-    <div className="grid gap-5 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center">
+    <div className="grid gap-5 *:min-w-0 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center">
       <div className="relative mx-auto h-[180px] w-[180px]">
         <svg viewBox="0 0 220 220" className="h-full w-full -rotate-90">
           <circle cx="110" cy="110" r="72" fill="none" stroke="#eef1f5" strokeWidth="22" />

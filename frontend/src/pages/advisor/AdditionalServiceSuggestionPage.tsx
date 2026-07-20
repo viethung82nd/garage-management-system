@@ -229,7 +229,7 @@ export function AdditionalServiceSuggestionPage() {
         <StatCard label="Quoted to customers" palette={advisorPalette} value={formatMoney(totalQuotedValue)} enterDelay={3} />
       </div>
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+      <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_400px]">
         <Card
           bordered={false}
           className="bo-card-hover bo-enter rounded-2xl"

@@ -361,7 +361,7 @@ export function VehicleInspectionPage() {
         </Card>
       ) : null}
 
-      <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-5">
           <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Inspection checklist">
             <Table columns={columns} dataSource={items} pagination={false} rowKey="id" scroll={{ x: 820 }} size="small" />

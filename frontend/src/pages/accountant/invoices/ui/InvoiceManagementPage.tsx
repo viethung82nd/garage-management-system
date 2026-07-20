@@ -586,7 +586,7 @@ export default function InvoiceManagementPage() {
 
       {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_360px]">
         <Card
           bordered={false}
           className="bo-card-hover bo-enter rounded-2xl"

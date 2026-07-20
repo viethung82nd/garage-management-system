@@ -508,7 +508,7 @@ export function TechnicianRepairNotesPage() {
             <InlineBanner tone="success">This order is {repairOrder.status === 'completed' ? 'completed' : 'cancelled'} — its steps can no longer be changed.</InlineBanner>
           ) : null}
 
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_400px]">
+          <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_400px]">
             <div className="flex flex-col gap-5">
               {/* Steps */}
               <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Repair steps">

@@ -68,7 +68,7 @@ export function TechnicianProfilePage() {
 
   return (
     <TechnicianShell eyebrow="Technician" title="My profile">
-      <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-5 *:min-w-0 lg:grid-cols-[320px_minmax(0,1fr)]">
         <Card
           bordered={false}
           className="rounded-2xl"

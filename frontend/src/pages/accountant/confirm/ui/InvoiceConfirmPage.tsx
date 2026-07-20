@@ -447,7 +447,7 @@ export default function InvoiceConfirmPage() {
           </p>
         </Card>
       ) : (
-        <div className="grid gap-5 xl:grid-cols-[minmax(0,1.3fr)_360px]">
+        <div className="grid gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1.3fr)_360px]">
           <div className="flex flex-col gap-3">
             {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
             {successMessage ? <InlineBanner tone="success">{successMessage}</InlineBanner> : null}

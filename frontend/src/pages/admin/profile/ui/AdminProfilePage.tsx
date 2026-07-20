@@ -68,7 +68,7 @@ export default function AdminProfilePage() {
 
   return (
     <AdminShell eyebrow="Admin" title="My profile">
-      <div className="grid gap-5 lg:grid-cols-[320px_minmax(0,1fr)]">
+      <div className="grid gap-5 *:min-w-0 lg:grid-cols-[320px_minmax(0,1fr)]">
         <Card
           bordered={false}
           className="bo-enter rounded-2xl"

@@ -318,7 +318,7 @@ export function QualityVerificationPage() {
       </Card>
 
       {selectedOrder ? (
-          <div className="grid items-start gap-5 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_320px]">
             <div className="flex flex-col gap-5">
               <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">

@@ -145,7 +145,7 @@ export function ServiceAdvisorDashboardPage() {
         ))}
       </div>
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_340px]">
+      <div className="grid gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_340px]">
         <Card
           bordered={false}
           className="bo-card-hover bo-enter rounded-2xl"
