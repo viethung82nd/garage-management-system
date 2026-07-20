@@ -358,8 +358,13 @@ export function BackOfficeShell({
             </Space>
           </header>
 
-          <section className="px-4 py-5 md:px-6">
-            <div className="bo-fade flex w-full flex-col gap-5">{children}</div>
+          <section className="min-w-0 px-4 py-5 md:px-6">
+            {/* `min-w-0` on the flex column itself, plus forcing it onto every
+                direct child, is what lets a wide Table/Card scroll *inside*
+                itself instead of stretching this column (and the page) wider
+                than the viewport — flex items default to `min-width: auto`,
+                which refuses to shrink below the content's intrinsic size. */}
+            <div className="bo-fade flex w-full min-w-0 flex-col gap-5 [&>*]:min-w-0">{children}</div>
           </section>
         </main>
       </div>

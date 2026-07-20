@@ -351,7 +351,7 @@ export function QualityVerificationPage() {
                 style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}
                 title="Verification checklist"
               >
-                <Table columns={checklistColumns} dataSource={checklist} pagination={false} rowKey="id" size="small" className="bo-table" />
+                <Table columns={checklistColumns} dataSource={checklist} pagination={false} rowKey="id" size="small" className="bo-table" scroll={{ x: 640 }} />
               </Card>
 
               {evidencePhotos.length ? (
