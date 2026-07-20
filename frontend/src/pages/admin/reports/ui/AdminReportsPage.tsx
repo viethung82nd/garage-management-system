@@ -413,7 +413,7 @@ export default function AdminReportsPage() {
 
           {requestError ? <InlineBanner tone="error">{requestError}</InlineBanner> : null}
 
-          <div className="gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
+          <div className="gap-4 *:min-w-0" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}>
             <StatCard
               label="Total revenue"
               value={formatMoney(report?.totalRevenue ?? 0, currency)}

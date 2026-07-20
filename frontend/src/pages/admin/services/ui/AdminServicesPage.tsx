@@ -259,7 +259,7 @@ export default function AdminServicesPage() {
             No categories yet — add one to start organizing your service catalog.
           </div>
         ) : (
-          <div className="grid gap-4" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
+          <div className="grid gap-4 *:min-w-0" style={{ gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))' }}>
             {categories.map((category) => (
               <div
                 key={category._id}

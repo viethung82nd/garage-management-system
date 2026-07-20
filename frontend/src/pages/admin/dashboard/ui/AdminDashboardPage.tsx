@@ -591,7 +591,7 @@ export default function AdminDashboardPage() {
 
   return (
     <AdminShell eyebrow="Admin dashboard" title="Garage operations overview">
-      <div className="gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <div className="gap-4 *:min-w-0" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         {overviewCards.map((item, index) => (
           <DashboardMetricCard
             key={item.label}
@@ -640,7 +640,7 @@ export default function AdminDashboardPage() {
         />
       </Card>
 
-      <div className="gap-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', alignItems: 'start' }}>
+      <div className="gap-5 *:min-w-0" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', alignItems: 'start' }}>
         <Card
           bordered={false}
           className="bo-enter bo-enter-3 rounded-2xl"
@@ -698,7 +698,7 @@ export default function AdminDashboardPage() {
         </Card>
       </div>
 
-      <div className="gap-5" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'start' }}>
+      <div className="gap-5 *:min-w-0" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', alignItems: 'start' }}>
         <Card
           bordered={false}
           className="bo-enter bo-enter-5 rounded-2xl"

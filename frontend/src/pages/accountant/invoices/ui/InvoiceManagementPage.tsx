@@ -569,7 +569,7 @@ export default function InvoiceManagementPage() {
 
   return (
     <AccountantShell eyebrow="Accountant dashboard" title="Invoice management">
-      <div className="gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <div className="gap-4 *:min-w-0" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         {overviewCards.map((item, index) => (
           <StatCard
             key={item.label}

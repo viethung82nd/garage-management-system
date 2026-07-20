@@ -169,7 +169,7 @@ export default function PaymentsPage() {
 
   return (
     <AccountantShell eyebrow="Accountant dashboard" title="Payments">
-      <div className="gap-4" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
+      <div className="gap-4 *:min-w-0" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))' }}>
         {overviewCards.map((item, index) => (
           <StatCard key={item.label} label={item.label} value={item.value} note={item.note} icon={item.icon} palette={accountantPalette} tone={item.tone} enterDelay={index + 1} />
         ))}

@@ -364,7 +364,7 @@ export function BackOfficeShell({
                 itself instead of stretching this column (and the page) wider
                 than the viewport — flex items default to `min-width: auto`,
                 which refuses to shrink below the content's intrinsic size. */}
-            <div className="bo-fade flex w-full min-w-0 flex-col gap-5 [&>*]:min-w-0">{children}</div>
+            <div className="bo-fade flex w-full min-w-0 flex-col gap-5 *:min-w-0">{children}</div>
           </section>
         </main>
       </div>
