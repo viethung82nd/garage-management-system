@@ -6,10 +6,10 @@ import { Icon, type IconName } from '../../shared/ui/base'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 const defaultStats = [
-  { icon: 'calendar', label: 'Booking chá» duyá»‡t', note: '+4 yÃªu cáº§u má»›i', value: '00' },
-  { icon: 'clipboard', label: 'Xe cáº§n tiáº¿p nháº­n', note: 'Trong hÃ´m nay', value: '00' },
-  { icon: 'wrench', label: 'Lá»‡nh Ä‘ang má»Ÿ', note: 'ÄÃ£ phÃ¢n cÃ´ng KTV', value: '00' },
-  { icon: 'users', label: 'KhÃ¡ch Ä‘ang chá»', note: 'Táº¡i quáº§y dá»‹ch vá»¥', value: '00' },
+  { icon: 'calendar', label: 'Booking chờ duyệt', note: 'Yêu cầu mới', value: '00' },
+  { icon: 'clipboard', label: 'Xe cần tiếp nhận', note: 'Trong hôm nay', value: '00' },
+  { icon: 'wrench', label: 'Lệnh đang mở', note: 'Đã phân công KTV', value: '00' },
+  { icon: 'users', label: 'Khách đang chờ', note: 'Tại quầy dịch vụ', value: '00' },
 ] satisfies Array<{ icon: IconName; label: string; note: string; value: string }>
 
 type QueueItem = { customer: string; meta: string; status: string; to: string }
