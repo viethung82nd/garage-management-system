@@ -19,8 +19,8 @@ export async function updateQuotation(req, res) {
 
 /** PATCH /api/quotations/:id/send — mark a quotation sent, notify the customer. */
 export async function sendQuotation(req, res) {
-  const quote = await quotationService.sendQuotation(req.params.id);
-  res.json(quote);
+  const { quote, hasEmailOnFile } = await quotationService.sendQuotation(req.params.id);
+  res.json({ ...quote.toObject(), hasEmailOnFile });
 }
 
 /**

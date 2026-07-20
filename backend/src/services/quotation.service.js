@@ -123,6 +123,7 @@ export async function sendQuotation(id) {
   // from the order's vehicle), so customerId is always resolvable — no more
   // phone-matching fallback needed.
   const customer = quote.customerId ? await userRepository.findById(quote.customerId) : null;
+  const hasEmailOnFile = Boolean(customer?.email);
 
   if (customer) {
     await createNotification({
@@ -134,7 +135,7 @@ export async function sendQuotation(id) {
       refModel: "RepairOrder",
     });
 
-    if (customer.email) {
+    if (hasEmailOnFile) {
       // Fire-and-forget: sendEmail already swallows its own errors, and the
       // customer was already informed via the in-app notification above — no
       // caller should have "Send quote" hang on a slow/unreachable SMTP server.
@@ -146,7 +147,10 @@ export async function sendQuotation(id) {
     }
   }
 
-  return quote;
+  // hasEmailOnFile tells the SA whether an email was actually attempted —
+  // the customer was often created as a walk-in with no email at all, in
+  // which case "Send quote" silently only ever notified them in-app.
+  return { quote, hasEmailOnFile };
 }
 
 /**

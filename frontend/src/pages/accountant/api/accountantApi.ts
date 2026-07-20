@@ -134,6 +134,8 @@ export type RepairOrderListResponse = RepairOrderApiRecord[]
 
 export type InvoiceDetailResponse = {
   invoice: InvoiceApiRecord
+  /** Only set on the response to sendInvoiceToCustomer() — whether the customer had an email on file to actually send to. */
+  hasEmailOnFile?: boolean
 }
 
 export type PaymentResultResponse = {

@@ -326,6 +326,7 @@ export async function sendInvoiceToCustomer(id, actorId) {
 
   const vehicle = invoice.repairOrderId?.vehicleId;
   const customer = vehicle?.customerId;
+  const hasEmailOnFile = Boolean(customer?.email);
 
   if (customer) {
     await createNotification({
@@ -337,7 +338,7 @@ export async function sendInvoiceToCustomer(id, actorId) {
       refModel: "RepairOrder",
     });
 
-    if (customer.email) {
+    if (hasEmailOnFile) {
       // Fire-and-forget — see quotation.service.js's sendQuotation() for why
       // this must not block the request on a slow/unreachable SMTP server.
       void sendEmail({
@@ -363,5 +364,5 @@ export async function sendInvoiceToCustomer(id, actorId) {
     .findOne({ invoiceId: invoice._id })
     .sort({ paidAt: -1, _id: -1 });
 
-  return { invoice: serializeInvoice(invoice, latestPayment) };
+  return { invoice: serializeInvoice(invoice, latestPayment), hasEmailOnFile };
 }

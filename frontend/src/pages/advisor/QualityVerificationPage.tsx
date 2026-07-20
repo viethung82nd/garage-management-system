@@ -110,7 +110,12 @@ export function QualityVerificationPage() {
       clearApiMessage()
       try {
         const response = await fetchWorkshopRepairOrders(authToken, '?status=completed')
-        const list = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders']).map(mapOrder)
+        // Backend leaves status "completed" even after forwarding (accounting
+        // still queries by that status) — exclude already-forwarded orders
+        // here so this queue only ever shows work that still needs the SA.
+        const list = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
+          .map(mapOrder)
+          .filter((order) => !order.forwardedToAccountantAt)
         if (cancelled) return
         setOrders(list)
         setSelectedId((current) => {

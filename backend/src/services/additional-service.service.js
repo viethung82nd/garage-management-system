@@ -179,12 +179,17 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
     }
   }
 
+  // Only meaningful when status === "sent" — undefined otherwise, so the
+  // frontend can tell "not applicable" apart from "no email on file".
+  let hasEmailOnFile;
+
   if (status === "sent") {
     const order = await repairOrderRepository.findById(proposal.repairOrderId);
     const vehicle = order?.vehicleId
       ? await vehicleRepository.model.findById(order.vehicleId).populate("customerId", "fullName email")
       : null;
     const customer = vehicle?.customerId;
+    hasEmailOnFile = Boolean(customer?.email);
 
     if (customer) {
       await createNotification({
@@ -196,7 +201,7 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
         refModel: "RepairOrder",
       });
 
-      if (customer.email) {
+      if (hasEmailOnFile) {
         // Fire-and-forget — see sendQuotation() for why this must not block
         // the request on a slow/unreachable SMTP server.
         void sendEmail({
@@ -208,5 +213,5 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
     }
   }
 
-  return proposal;
+  return { ...proposal.toObject(), hasEmailOnFile };
 }

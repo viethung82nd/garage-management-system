@@ -203,7 +203,15 @@ export function AdditionalServiceSuggestionPage() {
       })
       const mapped = mapProposal(updated)
       setProposals((current) => current.map((proposal) => (proposal.id === selectedProposal.id ? { ...proposal, ...mapped, status } : proposal)))
-      showSuccess(status === 'sent' ? 'Quote sent to the customer.' : status === 'approved' ? 'Approved and added to the work order.' : 'Proposal rejected.')
+      showSuccess(
+        status === 'approved'
+          ? 'Approved and added to the work order.'
+          : status === 'rejected'
+            ? 'Proposal rejected.'
+            : updated.hasEmailOnFile !== false
+              ? 'Quote sent to the customer.'
+              : 'Quote marked as sent, but this customer has no email on file — they can only see it by logging in.',
+      )
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Unable to update the proposal')
     } finally {

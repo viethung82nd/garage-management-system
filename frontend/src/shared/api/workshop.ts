@@ -94,6 +94,8 @@ export type ApiAdditionalServiceProposal = {
   priority?: 'high' | 'medium' | 'low'
   status?: 'pending' | 'sent' | 'approved' | 'rejected'
   technician?: AuthUser | string
+  /** Only set when status was just updated to "sent" — whether the customer had an email on file to actually send to. */
+  hasEmailOnFile?: boolean
 }
 
 export type QuotationLineKind = 'service' | 'part' | 'labor'
@@ -125,6 +127,8 @@ export type ApiQuotation = {
   validUntil?: string
   status?: 'draft' | 'sent' | 'approved' | 'rejected'
   createdAt?: string
+  /** Only set on the response to sendQuotation() — whether the customer had an email on file to actually send to. */
+  hasEmailOnFile?: boolean
 }
 
 export type ApiDashboardSummary = {
@@ -419,7 +423,7 @@ export function updateQuotation(token: string, id: string, payload: Partial<ApiQ
 }
 
 export function sendQuotation(token: string, id: string) {
-  return apiRequest<{ quotation?: ApiQuotation } | ApiQuotation>(`/api/quotations/${id}/send`, {
+  return apiRequest<ApiQuotation>(`/api/quotations/${id}/send`, {
     method: 'PATCH',
     token,
     body: JSON.stringify({}),

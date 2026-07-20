@@ -304,10 +304,20 @@ export function QuotationPage() {
         const quotation = (created && typeof created === 'object' && 'quotation' in created ? (created as any).quotation : created) as ApiQuotation | undefined
         id = quotation?._id || quotation?.id
       }
-      if (nextStatus === 'sent' && id) await sendQuotation(token, id)
+      let hasEmailOnFile = true
+      if (nextStatus === 'sent' && id) {
+        const sent = await sendQuotation(token, id)
+        hasEmailOnFile = sent.hasEmailOnFile !== false
+      }
       setQuotationId(id)
       setStatus(nextStatus)
-      showSuccess(nextStatus === 'sent' ? 'Quote sent to the customer.' : 'Draft quote saved.')
+      showSuccess(
+        nextStatus !== 'sent'
+          ? 'Draft quote saved.'
+          : hasEmailOnFile
+            ? 'Quote sent to the customer.'
+            : 'Quote marked as sent, but this customer has no email on file — they can only see it by logging in.',
+      )
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Unable to save the quote. Check the API connection.')
     } finally {

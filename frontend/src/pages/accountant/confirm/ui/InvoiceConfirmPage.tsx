@@ -420,7 +420,11 @@ export default function InvoiceConfirmPage() {
     try {
       const response = await sendInvoiceToCustomer(token, viewState.detail.id)
       setViewState({ kind: 'invoice', detail: response.invoice })
-      setSuccessMessage('Invoice sent to the customer.')
+      setSuccessMessage(
+        response.hasEmailOnFile !== false
+          ? 'Invoice sent to the customer.'
+          : 'Invoice marked as sent, but this customer has no email on file — they can only see it by logging in.',
+      )
     } catch (error) {
       setRequestError(error instanceof Error ? error.message : 'Unable to send the invoice.')
     } finally {
