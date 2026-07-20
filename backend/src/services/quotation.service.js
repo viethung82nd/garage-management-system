@@ -135,11 +135,14 @@ export async function sendQuotation(id) {
     });
 
     if (customer.email) {
-      await sendEmail({
+      // Fire-and-forget: sendEmail already swallows its own errors, and the
+      // customer was already informed via the in-app notification above — no
+      // caller should have "Send quote" hang on a slow/unreachable SMTP server.
+      void sendEmail({
         to: customer.email,
         subject: `Your repair quote ${quote.code} is ready`,
         html: `<p>Hi ${customer.fullName || "there"},</p><p>Your quote for <strong>${quote.vehicleName || "your vehicle"}</strong> (${quote.vehiclePlate || ""}) is ready — total estimate <strong>${quote.totalEstimate?.toLocaleString("vi-VN")} ₫</strong>.</p><p>Please log in to your account to review and approve it.</p>`,
-      });
+      }).catch(() => {});
     }
   }
 

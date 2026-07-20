@@ -19,6 +19,11 @@ function getTransporter() {
     port: Number(SMTP_PORT) || 587,
     secure: Number(SMTP_PORT) === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
+    // Nodemailer's defaults (multiple minutes) would otherwise let a stalled
+    // SMTP connection hang far longer than any caller should ever wait.
+    connectionTimeout: 10_000,
+    greetingTimeout: 10_000,
+    socketTimeout: 10_000,
   });
 
   return cachedTransporter;

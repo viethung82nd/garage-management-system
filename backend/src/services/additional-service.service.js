@@ -197,11 +197,13 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
       });
 
       if (customer.email) {
-        await sendEmail({
+        // Fire-and-forget — see sendQuotation() for why this must not block
+        // the request on a slow/unreachable SMTP server.
+        void sendEmail({
           to: customer.email,
           subject: `Additional service recommended: ${proposal.serviceName}`,
           html: `<p>Hi ${customer.fullName || "there"},</p><p>While working on your vehicle, our technician recommended an additional service:</p><p><strong>${proposal.serviceName}</strong></p><p>${proposal.reason || ""}</p><p>Estimated cost: <strong>${((proposal.laborCost || 0) + (proposal.partsCost || 0)).toLocaleString("vi-VN")} ₫</strong>.</p><p>Please log in to your account to approve or decline it.</p>`,
-        });
+        }).catch(() => {});
       }
     }
   }

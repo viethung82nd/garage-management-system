@@ -338,11 +338,13 @@ export async function sendInvoiceToCustomer(id, actorId) {
     });
 
     if (customer.email) {
-      await sendEmail({
+      // Fire-and-forget — see quotation.service.js's sendQuotation() for why
+      // this must not block the request on a slow/unreachable SMTP server.
+      void sendEmail({
         to: customer.email,
         subject: `Invoice ${formatDisplayId("INV", invoice._id)} — ${invoice.total.toLocaleString("vi-VN")} ₫`,
         html: `<p>Hi ${customer.fullName || "there"},</p><p>Your invoice for <strong>${vehicle.brand || ""} ${vehicle.model || ""} (${vehicle.licensePlate || ""})</strong> is ready.</p><p>Total due: <strong>${invoice.total.toLocaleString("vi-VN")} ₫</strong></p><p>Please settle at the service desk or by bank transfer as agreed.</p>`,
-      });
+      }).catch(() => {});
     }
   }
 
