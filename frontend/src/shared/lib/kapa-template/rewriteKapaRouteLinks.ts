@@ -26,21 +26,31 @@ function normalizePathname(pathname: string) {
   return pathname.endsWith('/') ? pathname : pathname
 }
 
+// Matches envytheme.com and every subdomain (themes., docs., etc.) — the
+// theme vendor's own site, scraped along with every page's markup.
+const ENVYTHEME_HOSTNAME_RE = /(^|\.)envytheme\.com$/i
+
 function resolveAppHref(rawHref: string, pageUrl: string) {
-  if (
-    !rawHref ||
-    rawHref.startsWith('#') ||
-    rawHref.startsWith('mailto:') ||
-    rawHref.startsWith('tel:') ||
-    rawHref.startsWith('javascript:')
-  ) {
+  if (!rawHref || rawHref.startsWith('#') || rawHref.startsWith('tel:') || rawHref.startsWith('javascript:')) {
     return null
+  }
+
+  if (rawHref.startsWith('mailto:')) {
+    // e.g. mailto:hello@envytheme.com — the theme demo's own support contact.
+    return ENVYTHEME_HOSTNAME_RE.test(rawHref.slice('mailto:'.length).split('@')[1] || '') ? '#' : null
   }
 
   try {
     const resolved = new URL(rawHref, pageUrl)
     const pathname = normalizePathname(resolved.pathname)
-    return APP_ROUTE_BY_PATHNAME.get(pathname) ?? null
+    const mapped = APP_ROUTE_BY_PATHNAME.get(pathname)
+    if (mapped) return mapped
+
+    // Every other page this scraped markup links to (blog posts, shop/cart,
+    // our-team, docs, etc.) was never built in this app — a real visitor
+    // must never be sent off to the original theme vendor's live site.
+    if (ENVYTHEME_HOSTNAME_RE.test(resolved.hostname)) return '#'
+    return null
   } catch {
     return null
   }

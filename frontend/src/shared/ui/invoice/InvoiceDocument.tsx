@@ -109,10 +109,9 @@ export const InvoiceDocument = forwardRef<HTMLDivElement, InvoiceDocumentProps>(
       <div className="customer-invoice-sheet__topline">
         <div className="customer-invoice-sheet__garage">
           <strong>Kapa Auto Care Center</strong>
-          <span>7011 Vermont Ave</span>
-          <span>Los Angeles, CA 90044</span>
+          <span>Thon 3, Thach Hoa, Thach That, Hanoi</span>
           <span>support@kapa-garage.com</span>
-          <span>+1 (323) 750-1234</span>
+          <span>+(84)848637886</span>
         </div>
         <table className="customer-invoice-sheet__meta-table">
           <tbody>

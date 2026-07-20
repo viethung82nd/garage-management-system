@@ -175,24 +175,6 @@ export function KapaNavbar({
           </div>
         </div>
       </div>
-
-      <div className="et-demo-options-toolbar">
-        <a href="#" className="hint--bounce hint--left hint--black" id="toggle-quick-options" aria-label="RTL Demo">
-          <i className="fa fa-align-right" />
-        </a>
-        <a
-          href="mailto:hello@envytheme.com"
-          target="_blank"
-          rel="nofollow"
-          className="hint--bounce hint--left hint--black"
-          aria-label="Reach Us"
-        >
-          <i className="fa fa-life-ring" />
-        </a>
-        <a href="#" target="_blank" rel="nofollow" className="hint--bounce hint--left hint--black" aria-label="Documentation">
-          <i className="fa fa-book" />
-        </a>
-      </div>
     </>
   )
 }

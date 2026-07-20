@@ -9,11 +9,11 @@ export function KapaTopbar() {
             <ul className="topbar-information">
               <li>
                 <img src={asset('/wp-content/uploads/2022/11/calling.svg')} alt="Icon Image" />
-                <span> Call Us: </span> <a href="tel:3237501234">+(323) 750-1234</a>
+                <span> Call Us: </span> <a href="tel:+84848637886">+(84)848637886</a>
               </li>
               <li>
                 <img src={asset('/wp-content/uploads/2022/11/map.svg')} alt="Icon Image" />
-                <span> Address: </span> 7011 Vermont Ave, Los Angeles, CA 90044
+                <span> Address: </span> Thon 3, Thach Hoa, Thach That, Hanoi
               </li>
             </ul>
           </div>

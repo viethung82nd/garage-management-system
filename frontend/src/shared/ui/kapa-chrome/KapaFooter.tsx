@@ -12,11 +12,11 @@ export function KapaFooter() {
               <ul className="info-list">
                 <li>
                   <img src={asset('/wp-content/uploads/2022/11/calling.svg')} alt="Image" />
-                  <span>Call Us: </span> <a href="tel:3237501234">+(323) 750-1234</a>
+                  <span>Call Us: </span> <a href="tel:+84848637886">+(84)848637886</a>
                 </li>
                 <li>
                   <img src={asset('/wp-content/uploads/2022/11/timer.svg')} alt="Image" />
-                  <span>Address: </span> 7011 Vermont Ave, Los Angeles, CA 90044
+                  <span>Address: </span> Thon 3, Thach Hoa, Thach That, Hanoi
                 </li>
                 <li>
                   <img src={asset('/wp-content/uploads/2022/11/map.svg')} alt="Image" />
@@ -53,7 +53,7 @@ export function KapaFooter() {
 
           <div className="col-lg-4 col-sm-6">
             <div className="widget single-footer-widget widget_kapa_contact_info">
-              <h3 className="widget_title">Contact Information </h3>
+              <h3 className="widget_title">Business Hours </h3>
               <ul className="info-list">
                 <li>
                   <span>Mon - Fri: </span> 8:00 AM - 6:00 PM
