@@ -297,6 +297,9 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
 
   await invoice.populate(invoicePopulate);
 
+  order.invoicedAt = issuedAt;
+  await order.save();
+
   await logAudit({
     action: "invoiceGenerated",
     actorId: accountantId,

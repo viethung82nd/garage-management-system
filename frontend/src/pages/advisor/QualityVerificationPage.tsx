@@ -41,6 +41,7 @@ type OrderView = {
   customer: string
   completedAt: string
   forwardedToAccountantAt?: string
+  invoicedAt?: string
   /** Photos the technician attached to their step notes — evidence of the
    * actual repair work, distinct from the advisor's pre-repair inspection photos. */
   stepPhotos: string[]
@@ -80,6 +81,7 @@ function mapOrder(order: ApiRepairOrder): OrderView {
     completedAt: formatApiDate(order.completedAt || order.updatedAt),
     customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'No customer on file'),
     forwardedToAccountantAt: order.forwardedToAccountantAt,
+    invoicedAt: order.invoicedAt,
     id: order._id || order.id || crypto.randomUUID(),
     plate: vehiclePlate(vehicle),
     technician: personName(order.technicianId || order.technician, 'Unassigned'),
@@ -110,12 +112,15 @@ export function QualityVerificationPage() {
       clearApiMessage()
       try {
         const response = await fetchWorkshopRepairOrders(authToken, '?status=completed')
-        // Backend leaves status "completed" even after forwarding (accounting
-        // still queries by that status) — exclude already-forwarded orders
-        // here so this queue only ever shows work that still needs the SA.
+        // Backend leaves status "completed" even after forwarding or billing
+        // (accounting queries by that same status) — exclude orders that are
+        // already forwarded OR already invoiced. The accountant can bill
+        // directly off the completed-orders queue without ever going through
+        // "Forward to accountant", so invoicedAt is checked independently
+        // rather than assuming forwardedToAccountantAt was set first.
         const list = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
           .map(mapOrder)
-          .filter((order) => !order.forwardedToAccountantAt)
+          .filter((order) => !order.forwardedToAccountantAt && !order.invoicedAt)
         if (cancelled) return
         setOrders(list)
         setSelectedId((current) => {

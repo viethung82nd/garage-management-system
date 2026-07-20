@@ -66,6 +66,7 @@ export type ApiRepairOrder = {
   startedAt?: string
   completedAt?: string
   forwardedToAccountantAt?: string
+  invoicedAt?: string
   promisedAt?: string
   updatedAt?: string
   createdAt?: string

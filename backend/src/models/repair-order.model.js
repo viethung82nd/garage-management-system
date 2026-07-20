@@ -172,6 +172,13 @@ const repairOrderSchema = new Schema(
     forwardedToAccountantAt: {
       type: Date,
     },
+    // Set once an accountant generates an invoice for this order — the
+    // accountant can bill directly off the completed-orders queue without
+    // waiting on forwardedToAccountantAt, so this is the real "nothing left
+    // to do here" signal for the SA's own Quality Check queue.
+    invoicedAt: {
+      type: Date,
+    },
   },
   { timestamps: false }
 );
