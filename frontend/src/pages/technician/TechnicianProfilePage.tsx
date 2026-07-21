@@ -48,10 +48,6 @@ export function TechnicianProfilePage() {
   }
 
   async function handlePasswordSubmit(values: PasswordFormValues) {
-    if (values.newPassword !== values.confirmPassword) {
-      setPasswordError('New password and confirmation do not match.')
-      return
-    }
     setSavingPassword(true)
     setPasswordError('')
     setPasswordSaved(false)
@@ -132,11 +128,22 @@ export function TechnicianProfilePage() {
                 <Form.Item name="fullName" label="Full name" rules={[{ required: true, message: 'Full name is required' }]}>
                   <Input prefix={<UserOutlined style={{ color: technicianPalette.textMuted }} />} />
                 </Form.Item>
-                <Form.Item name="email" label="Email" rules={[{ type: 'email', message: 'A valid email is required' }]}>
+                <Form.Item
+                  name="email"
+                  label="Email"
+                  rules={[
+                    { required: true, message: 'Email is required' },
+                    { type: 'email', message: 'A valid email is required' },
+                  ]}
+                >
                   <Input prefix={<MailOutlined style={{ color: technicianPalette.textMuted }} />} />
                 </Form.Item>
               </div>
-              <Form.Item name="phone" label="Phone">
+              <Form.Item
+                name="phone"
+                label="Phone"
+                rules={[{ pattern: /^(0|\+84)\d{9,10}$/, message: 'Enter a valid phone number (e.g. 0901234567)' }]}
+              >
                 <Input prefix={<PhoneOutlined style={{ color: technicianPalette.textMuted }} />} style={{ maxWidth: 280 }} />
               </Form.Item>
               <Button type="primary" htmlType="submit" loading={savingProfile}>
@@ -169,10 +176,36 @@ export function TechnicianProfilePage() {
                 <Form.Item name="currentPassword" label="Current password" rules={[{ required: true, message: 'Current password is required' }]}>
                   <Input.Password prefix={<LockOutlined style={{ color: technicianPalette.textMuted }} />} />
                 </Form.Item>
-                <Form.Item name="newPassword" label="New password" rules={[{ required: true, min: 8, message: 'At least 8 characters' }]}>
+                <Form.Item
+                  name="newPassword"
+                  label="New password"
+                  dependencies={['currentPassword']}
+                  rules={[
+                    { required: true, min: 8, message: 'At least 8 characters' },
+                    ({ getFieldValue }) => ({
+                      validator(_, value) {
+                        if (!value || value !== getFieldValue('currentPassword')) return Promise.resolve()
+                        return Promise.reject(new Error('New password must differ from the current one'))
+                      },
+                    }),
+                  ]}
+                >
                   <Input.Password prefix={<LockOutlined style={{ color: technicianPalette.textMuted }} />} />
                 </Form.Item>
-                <Form.Item name="confirmPassword" label="Confirm new password" rules={[{ required: true, message: 'Please confirm the new password' }]}>
+                <Form.Item
+                  name="confirmPassword"
+                  label="Confirm new password"
+                  dependencies={['newPassword']}
+                  rules={[
+                    { required: true, message: 'Please confirm the new password' },
+                    ({ getFieldValue }) => ({
+                      validator(_, value) {
+                        if (!value || value === getFieldValue('newPassword')) return Promise.resolve()
+                        return Promise.reject(new Error('New password and confirmation do not match'))
+                      },
+                    }),
+                  ]}
+                >
                   <Input.Password prefix={<LockOutlined style={{ color: technicianPalette.textMuted }} />} />
                 </Form.Item>
               </div>
