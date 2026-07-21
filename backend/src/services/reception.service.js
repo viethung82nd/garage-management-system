@@ -82,6 +82,10 @@ export async function createReception(
     services: [],
     status: "pending",
     issueDescription: issueDescription?.trim() || undefined,
+    // Carry the category the customer chose when booking so the SA's
+    // inspection checklist can list that category's services. Walk-ins
+    // (no booking) leave it empty and fall back to the generic checklist.
+    serviceCategory: booking?.serviceCategory || undefined,
     promisedAt: parsedPromisedAt,
   });
 

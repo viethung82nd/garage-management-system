@@ -3,9 +3,9 @@ import type { AuthUser } from '../../../shared/auth'
 import {
   AppointmentApiError,
   createAppointmentBooking,
-  fetchAppointmentServices,
+  fetchAppointmentCategories,
   fetchAppointmentSlots,
-  type AppointmentService,
+  type AppointmentCategory,
   type AppointmentSlot,
 } from '../api/appointmentApi'
 
@@ -20,7 +20,7 @@ type AppointmentFormState = {
   licensePlate: string
   bookingDate: string
   timeSlot: string
-  serviceId: string
+  serviceCategory: string
   note: string
 }
 
@@ -46,7 +46,7 @@ function buildInitialState(fullName = '', email = '', phone = ''): AppointmentFo
     licensePlate: '',
     bookingDate: '',
     timeSlot: '',
-    serviceId: '',
+    serviceCategory: '',
     note: '',
   }
 }
@@ -75,7 +75,7 @@ function findMissingFieldMessage(formState: AppointmentFormState) {
   if (!formState.licensePlate.trim()) return 'Please enter your license plate.'
   if (!formState.bookingDate) return 'Please select a date.'
   if (!formState.timeSlot) return 'Please select a time slot.'
-  if (!formState.serviceId) return 'Please select a service.'
+  if (!formState.serviceCategory) return 'Please select a service category.'
   return null
 }
 
@@ -83,9 +83,9 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
   const [formState, setFormState] = useState<AppointmentFormState>(() =>
     buildInitialState(user?.fullName || '', user?.email || '', user?.phone || ''),
   )
-  const [services, setServices] = useState<AppointmentService[]>([])
+  const [categories, setCategories] = useState<AppointmentCategory[]>([])
   const [slots, setSlots] = useState<AppointmentSlot[]>([])
-  const [isLoadingServices, setIsLoadingServices] = useState(true)
+  const [isLoadingCategories, setIsLoadingCategories] = useState(true)
   const [isLoadingSlots, setIsLoadingSlots] = useState(false)
   const [submitState, setSubmitState] = useState<SubmitState>({ type: 'idle', message: '' })
   const minimumDate = useMemo(() => getTodayInputValue(), [])
@@ -109,20 +109,20 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
   useEffect(() => {
     let cancelled = false
 
-    setIsLoadingServices(true)
-    fetchAppointmentServices()
+    setIsLoadingCategories(true)
+    fetchAppointmentCategories()
       .then((response) => {
         if (cancelled) return
-        setServices(response)
+        setCategories(response)
       })
       .catch((error) => {
         if (cancelled) return
         const message =
-          error instanceof AppointmentApiError ? error.message : 'Unable to load services right now.'
+          error instanceof AppointmentApiError ? error.message : 'Unable to load service categories right now.'
         setSubmitState({ type: 'error', message })
       })
       .finally(() => {
-        if (!cancelled) setIsLoadingServices(false)
+        if (!cancelled) setIsLoadingCategories(false)
       })
 
     return () => {
@@ -183,7 +183,7 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
         vehicle: {
           licensePlate: formState.licensePlate.trim().toUpperCase(),
         },
-        serviceId: formState.serviceId,
+        serviceCategory: formState.serviceCategory,
         bookingDate: formState.bookingDate,
         timeSlot: formState.timeSlot,
         note: formState.note.trim(),
@@ -338,16 +338,16 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
                   <select
                     className="wpcf7-form-control wpcf7-select wpcf7-validates-as-required form-control"
                     required
-                    value={formState.serviceId}
-                    disabled={isLoadingServices}
+                    value={formState.serviceCategory}
+                    disabled={isLoadingCategories}
                     onChange={(event) =>
-                      setFormState((current) => ({ ...current, serviceId: event.target.value }))
+                      setFormState((current) => ({ ...current, serviceCategory: event.target.value }))
                     }
                   >
-                    <option value="">{isLoadingServices ? '-- Loading Services --' : '-- Select Services --'}</option>
-                    {services.map((service) => (
-                      <option key={service._id} value={service._id}>
-                        {service.name}
+                    <option value="">{isLoadingCategories ? '-- Loading Service Categories --' : '-- Select Service Category --'}</option>
+                    {categories.map((category) => (
+                      <option key={category._id} value={category.name}>
+                        {category.name}
                       </option>
                     ))}
                   </select>
@@ -374,7 +374,7 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
             <button
               type="submit"
               className="default-btn"
-              disabled={submitState.type === 'loading' || isLoadingServices}
+              disabled={submitState.type === 'loading' || isLoadingCategories}
             >
               {submitState.type === 'loading' ? 'Sending Request...' : 'Make An Appointment'}
             </button>

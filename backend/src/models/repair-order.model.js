@@ -122,6 +122,14 @@ const repairOrderSchema = new Schema(
       type: String,
       trim: true,
     },
+    // The service category the customer chose when booking, copied from the
+    // originating Booking at Reception (matches a ServiceCategory.name). Lets
+    // the SA's inspection checklist show that category's services instead of a
+    // generic seed. Empty for walk-ins with no booking.
+    serviceCategory: {
+      type: String,
+      trim: true,
+    },
     promisedAt: {
       type: Date,
     },

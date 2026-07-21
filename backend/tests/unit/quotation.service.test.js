@@ -85,14 +85,32 @@ describe("quotation.service", () => {
     expect(updatedOrder.services).toHaveLength(0);
   });
 
-  it("rejects confirming a quotation that hasn't been sent", async () => {
+  it("confirms a draft directly (walk-in flow, no send step) and syncs services", async () => {
     const { user: customer } = await createUser({ role: "onlineCustomer" });
     const order = await orderWithVehicle(customer);
     const quote = await quotationService.createQuotation(
       { repairOrderId: order._id.toString(), lines: [{ description: "X", unitPrice: 1000, quantity: 1 }] },
       (await advisorId()),
     );
-    await expect(quotationService.confirmQuotation(quote._id.toString(), true)).rejects.toMatchObject({
+
+    const result = await quotationService.confirmQuotation(quote._id.toString(), true);
+    expect(result.status).toBe("approved");
+
+    const updatedOrder = await RepairOrderModel.findById(order._id);
+    expect(updatedOrder.services).toHaveLength(1);
+    expect(updatedOrder.totalCost).toBe(1000);
+  });
+
+  it("rejects re-confirming a quotation that is already approved/rejected", async () => {
+    const { user: customer } = await createUser({ role: "onlineCustomer" });
+    const order = await orderWithVehicle(customer);
+    const quote = await quotationService.createQuotation(
+      { repairOrderId: order._id.toString(), lines: [{ description: "X", unitPrice: 1000, quantity: 1 }] },
+      (await advisorId()),
+    );
+    await quotationService.confirmQuotation(quote._id.toString(), true);
+
+    await expect(quotationService.confirmQuotation(quote._id.toString(), false)).rejects.toMatchObject({
       status: 409,
     });
   });

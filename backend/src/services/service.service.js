@@ -115,11 +115,39 @@ export async function deleteServiceCategory(id) {
 // ============= SERVICE =============
 
 export async function getAllServices({ category, isActive }) {
-  const filter = {};
-  if (category) filter.category = category;
-  if (isActive !== undefined) filter.isActive = isActive === "true";
+  const match = {};
+  if (isActive !== undefined) match.isActive = isActive === "true";
 
-  return serviceRepository.model.find(filter).select("-__v").sort({ createdAt: -1 });
+  if (!category) {
+    return serviceRepository.model.find(match).select("-__v").sort({ createdAt: -1 });
+  }
+
+  // A service's `category` has historically been stored as either the
+  // ServiceCategory name (the documented convention) OR its _id — and with
+  // mixed BSON types (some rows keep it as a real ObjectId, others as a
+  // String). A plain String-schema equality query can't match the ObjectId
+  // rows, so resolve the incoming param (itself a name or an id) to the
+  // category document, then match on the *stringified* category. This finds
+  // services regardless of which form/type they were saved with.
+  const values = new Set([String(category)]);
+  let categoryDoc = null;
+  if (OBJECT_ID_RE.test(category)) {
+    categoryDoc = await serviceCategoryRepository.findById(category);
+  }
+  if (!categoryDoc) {
+    categoryDoc = await serviceCategoryRepository.findOne({ name: category });
+  }
+  if (categoryDoc) {
+    values.add(categoryDoc.name);
+    values.add(String(categoryDoc._id));
+  }
+
+  return serviceRepository.model.aggregate([
+    { $addFields: { _categoryStr: { $toString: "$category" } } },
+    { $match: { ...match, _categoryStr: { $in: [...values] } } },
+    { $project: { __v: 0, _categoryStr: 0 } },
+    { $sort: { createdAt: -1 } },
+  ]);
 }
 
 export async function getServiceById(id) {

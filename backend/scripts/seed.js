@@ -202,6 +202,7 @@ async function seedBookings({ customers, walkIns, vehicles, services, advisors }
       customerId: spec.customer._id,
       vehicleId: spec.vehicle._id,
       serviceId: spec.service._id,
+      serviceCategory: spec.service.category,
       advisorId: spec.advisor?._id,
       bookingDate: spec.day >= 0 ? daysFromNow(spec.day) : daysAgo(-spec.day),
       timeSlot: spec.slot,
@@ -319,6 +320,7 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     vehicleId: vehicles[5]._id,
     advisorId: advisors[0]._id,
     services: [svcLine("Dent Removal & Panel Repair")],
+    serviceCategory: findService("Dent Removal & Panel Repair").category,
     status: "pending",
     totalCost: findService("Dent Removal & Panel Repair").basePrice,
   });
@@ -330,6 +332,7 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     vehicleId: vehicles[6]._id,
     advisorId: advisors[1]._id,
     services: [svcLine("AC Recharge Service")],
+    serviceCategory: findService("AC Recharge Service").category,
     status: "pending",
     totalCost: findService("AC Recharge Service").basePrice,
   });

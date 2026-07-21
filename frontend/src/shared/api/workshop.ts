@@ -9,6 +9,7 @@ export type ApiVehicle = {
   brand?: string
   model?: string
   year?: number | string
+  color?: string
   customerId?: AuthUser
   customer?: AuthUser
   vin?: string
@@ -36,6 +37,7 @@ export type ApiBooking = {
   vehicle?: ApiVehicle
   serviceId?: ApiService
   service?: ApiService
+  serviceCategory?: string
   advisorId?: AuthUser
   advisor?: AuthUser
   bookingDate?: string
@@ -59,6 +61,8 @@ export type ApiRepairOrder = {
   technician?: AuthUser
   inspectionId?: string
   issueDescription?: string
+  /** Service category the customer chose when booking, carried from the booking at Reception. Drives the inspection checklist. */
+  serviceCategory?: string
   services?: Array<{ serviceId?: ApiService | string; name?: string; quantity?: number; priceAtTime?: number; status?: 'pending' | 'inProgress' | 'completed' }>
   stepNotes?: Array<{ content?: string; technicianId?: AuthUser | string; stepIndex?: number; photos?: string[]; createdAt?: string }>
   status?: string
@@ -240,6 +244,11 @@ export function addWorkshopStepNote(token: string, id: string, payload: AddStepN
 
 export function fetchWorkshopServices(token: string) {
   return apiRequest<ApiService[]>('/api/services', { token })
+}
+
+/** Active services belonging to one category — used to build the SA's inspection checklist from the category the customer booked. */
+export function fetchWorkshopServicesByCategory(token: string, category: string) {
+  return apiRequest<ApiService[]>(`/api/services?isActive=true&category=${encodeURIComponent(category)}`, { token })
 }
 
 export function createWorkshopService(token: string, payload: ApiService) {

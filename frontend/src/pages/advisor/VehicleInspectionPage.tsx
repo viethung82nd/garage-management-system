@@ -1,5 +1,5 @@
 import { CheckCircleFilled, PlusOutlined, UploadOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Image, Input, InputNumber, Select, Table, Tag, Upload } from 'antd'
+import { Button, Card, Checkbox, Empty, Image, Input, InputNumber, Select, Table, Tag, Upload } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { useEffect, useMemo, useState } from 'react'
@@ -8,6 +8,7 @@ import {
   createInspectionReport,
   fetchInspectionReports,
   fetchWorkshopRepairOrders,
+  fetchWorkshopServicesByCategory,
   orderId,
   personName,
   unwrapArray,
@@ -26,6 +27,11 @@ import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 const { TextArea } = Input
 
 type InspectionItemRow = ApiInspectionItem & { id: string; category: string; label: string; status: InspectionItemStatus; laborCost: number; partsCost: number; note: string }
+
+// A selectable catalog service from the booked category. When a category has
+// services, the checklist becomes a "tick the services this vehicle needs"
+// list — the ticked rows carry to the quote as recommended services.
+type ServiceRow = { id: string; serviceId?: string; name: string; price: number; selected: boolean }
 
 type ChecklistGroup = { category: string; items: string[] }
 
@@ -78,7 +84,26 @@ function seedItems(): InspectionItemRow[] {
   )
 }
 
-type SubjectOption = { label: string; value: string; vehicleId?: string; lastKnownMileage?: number }
+/** Normalises a checklist/service row into the InspectionReport item shape. */
+function buildReportItem(item: {
+  category: string
+  label: string
+  status: InspectionItemStatus
+  laborCost?: number
+  partsCost?: number
+  note?: string
+}): ApiInspectionItem {
+  return {
+    category: item.category,
+    label: item.label,
+    status: item.status,
+    laborCost: item.laborCost ?? 0,
+    partsCost: item.partsCost ?? 0,
+    note: item.note ?? '',
+  }
+}
+
+type SubjectOption = { label: string; value: string; vehicleId?: string; lastKnownMileage?: number; serviceCategory?: string }
 
 export function VehicleInspectionPage() {
   const { token } = useAuth()
@@ -88,6 +113,7 @@ export function VehicleInspectionPage() {
   const [repairOrders, setRepairOrders] = useState<ApiRepairOrder[]>([])
   const [subjectKey, setSubjectKey] = useState('')
   const [items, setItems] = useState<InspectionItemRow[]>(() => seedItems())
+  const [serviceRows, setServiceRows] = useState<ServiceRow[]>([])
   const [odometer, setOdometer] = useState('')
   const [fuelLevel, setFuelLevel] = useState('1/2')
   const [findings, setFindings] = useState('')
@@ -134,6 +160,7 @@ export function VehicleInspectionPage() {
           value: order._id || order.id || '',
           vehicleId: vehicle?._id || vehicle?.id,
           lastKnownMileage: vehicle?.lastKnownMileage,
+          serviceCategory: order.serviceCategory,
         }
       }),
     [repairOrders],
@@ -185,6 +212,63 @@ export function VehicleInspectionPage() {
     }
   }, [token, selectedSubject?.vehicleId])
 
+  // Load the services of the category the customer booked so the SA can tick
+  // the ones this vehicle actually needs (each row shows its catalogue price).
+  // Walk-ins (or bookings whose category has no services yet) fall back to the
+  // generic OK/Monitor/Needs-repair seed checklist. Re-runs whenever the
+  // selected order changes, so switching subjects starts from a clean slate.
+  useEffect(() => {
+    if (!token) return
+    const authToken = token
+    const category = selectedSubject?.serviceCategory?.trim()
+
+    if (!category) {
+      setServiceRows([])
+      setItems(seedItems())
+      setSubmitted(false)
+      return
+    }
+
+    let cancelled = false
+
+    async function loadCategoryServices() {
+      try {
+        const services = await fetchWorkshopServicesByCategory(authToken, category!)
+        if (cancelled) return
+        const rows: ServiceRow[] = services
+          .filter((service) => service?.name)
+          .map((service) => ({
+            id: crypto.randomUUID(),
+            serviceId: service._id || service.id,
+            name: service.name as string,
+            price: service.basePrice ?? service.price ?? 0,
+            selected: false,
+          }))
+        if (rows.length) {
+          setServiceRows(rows)
+          setItems([])
+        } else {
+          // Category has no catalogue services yet — don't leave the SA with an
+          // empty page; fall back to the generic checklist.
+          setServiceRows([])
+          setItems(seedItems())
+        }
+        setSubmitted(false)
+      } catch {
+        if (!cancelled) {
+          setServiceRows([])
+          setItems(seedItems())
+        }
+      }
+    }
+
+    void loadCategoryServices()
+    return () => {
+      cancelled = true
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, subjectKey, selectedSubject?.serviceCategory])
+
   const priorPhotos = useMemo(() => priorReports.flatMap((report) => report.photos || []), [priorReports])
 
   function updateItem(id: string, patch: Partial<InspectionItemRow>) {
@@ -201,15 +285,58 @@ export function VehicleInspectionPage() {
   const monitorCount = items.filter((item) => item.status === 'monitor').length
   const totalEstimate = repairItems.reduce((sum, item) => sum + item.laborCost + item.partsCost, 0)
 
+  // Service-selection mode is active whenever the booked category yielded
+  // catalogue services to tick; otherwise the generic checklist is shown.
+  const servicesMode = serviceRows.length > 0
+  const selectedServices = useMemo(() => serviceRows.filter((row) => row.selected), [serviceRows])
+  const selectedTotal = selectedServices.reduce((sum, row) => sum + row.price, 0)
+
+  function toggleService(id: string, selected: boolean) {
+    setSubmitted(false)
+    setServiceRows((current) => current.map((row) => (row.id === id ? { ...row, selected } : row)))
+  }
+
   async function submitInspection() {
     if (!token || !selectedSubject) {
       showError('Select a repair order to inspect first.')
       return
     }
-    const uncosted = repairItems.filter((item) => item.laborCost + item.partsCost <= 0 && !item.note.trim())
-    if (uncosted.length) {
-      showError(`Add a cost estimate or a note for "${uncosted[0].label}" — items marked "Needs repair" carry over to the quote and need something for the SA to price.`)
-      return
+
+    const category = selectedSubject.serviceCategory || ''
+
+    // Build the report payload differently per mode. In service-selection mode
+    // the ticked services are what carry to the quote; in the generic checklist
+    // mode it's the "Needs repair" items.
+    let reportItems: ReturnType<typeof buildReportItem>[]
+    let recommendedServices: { serviceId?: string; name: string; price?: number; isRequired?: boolean }[]
+    let estimatedCost: number
+
+    if (servicesMode) {
+      if (!selectedServices.length) {
+        showError('Tick at least one service the vehicle needs before submitting.')
+        return
+      }
+      reportItems = serviceRows.map((row) =>
+        buildReportItem({
+          category,
+          label: row.name,
+          status: row.selected ? 'repair' : 'ok',
+          partsCost: row.selected ? row.price : 0,
+        }),
+      )
+      recommendedServices = selectedServices.map((row) => ({ serviceId: row.serviceId, name: row.name, price: row.price, isRequired: true }))
+      estimatedCost = selectedTotal
+    } else {
+      const uncosted = repairItems.filter((item) => item.laborCost + item.partsCost <= 0 && !item.note.trim())
+      if (uncosted.length) {
+        showError(`Add a cost estimate or a note for "${uncosted[0].label}" — items marked "Needs repair" carry over to the quote and need something for the SA to price.`)
+        return
+      }
+      reportItems = items.map((item) => buildReportItem({ category: item.category, label: item.label, laborCost: item.laborCost, note: item.note, partsCost: item.partsCost, status: item.status }))
+      // Items flagged "Needs repair" become the suggested lines the quotation
+      // step offers to add with one click.
+      recommendedServices = repairItems.map((item) => ({ name: item.label, price: item.laborCost + item.partsCost }))
+      estimatedCost = totalEstimate
     }
 
     setSaving(true)
@@ -217,14 +344,11 @@ export function VehicleInspectionPage() {
     try {
       await createInspectionReport(token, {
         repairOrderId: selectedSubject.value,
-        estimatedCost: totalEstimate,
+        estimatedCost,
         findings,
         fuelLevel,
-        items: items.map((item) => ({ category: item.category, label: item.label, laborCost: item.laborCost, note: item.note, partsCost: item.partsCost, status: item.status })),
-        // Items flagged "Needs repair" become the suggested lines the
-        // quotation step offers to add with one click — this is the only
-        // thing that actually carries the inspection findings forward.
-        recommendedServices: repairItems.map((item) => ({ name: item.label, price: item.laborCost + item.partsCost })),
+        items: reportItems,
+        recommendedServices,
         odometer: Number(odometer) || undefined,
         photos: photoFiles.map((file) => file.originFileObj as File).filter(Boolean),
       })
@@ -300,6 +424,32 @@ export function VehicleInspectionPage() {
     },
   ]
 
+  const serviceColumns: ColumnsType<ServiceRow> = [
+    {
+      key: 'select',
+      render: (_, row) => <Checkbox checked={row.selected} onChange={(event) => toggleService(row.id, event.target.checked)} />,
+      title: 'Select',
+      width: 80,
+    },
+    {
+      key: 'service',
+      render: (_, row) => (
+        <div>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{selectedSubject?.serviceCategory}</div>
+          <div style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 2 }}>{row.name}</div>
+        </div>
+      ),
+      title: 'Service',
+    },
+    {
+      key: 'price',
+      align: 'right',
+      render: (_, row) => <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>{formatMoney(row.price)}</span>,
+      title: 'Price',
+      width: 160,
+    },
+  ]
+
   return (
     <ServiceAdvisorShell title="Vehicle inspection">
       {apiMessage ? <InlineBanner tone="error">{apiMessage}</InlineBanner> : null}
@@ -326,6 +476,12 @@ export function VehicleInspectionPage() {
             <div style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>Fuel level</div>
             <Select onChange={setFuelLevel} options={fuelLevels.map((level) => ({ label: level, value: level }))} style={{ width: 140 }} value={fuelLevel} />
           </div>
+          {selectedSubject?.serviceCategory ? (
+            <div>
+              <div style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>Booked service</div>
+              <Tag color="blue">{selectedSubject.serviceCategory}</Tag>
+            </div>
+          ) : null}
           {submitted ? <Tag color="green" icon={<CheckCircleFilled />}>Submitted</Tag> : null}
         </div>
       </Card>
@@ -337,9 +493,19 @@ export function VehicleInspectionPage() {
       ) : (
       <>
       <div className="flex flex-wrap gap-4">
-        <StatCard label="Needs repair" palette={advisorPalette} value={repairItems.length} />
-        <StatCard label="To monitor" palette={advisorPalette} value={monitorCount} />
-        <StatCard label="Estimated cost" palette={advisorPalette} value={formatMoney(totalEstimate)} />
+        {servicesMode ? (
+          <>
+            <StatCard label="Services selected" palette={advisorPalette} value={selectedServices.length} />
+            <StatCard label="Available services" palette={advisorPalette} value={serviceRows.length} />
+            <StatCard label="Estimated cost" palette={advisorPalette} value={formatMoney(selectedTotal)} />
+          </>
+        ) : (
+          <>
+            <StatCard label="Needs repair" palette={advisorPalette} value={repairItems.length} />
+            <StatCard label="To monitor" palette={advisorPalette} value={monitorCount} />
+            <StatCard label="Estimated cost" palette={advisorPalette} value={formatMoney(totalEstimate)} />
+          </>
+        )}
       </div>
 
       {priorPhotos.length ? (
@@ -364,31 +530,76 @@ export function VehicleInspectionPage() {
       <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div className="flex flex-col gap-5">
           <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Inspection checklist">
-            <Table columns={columns} dataSource={items} pagination={false} rowKey="id" scroll={{ x: 820 }} size="small" />
+            {servicesMode ? (
+              <>
+                <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginBottom: 12 }}>
+                  Tick the services this vehicle needs from the booked category — the selected services and their prices carry over to the quote.
+                </p>
+                <Table columns={serviceColumns} dataSource={serviceRows} pagination={false} rowKey="id" scroll={{ x: 480 }} size="small" />
+              </>
+            ) : (
+              <Table columns={columns} dataSource={items} pagination={false} rowKey="id" scroll={{ x: 820 }} size="small" />
+            )}
           </Card>
         </div>
 
         <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
           <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
             <p style={{ color: '#ffb4ab', fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Inspection summary</p>
-            <div className="mt-4 flex flex-col gap-3" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
-              <div className="flex items-center justify-between">
-                <span>Total items</span>
-                <span style={{ fontWeight: 700 }}>{items.length}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>Needs repair</span>
-                <span style={{ color: '#ffb4ab', fontWeight: 700 }}>{repairItems.length}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span>To monitor</span>
-                <span style={{ fontWeight: 700 }}>{monitorCount}</span>
-              </div>
-            </div>
-            <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 16, paddingTop: 16 }}>
-              <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Estimated cost</p>
-              <p style={{ color: '#ffb4ab', fontSize: 26, fontWeight: 700, marginTop: 8 }}>{formatMoney(totalEstimate)}</p>
-            </div>
+            {servicesMode ? (
+              <>
+                <div className="mt-4 flex flex-col gap-3" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
+                  <div className="flex items-center justify-between">
+                    <span>Available services</span>
+                    <span style={{ fontWeight: 700 }}>{serviceRows.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Selected</span>
+                    <span style={{ color: '#ffb4ab', fontWeight: 700 }}>{selectedServices.length}</span>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 16, paddingTop: 16 }}>
+                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Selected services</p>
+                  {selectedServices.length ? (
+                    <div className="mt-3 flex flex-col gap-2" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 13 }}>
+                      {selectedServices.map((row) => (
+                        <div className="flex items-start justify-between gap-3" key={row.id}>
+                          <span>{row.name}</span>
+                          <span style={{ fontWeight: 700, whiteSpace: 'nowrap' }}>{formatMoney(row.price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p style={{ color: 'rgba(255,255,255,0.5)', fontSize: 13, marginTop: 8 }}>No services selected yet.</p>
+                  )}
+                </div>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 16, paddingTop: 16 }}>
+                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Estimated cost</p>
+                  <p style={{ color: '#ffb4ab', fontSize: 26, fontWeight: 700, marginTop: 8 }}>{formatMoney(selectedTotal)}</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="mt-4 flex flex-col gap-3" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
+                  <div className="flex items-center justify-between">
+                    <span>Total items</span>
+                    <span style={{ fontWeight: 700 }}>{items.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>Needs repair</span>
+                    <span style={{ color: '#ffb4ab', fontWeight: 700 }}>{repairItems.length}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span>To monitor</span>
+                    <span style={{ fontWeight: 700 }}>{monitorCount}</span>
+                  </div>
+                </div>
+                <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 16, paddingTop: 16 }}>
+                  <p style={{ color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Estimated cost</p>
+                  <p style={{ color: '#ffb4ab', fontSize: 26, fontWeight: 700, marginTop: 8 }}>{formatMoney(totalEstimate)}</p>
+                </div>
+              </>
+            )}
           </Card>
 
           <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Photos">
@@ -430,7 +641,13 @@ export function VehicleInspectionPage() {
             <Button block icon={<UploadOutlined />} loading={saving} onClick={submitInspection} style={{ marginTop: 16 }} type="primary">
               Submit &amp; continue to quotation
             </Button>
-            {repairItems.length ? (
+            {servicesMode ? (
+              selectedServices.length ? (
+                <p style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 8, textAlign: 'center' }}>
+                  {selectedServices.length} service{selectedServices.length === 1 ? '' : 's'} will be suggested on the quote.
+                </p>
+              ) : null
+            ) : repairItems.length ? (
               <p style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 8, textAlign: 'center' }}>
                 {repairItems.length} item{repairItems.length === 1 ? '' : 's'} marked "Needs repair" will be suggested on the quote.
               </p>

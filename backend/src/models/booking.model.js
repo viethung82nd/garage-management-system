@@ -26,6 +26,14 @@ const bookingSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Service",
     },
+    // The service category the customer picked when booking (matches a
+    // ServiceCategory.name, mirroring how Service.category is stored — a name,
+    // not a foreign key). Carried onto the RepairOrder at Reception so the SA's
+    // inspection page can list that category's services as the checklist.
+    serviceCategory: {
+      type: String,
+      trim: true,
+    },
     advisorId: {
       type: Schema.Types.ObjectId,
       ref: "User",

@@ -42,7 +42,7 @@ function mapBooking(booking: ApiBooking): BookingRequest {
     initials: getUserInitials(customer),
     phone: customer?.phone || 'No phone on file',
     plate: vehiclePlate(vehicle),
-    service: service?.name || 'No service selected',
+    service: service?.name || booking.serviceCategory || 'No service selected',
     status: normalizeBookingStatus(booking.status),
     time: booking.timeSlot || booking.time || '--:--',
     vehicle: vehicleName(vehicle),

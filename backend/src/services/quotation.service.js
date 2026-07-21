@@ -173,8 +173,11 @@ export async function confirmQuotation(id, approved) {
   if (!quote) {
     throw new ApiError(404, "Quotation not found");
   }
-  if (quote.status !== "sent") {
-    throw new ApiError(409, "Only a sent quotation can be confirmed");
+  // The SA now records the customer's decision on the spot (walk-in), so a
+  // draft can be confirmed directly without first "sending" it. Already
+  // approved/rejected quotes are terminal and can't be re-confirmed.
+  if (quote.status !== "draft" && quote.status !== "sent") {
+    throw new ApiError(409, `Only a draft or sent quotation can be confirmed (this one is ${quote.status})`);
   }
 
   quote.status = approved ? "approved" : "rejected";

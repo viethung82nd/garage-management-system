@@ -24,6 +24,14 @@ export type AppointmentService = {
   isActive: boolean
 }
 
+export type AppointmentCategory = {
+  _id: string
+  name: string
+  description?: string
+  imageUrl?: string
+  isActive?: boolean
+}
+
 export type AppointmentSlot = {
   timeSlot: string
   capacity: number
@@ -40,7 +48,7 @@ export type CreateAppointmentBookingPayload = {
   vehicle: {
     licensePlate: string
   }
-  serviceId: string
+  serviceCategory: string
   bookingDate: string
   timeSlot: string
   note: string
@@ -97,6 +105,12 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
 
 export async function fetchAppointmentServices() {
   return requestJson<AppointmentService[]>('/api/services?isActive=true', { method: 'GET' })
+}
+
+export async function fetchAppointmentCategories() {
+  const categories = await requestJson<AppointmentCategory[]>('/api/services/categories', { method: 'GET' })
+  // The catalog can hold retired categories; only offer the ones still active.
+  return categories.filter((category) => category.isActive !== false)
 }
 
 export async function fetchAppointmentSlots(date: string) {

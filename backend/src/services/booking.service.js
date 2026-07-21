@@ -1,5 +1,5 @@
 import { bookingRepository, bookingHistoryRepository } from "../repositories/booking.repository.js";
-import { serviceRepository } from "../repositories/service.repository.js";
+import { serviceRepository, serviceCategoryRepository } from "../repositories/service.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { BOOKING_STATUSES } from "../models/booking.model.js";
@@ -223,7 +223,7 @@ async function notifyCounterparty(booking, actor, payload) {
  * Public booking creation. Captures the customer and vehicle (find-or-create),
  * re-checks slot capacity, then records the booking.
  */
-export async function createBooking({ customer, vehicle, serviceId, bookingDate, timeSlot, note }) {
+export async function createBooking({ customer, vehicle, serviceId, serviceCategory, bookingDate, timeSlot, note }) {
   if (!customer?.fullName?.trim() || !customer?.phone?.trim()) {
     throw new ApiError(400, "customer.fullName and customer.phone are required");
   }
@@ -248,6 +248,17 @@ export async function createBooking({ customer, vehicle, serviceId, bookingDate,
     }
   }
 
+  // The customer now picks a service category (not a single service) at booking
+  // time; validate it against the catalog so a stale/invalid name can't slip
+  // through to the SA's inspection checklist.
+  const categoryName = serviceCategory?.trim();
+  if (categoryName) {
+    const category = await serviceCategoryRepository.findOne({ name: categoryName });
+    if (!category) {
+      throw new ApiError(404, "service category not found");
+    }
+  }
+
   // Fast-path rejection of a full slot before any find-or-create side effects.
   const taken = await takenSeats(day, timeSlot);
   if (taken.size >= SLOT_CAPACITY) {
@@ -269,6 +280,7 @@ export async function createBooking({ customer, vehicle, serviceId, bookingDate,
         customerId: customerDoc._id,
         vehicleId: vehicleDoc._id,
         serviceId: serviceId || undefined,
+        serviceCategory: categoryName || undefined,
         bookingDate: day,
         timeSlot,
         source: "online",
