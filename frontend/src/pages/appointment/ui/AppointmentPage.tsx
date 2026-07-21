@@ -1,5 +1,5 @@
-import { useCallback, useEffect } from 'react'
-import { createRoot } from 'react-dom/client'
+import { useCallback, useEffect, useRef } from 'react'
+import { createRoot, type Root } from 'react-dom/client'
 import {
   pruneKapaNavbar,
   rewriteKapaRouteLinks,
@@ -39,6 +39,13 @@ export default function AppointmentPage() {
     disableExistingLink: (href) => href.includes('/kapa-auth/') || href.includes('/external/'),
   })
 
+  // Mount the booking form into the cloned template's slot ONCE per template
+  // render. Deliberately excludes `user` from the deps: when the auth profile
+  // resolves (or refreshes) the form must NOT be torn down and rebuilt — that
+  // wipes whatever the visitor was in the middle of entering (picked date,
+  // selected category). New user props are pushed to the existing root by the
+  // effect below, which React reconciles while preserving the form's state.
+  const rootRef = useRef<Root | null>(null)
   useEffect(() => {
     if (!pageSpec) return
 
@@ -46,12 +53,20 @@ export default function AppointmentPage() {
     if (!slot) return
 
     const root = createRoot(slot)
+    rootRef.current = root
     root.render(<AppointmentBookingForm user={user} />)
 
     return () => {
+      rootRef.current = null
       root.unmount()
     }
-  }, [markup, pageSpec, user])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [markup, pageSpec])
+
+  // Push updated user props into the already-mounted form without remounting.
+  useEffect(() => {
+    rootRef.current?.render(<AppointmentBookingForm user={user} />)
+  }, [user])
 
   useMountKapaNavbarWidgets(Boolean(pageSpec))
 
