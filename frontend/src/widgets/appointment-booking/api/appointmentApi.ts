@@ -79,10 +79,17 @@ async function parseError(response: Response) {
   throw new AppointmentApiError(message, response.status)
 }
 
+/** Requests time out after this long so a hung/unreachable backend surfaces a
+ * clear error instead of an indefinite "Loading..." state. */
+const REQUEST_TIMEOUT_MS = 12000
+
 async function requestJson<T>(path: string, init: RequestInit = {}) {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS)
   try {
     const response = await fetch(`${API_BASE_URL}${path}`, {
       ...init,
+      signal: controller.signal,
       headers: {
         'Content-Type': 'application/json',
         ...(init.headers || {}),
@@ -99,7 +106,13 @@ async function requestJson<T>(path: string, init: RequestInit = {}) {
       throw error
     }
 
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new AppointmentApiError('The booking service took too long to respond. Please check the backend and try again.', 0)
+    }
+
     throw new AppointmentApiError('Unable to connect to the booking service. Please check backend, CORS, or network status.', 0)
+  } finally {
+    clearTimeout(timeout)
   }
 }
 
