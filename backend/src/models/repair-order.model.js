@@ -62,7 +62,7 @@ const orderServiceSchema = new Schema(
       default: "pending",
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const stepNoteSchema = new Schema(
@@ -94,7 +94,7 @@ const stepNoteSchema = new Schema(
       default: Date.now,
     },
   },
-  { _id: false }
+  { _id: false },
 );
 
 const repairOrderSchema = new Schema(
@@ -188,7 +188,10 @@ const repairOrderSchema = new Schema(
       type: Date,
     },
   },
-  { timestamps: false }
+  { timestamps: true },
 );
 
-export const RepairOrderModel = mongoose.model("RepairOrder", repairOrderSchema);
+export const RepairOrderModel = mongoose.model(
+  "RepairOrder",
+  repairOrderSchema,
+);

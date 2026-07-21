@@ -1,5 +1,11 @@
-import { bookingRepository, bookingHistoryRepository } from "../repositories/booking.repository.js";
-import { serviceRepository, serviceCategoryRepository } from "../repositories/service.repository.js";
+import {
+  bookingRepository,
+  bookingHistoryRepository,
+} from "../repositories/booking.repository.js";
+import {
+  serviceRepository,
+  serviceCategoryRepository,
+} from "../repositories/service.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { BOOKING_STATUSES } from "../models/booking.model.js";
@@ -111,40 +117,51 @@ export async function getSlots(dateParam) {
 
 /** Finds a user by phone, or creates a walk-in customer record for them. */
 export async function resolveCustomer({ fullName, phone, email }) {
+  const normalizedName = fullName?.trim();
+  const normalizedPhone = phone?.trim();
+  const normalizedEmail = email?.trim().toLowerCase();
+
   const existing = await userRepository.findOne({
-    phone,
+    phone: normalizedPhone,
     role: { $in: ["onlineCustomer", "walkInCustomer"] },
   });
+
   if (existing) {
-    let shouldSave = false;
-    if (!existing.email && email?.trim()) {
-      existing.email = email.trim().toLowerCase();
-      shouldSave = true;
-    }
+    // Phone đã tồn tại nhưng tên khác -> báo lỗi
     if (
-      existing.accountType === "walkIn" &&
-      fullName?.trim() &&
-      existing.fullName !== fullName.trim()
+      normalizedName &&
+      existing.fullName.trim().toLowerCase() !== normalizedName.toLowerCase()
     ) {
-      existing.fullName = fullName.trim();
-      shouldSave = true;
+      throw new ApiError(
+        409,
+        `Phone number ${normalizedPhone} already belongs to ${existing.fullName}. Please verify the customer's information.`,
+      );
     }
-    if (shouldSave) {
+
+    // Chỉ bổ sung email nếu trước đó chưa có
+    if (!existing.email && normalizedEmail) {
+      existing.email = normalizedEmail;
       await existing.save();
     }
+
     return existing;
   }
+
+  // Chưa có khách hàng -> tạo mới
   return userRepository.create({
-    fullName: fullName.trim(),
-    phone,
-    email: email?.trim()?.toLowerCase() || undefined,
+    fullName: normalizedName,
+    phone: normalizedPhone,
+    email: normalizedEmail || undefined,
     role: "walkInCustomer",
     accountType: "walkIn",
   });
 }
 
 /** Finds a vehicle by licence plate, or registers a new one for the customer. */
-export async function resolveVehicle({ licensePlate, brand, model }, customerId) {
+export async function resolveVehicle(
+  { licensePlate, brand, model },
+  customerId,
+) {
   const plate = licensePlate.toUpperCase().trim();
   const existing = await vehicleRepository.findOne({ licensePlate: plate });
   if (existing) {
@@ -166,7 +183,12 @@ export async function resolveVehicle({ licensePlate, brand, model }, customerId)
     }
     return existing;
   }
-  return vehicleRepository.create({ licensePlate: plate, brand, model, customerId });
+  return vehicleRepository.create({
+    licensePlate: plate,
+    brand,
+    model,
+    customerId,
+  });
 }
 
 /** Populates a booking with the fields clients need for display. */
@@ -210,12 +232,18 @@ function assertCanManage(booking, user) {
 async function notifyCounterparty(booking, actor, payload) {
   const actorId = String(actor.sub);
   const targets = new Set();
-  if (String(booking.customerId) !== actorId) targets.add(String(booking.customerId));
+  if (String(booking.customerId) !== actorId)
+    targets.add(String(booking.customerId));
   if (booking.advisorId && String(booking.advisorId) !== actorId) {
     targets.add(String(booking.advisorId));
   }
   for (const userId of targets) {
-    await createNotification({ userId, refId: booking._id, refModel: "Booking", ...payload });
+    await createNotification({
+      userId,
+      refId: booking._id,
+      refModel: "Booking",
+      ...payload,
+    });
   }
 }
 
@@ -223,15 +251,29 @@ async function notifyCounterparty(booking, actor, payload) {
  * Public booking creation. Captures the customer and vehicle (find-or-create),
  * re-checks slot capacity, then records the booking.
  */
-export async function createBooking({ customer, vehicle, serviceId, serviceCategory, bookingDate, timeSlot, note }) {
+export async function createBooking({
+  customer,
+  vehicle,
+  serviceId,
+  serviceCategory,
+  bookingDate,
+  timeSlot,
+  note,
+}) {
   if (!customer?.fullName?.trim() || !customer?.phone?.trim()) {
-    throw new ApiError(400, "customer.fullName and customer.phone are required");
+    throw new ApiError(
+      400,
+      "customer.fullName and customer.phone are required",
+    );
   }
   if (!vehicle?.licensePlate?.trim()) {
     throw new ApiError(400, "vehicle.licensePlate is required");
   }
   if (!isValidSlot(timeSlot)) {
-    throw new ApiError(400, `timeSlot must be one of: ${getSlotTimes().join(", ")}`);
+    throw new ApiError(
+      400,
+      `timeSlot must be one of: ${getSlotTimes().join(", ")}`,
+    );
   }
 
   const day = parseBookingDate(bookingDate);
@@ -242,7 +284,10 @@ export async function createBooking({ customer, vehicle, serviceId, serviceCateg
   }
 
   if (serviceId) {
-    const service = await serviceRepository.findOne({ _id: serviceId, isActive: true });
+    const service = await serviceRepository.findOne({
+      _id: serviceId,
+      isActive: true,
+    });
     if (!service) {
       throw new ApiError(404, "service not found or inactive");
     }
@@ -253,7 +298,9 @@ export async function createBooking({ customer, vehicle, serviceId, serviceCateg
   // through to the SA's inspection checklist.
   const categoryName = serviceCategory?.trim();
   if (categoryName) {
-    const category = await serviceCategoryRepository.findOne({ name: categoryName });
+    const category = await serviceCategoryRepository.findOne({
+      name: categoryName,
+    });
     if (!category) {
       throw new ApiError(404, "service category not found");
     }
@@ -325,7 +372,10 @@ export async function listBookings({ status, date, from, to }) {
 
   if (status) {
     if (!BOOKING_STATUSES.includes(status)) {
-      throw new ApiError(400, `status must be one of: ${BOOKING_STATUSES.join(", ")}`);
+      throw new ApiError(
+        400,
+        `status must be one of: ${BOOKING_STATUSES.join(", ")}`,
+      );
     }
     filter.status = status;
   }
@@ -441,7 +491,11 @@ export async function cancelBooking(id, user, reason) {
  * uses; the old seat frees automatically because the same document moves off
  * its previous (date, slot, seat).
  */
-export async function rescheduleBooking(id, user, { bookingDate, timeSlot, reason }) {
+export async function rescheduleBooking(
+  id,
+  user,
+  { bookingDate, timeSlot, reason },
+) {
   const booking = await loadBooking(id);
   assertCanManage(booking, user);
 
@@ -450,7 +504,10 @@ export async function rescheduleBooking(id, user, { bookingDate, timeSlot, reaso
   }
 
   if (!isValidSlot(timeSlot)) {
-    throw new ApiError(400, `timeSlot must be one of: ${getSlotTimes().join(", ")}`);
+    throw new ApiError(
+      400,
+      `timeSlot must be one of: ${getSlotTimes().join(", ")}`,
+    );
   }
   const day = parseBookingDate(bookingDate);
   const slotStart = new Date(`${bookingDate}T${timeSlot}:00.000Z`);
@@ -519,10 +576,16 @@ export async function rescheduleBooking(id, user, { bookingDate, timeSlot, reaso
  */
 export async function updateBookingStatus(id, user, { status, reason }) {
   if (!BOOKING_STATUSES.includes(status)) {
-    throw new ApiError(400, `status must be one of: ${BOOKING_STATUSES.join(", ")}`);
+    throw new ApiError(
+      400,
+      `status must be one of: ${BOOKING_STATUSES.join(", ")}`,
+    );
   }
   if (status === "rescheduled") {
-    throw new ApiError(400, "Use the reschedule endpoint to change a booking's date/slot");
+    throw new ApiError(
+      400,
+      "Use the reschedule endpoint to change a booking's date/slot",
+    );
   }
 
   const booking = await loadBooking(id);
@@ -532,7 +595,10 @@ export async function updateBookingStatus(id, user, { status, reason }) {
   }
   const allowed = STATUS_TRANSITIONS[booking.status] ?? [];
   if (!allowed.includes(status)) {
-    throw new ApiError(409, `Cannot change status from ${booking.status} to ${status}`);
+    throw new ApiError(
+      409,
+      `Cannot change status from ${booking.status} to ${status}`,
+    );
   }
 
   booking.status = status;
