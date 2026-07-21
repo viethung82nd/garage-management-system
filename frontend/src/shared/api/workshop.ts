@@ -493,16 +493,16 @@ export function unwrapArray<T>(value: T[] | Record<string, T[] | undefined>, key
   return []
 }
 
-export function personName(person?: AuthUser | string | null, fallback = 'Chưa cập nhật') {
+export function personName(person?: AuthUser | string | null, fallback = 'Not updated') {
   return typeof person === 'string' ? person : person?.fullName || person?.email || fallback
 }
 
 export function vehiclePlate(vehicle?: ApiVehicle | null) {
-  return vehicle?.licensePlate || vehicle?.plate || 'Chưa có biển số'
+  return vehicle?.licensePlate || vehicle?.plate || 'No plate'
 }
 
 export function vehicleName(vehicle?: ApiVehicle | null) {
-  return [vehicle?.brand, vehicle?.model].filter(Boolean).join(' ') || vehicle?.model || 'Chưa rõ xe'
+  return [vehicle?.brand, vehicle?.model].filter(Boolean).join(' ') || vehicle?.model || 'Unknown vehicle'
 }
 
 /**
@@ -529,7 +529,7 @@ export function orderId(order: Pick<ApiRepairOrder, '_id' | 'id' | 'code'>) {
 }
 
 export function formatApiDate(value?: string) {
-  if (!value) return 'Chưa cập nhật'
+  if (!value) return 'Not updated'
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)

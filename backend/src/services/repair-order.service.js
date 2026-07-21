@@ -554,13 +554,13 @@ export async function submitQualityCheck(id, { passed, items, note, reworkReason
   let summary;
   if (passed) {
     order.completedAt = order.completedAt || new Date();
-    summary = note?.trim() ? `[QC pass] ${note.trim()}` : "[QC pass] Nghiệm thu đạt.";
+    summary = note?.trim() ? `[QC pass] ${note.trim()}` : "[QC pass] Quality check passed.";
   } else {
     order.status = "reworkRequired";
     const reason =
       reworkReason?.trim() ||
       failedItems.map((item) => item.label).filter(Boolean).join(", ") ||
-      "Chưa đạt nghiệm thu";
+      "Quality check failed";
     summary = `[QC fail] ${reason}`;
   }
 

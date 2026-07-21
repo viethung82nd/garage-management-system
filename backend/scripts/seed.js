@@ -57,8 +57,11 @@ async function clearCollections() {
   await Promise.all([
     UserModel.deleteMany({ email: { $nin: PRESERVED_EMAILS } }),
     VehicleModel.deleteMany({}),
+    // ServiceCategoryModel is deliberately NOT cleared — the 8 real
+    // categories (renamed via the admin UI to their bilingual VN/EN names)
+    // are the ones actually in use and must survive a re-seed. Only the
+    // orphaned Service catalog under them gets rebuilt.
     ServiceModel.deleteMany({}),
-    ServiceCategoryModel.deleteMany({}),
     BookingModel.deleteMany({}),
     BookingHistoryModel.deleteMany({}),
     InspectionReportModel.deleteMany({}),
@@ -142,41 +145,119 @@ async function seedVehicles({ customers, walkIns }) {
 }
 
 async function seedCatalog() {
-  const categories = await ServiceCategoryModel.insertMany([
-    { name: "Engine Diagnostics & Repair", description: "Computerized diagnostics and repair for engine performance issues.", isActive: true, imageUrl: IMG.engine },
-    { name: "Brake Service", description: "Brake pad, rotor, and full brake system inspection and repair.", isActive: true, imageUrl: IMG.brake },
-    { name: "Oil & Fluid Change", description: "Engine oil, coolant, transmission, and brake fluid service.", isActive: true, imageUrl: IMG.oil },
-    { name: "Tire & Wheel Service", description: "Tire rotation, balancing, alignment, and replacement.", isActive: true, imageUrl: IMG.tire },
-    { name: "Electrical System", description: "Battery, alternator, starter, and wiring diagnostics.", isActive: true, imageUrl: IMG.battery },
-    { name: "AC & Climate Control", description: "Air conditioning recharge, repair, and cabin filter service.", isActive: true, imageUrl: IMG.ac },
-    { name: "Bodywork & Paint", description: "Dent repair, panel refinishing, and paint touch-up.", isActive: true, imageUrl: IMG.bodywork },
-    { name: "General Maintenance", description: "Scheduled maintenance packages and multi-point inspections.", isActive: true, imageUrl: IMG.garage },
-  ]);
-
+  // The 8 categories below are real — created earlier and renamed through
+  // the admin UI to their bilingual VN/EN names. They are NOT recreated
+  // here (clearCollections leaves ServiceCategoryModel untouched); every
+  // service below is linked to one of these exact, already-live names.
+  //
+  // The service catalog that used to sit under them was orphaned: every
+  // existing Service.category value was either a stale English category
+  // name from an earlier seed (e.g. "Electrical System", which matches no
+  // real category anymore) or, for several entries, literally a category
+  // ObjectId string instead of its name. None of them resolved against a
+  // real ServiceCategory, so the SA's per-category inspection checklist
+  // could never find real services for any category and always fell back
+  // to the generic seed. This rebuild fixes the linkage and fills out a
+  // real, market-researched menu per category — matched to a dealer/
+  // authorized-service-center structure (Express/Maintenance/General
+  // repair/Bodywork/Warranty/Recall/Mobile/Other), not a generic
+  // independent-garage one, since that's what these 8 categories actually
+  // describe. Priced on the same VND scale the rest of the demo data uses.
+  const categories = await ServiceCategoryModel.find({}).sort({ createdAt: 1 });
+  if (categories.length === 0) {
+    throw new Error(
+      "[seed] No ServiceCategory documents found — this script expects the 8 real categories to already exist (it does not create them). Create them first via the admin UI, or restore clearing ServiceCategoryModel in clearCollections() if you actually want fresh demo categories."
+    );
+  }
   const byName = Object.fromEntries(categories.map((c) => [c.name, c.name]));
+
+  const EXPRESS = "Bảo Dưỡng Nhanh/Express Service";
+  const MAINTENANCE = "Bảo dưỡng/Maintenance";
+  const GENERAL_REPAIR = "Sửa chữa chung/General repair";
+  const BODYWORK = "Đồng sơn/B-P repair";
+  const WARRANTY = "Bảo hành/Warranty repair";
+  const RECALL = "Chương trình triệu hồi/Re-call";
+  const MOBILE = "Bảo dưỡng lưu động/ Mobile Service";
+  const OTHER = "Dịch vụ khác/Other Services";
+
+  // seedBookings/seedRepairOrdersAndFollowOns/seedInvoicesPayments below all
+  // look services up by exact name via findService() — every name kept from
+  // the previous catalog revision (Full Engine Diagnostic Scan, Front Brake
+  // Pad Replacement, Synthetic Oil Change, etc.) is unchanged here, only
+  // its category re-pointed at a real one, so none of those lookups break.
   const services = await ServiceModel.insertMany([
-    { name: "Full Engine Diagnostic Scan", category: byName["Engine Diagnostics & Repair"], basePrice: 89000, estimatedDuration: 60, isActive: true },
-    { name: "Check Engine Light Diagnosis", category: byName["Engine Diagnostics & Repair"], basePrice: 65000, estimatedDuration: 45, isActive: true },
-    { name: "Timing Belt Replacement", category: byName["Engine Diagnostics & Repair"], basePrice: 620000, estimatedDuration: 240, isActive: true },
-    { name: "Front Brake Pad Replacement", category: byName["Brake Service"], basePrice: 180000, estimatedDuration: 75, isActive: true },
-    { name: "Brake Rotor Resurfacing", category: byName["Brake Service"], basePrice: 140000, estimatedDuration: 60, isActive: true },
-    { name: "Full Brake System Inspection", category: byName["Brake Service"], basePrice: 45000, estimatedDuration: 30, isActive: true },
-    { name: "Synthetic Oil Change", category: byName["Oil & Fluid Change"], basePrice: 69000, estimatedDuration: 30, isActive: true },
-    { name: "Coolant Flush & Refill", category: byName["Oil & Fluid Change"], basePrice: 95000, estimatedDuration: 45, isActive: true },
-    { name: "Transmission Fluid Service", category: byName["Oil & Fluid Change"], basePrice: 150000, estimatedDuration: 60, isActive: true },
-    { name: "Tire Rotation & Balancing", category: byName["Tire & Wheel Service"], basePrice: 55000, estimatedDuration: 40, isActive: true },
-    { name: "Wheel Alignment", category: byName["Tire & Wheel Service"], basePrice: 99000, estimatedDuration: 50, isActive: true },
-    { name: "New Tire Set Installation", category: byName["Tire & Wheel Service"], basePrice: 480000, estimatedDuration: 60, isActive: true },
-    { name: "Car Battery Replacement", category: byName["Electrical System"], basePrice: 175000, estimatedDuration: 30, isActive: true },
-    { name: "Alternator Repair", category: byName["Electrical System"], basePrice: 320000, estimatedDuration: 90, isActive: true },
-    { name: "AC Recharge Service", category: byName["AC & Climate Control"], basePrice: 120000, estimatedDuration: 45, isActive: true },
-    { name: "Cabin Air Filter Replacement", category: byName["AC & Climate Control"], basePrice: 35000, estimatedDuration: 20, isActive: true },
-    { name: "Dent Removal & Panel Repair", category: byName["Bodywork & Paint"], basePrice: 250000, estimatedDuration: 180, isActive: true },
-    { name: "Full Multi-Point Inspection", category: byName["General Maintenance"], basePrice: 49000, estimatedDuration: 40, isActive: true },
-    { name: "Scheduled Maintenance Package", category: byName["General Maintenance"], basePrice: 210000, estimatedDuration: 120, isActive: true },
+    // --- Express Service — quick, no-appointment jobs ---
+    { name: "Express Oil Change", category: byName[EXPRESS], basePrice: 45000, estimatedDuration: 20, isActive: true },
+    { name: "Tire Pressure Check & Top-Up", category: byName[EXPRESS], basePrice: 15000, estimatedDuration: 10, isActive: true },
+    { name: "Wiper Blade Replacement", category: byName[EXPRESS], basePrice: 20000, estimatedDuration: 10, isActive: true },
+    { name: "Battery Quick Test", category: byName[EXPRESS], basePrice: 15000, estimatedDuration: 10, isActive: true },
+    { name: "Headlight & Taillight Bulb Replacement", category: byName[EXPRESS], basePrice: 30000, estimatedDuration: 15, isActive: true },
+    { name: "Cabin Air Filter Replacement", category: byName[EXPRESS], basePrice: 35000, estimatedDuration: 20, isActive: true },
+
+    // --- Maintenance — scheduled maintenance ---
+    { name: "Synthetic Oil Change", category: byName[MAINTENANCE], basePrice: 69000, estimatedDuration: 30, isActive: true },
+    { name: "Scheduled Maintenance Package", category: byName[MAINTENANCE], basePrice: 210000, estimatedDuration: 120, isActive: true },
+    { name: "Full Multi-Point Inspection", category: byName[MAINTENANCE], basePrice: 49000, estimatedDuration: 40, isActive: true },
+    { name: "Coolant Flush & Refill", category: byName[MAINTENANCE], basePrice: 95000, estimatedDuration: 45, isActive: true },
+    { name: "Transmission Fluid Service", category: byName[MAINTENANCE], basePrice: 150000, estimatedDuration: 60, isActive: true },
+    { name: "Engine Air Filter Replacement", category: byName[MAINTENANCE], basePrice: 40000, estimatedDuration: 20, isActive: true },
+    { name: "Spark Plug Replacement", category: byName[MAINTENANCE], basePrice: 85000, estimatedDuration: 40, isActive: true },
+
+    // --- General repair — the broad component-repair bucket ---
+    { name: "Full Engine Diagnostic Scan", category: byName[GENERAL_REPAIR], basePrice: 89000, estimatedDuration: 60, isActive: true },
+    { name: "Check Engine Light Diagnosis", category: byName[GENERAL_REPAIR], basePrice: 65000, estimatedDuration: 45, isActive: true },
+    { name: "Front Brake Pad Replacement", category: byName[GENERAL_REPAIR], basePrice: 180000, estimatedDuration: 75, isActive: true },
+    { name: "Rear Brake Pad Replacement", category: byName[GENERAL_REPAIR], basePrice: 165000, estimatedDuration: 70, isActive: true },
+    { name: "Brake Rotor Resurfacing", category: byName[GENERAL_REPAIR], basePrice: 140000, estimatedDuration: 60, isActive: true },
+    { name: "Full Brake System Inspection", category: byName[GENERAL_REPAIR], basePrice: 45000, estimatedDuration: 30, isActive: true },
+    { name: "Brake Fluid Flush", category: byName[GENERAL_REPAIR], basePrice: 75000, estimatedDuration: 30, isActive: true },
+    { name: "Wheel Alignment", category: byName[GENERAL_REPAIR], basePrice: 99000, estimatedDuration: 50, isActive: true },
+    { name: "Tire Rotation & Balancing", category: byName[GENERAL_REPAIR], basePrice: 55000, estimatedDuration: 40, isActive: true },
+    { name: "New Tire Set Installation", category: byName[GENERAL_REPAIR], basePrice: 480000, estimatedDuration: 60, isActive: true },
+    { name: "Car Battery Replacement", category: byName[GENERAL_REPAIR], basePrice: 175000, estimatedDuration: 30, isActive: true },
+    { name: "Alternator Repair", category: byName[GENERAL_REPAIR], basePrice: 320000, estimatedDuration: 90, isActive: true },
+    { name: "Starter Motor Replacement", category: byName[GENERAL_REPAIR], basePrice: 380000, estimatedDuration: 100, isActive: true },
+    { name: "Shock Absorber Replacement", category: byName[GENERAL_REPAIR], basePrice: 350000, estimatedDuration: 150, isActive: true },
+    { name: "Power Steering Fluid Flush", category: byName[GENERAL_REPAIR], basePrice: 65000, estimatedDuration: 30, isActive: true },
+    { name: "Timing Belt Replacement", category: byName[GENERAL_REPAIR], basePrice: 620000, estimatedDuration: 240, isActive: true },
+    { name: "AC Recharge Service", category: byName[GENERAL_REPAIR], basePrice: 120000, estimatedDuration: 45, isActive: true },
+    { name: "AC Compressor Repair", category: byName[GENERAL_REPAIR], basePrice: 450000, estimatedDuration: 120, isActive: true },
+
+    // --- Bodywork & paint — B-P repair ---
+    { name: "Dent Removal & Panel Repair", category: byName[BODYWORK], basePrice: 250000, estimatedDuration: 180, isActive: true },
+    { name: "Paint Touch-Up (Small Area)", category: byName[BODYWORK], basePrice: 150000, estimatedDuration: 90, isActive: true },
+    { name: "Bumper Repair", category: byName[BODYWORK], basePrice: 300000, estimatedDuration: 150, isActive: true },
+    { name: "Scratch & Scuff Removal", category: byName[BODYWORK], basePrice: 80000, estimatedDuration: 45, isActive: true },
+    { name: "Headlight Lens Restoration", category: byName[BODYWORK], basePrice: 60000, estimatedDuration: 40, isActive: true },
+
+    // --- Warranty repair — labor charge only, parts covered by manufacturer ---
+    { name: "Warranty Diagnostic Review", category: byName[WARRANTY], basePrice: 30000, estimatedDuration: 45, isActive: true },
+    { name: "Warranty Parts Replacement (Labor)", category: byName[WARRANTY], basePrice: 50000, estimatedDuration: 90, isActive: true },
+    { name: "Powertrain Warranty Repair (Labor)", category: byName[WARRANTY], basePrice: 80000, estimatedDuration: 150, isActive: true },
+    { name: "Electrical System Warranty Repair (Labor)", category: byName[WARRANTY], basePrice: 45000, estimatedDuration: 60, isActive: true },
+
+    // --- Recall program — always free of charge, safety-mandated ---
+    { name: "Manufacturer Recall Inspection", category: byName[RECALL], basePrice: 0, estimatedDuration: 30, isActive: true },
+    { name: "Recall Software / ECU Update", category: byName[RECALL], basePrice: 0, estimatedDuration: 45, isActive: true },
+    { name: "Recall Airbag Component Replacement", category: byName[RECALL], basePrice: 0, estimatedDuration: 90, isActive: true },
+    { name: "Recall Fuel System Component Replacement", category: byName[RECALL], basePrice: 0, estimatedDuration: 90, isActive: true },
+
+    // --- Mobile Service — technician dispatched to the customer ---
+    { name: "Mobile Battery Replacement", category: byName[MOBILE], basePrice: 200000, estimatedDuration: 40, isActive: true },
+    { name: "Mobile Oil Change", category: byName[MOBILE], basePrice: 90000, estimatedDuration: 30, isActive: true },
+    { name: "Mobile Flat Tire Change", category: byName[MOBILE], basePrice: 60000, estimatedDuration: 30, isActive: true },
+    { name: "Mobile Jump-Start Service", category: byName[MOBILE], basePrice: 80000, estimatedDuration: 20, isActive: true },
+    { name: "Mobile Pre-Trip Inspection", category: byName[MOBILE], basePrice: 100000, estimatedDuration: 40, isActive: true },
+
+    // --- Other Services ---
+    { name: "Vehicle Detailing", category: byName[OTHER], basePrice: 250000, estimatedDuration: 120, isActive: true },
+    { name: "Pre-Purchase Inspection", category: byName[OTHER], basePrice: 150000, estimatedDuration: 90, isActive: true },
+    { name: "Car Wash & Interior Cleaning", category: byName[OTHER], basePrice: 60000, estimatedDuration: 45, isActive: true },
+    { name: "Roadside Assistance Callout", category: byName[OTHER], basePrice: 150000, estimatedDuration: 30, isActive: true },
+    { name: "Custom Accessory Installation", category: byName[OTHER], basePrice: 120000, estimatedDuration: 60, isActive: true },
   ]);
 
-  console.log(`[seed] categories: ${categories.length}, services: ${services.length}`);
+  console.log(`[seed] categories: ${categories.length} (preserved), services: ${services.length}`);
   return { categories, services };
 }
 

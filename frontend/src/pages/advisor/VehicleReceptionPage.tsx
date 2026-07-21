@@ -141,8 +141,8 @@ export function VehicleReceptionPage() {
           customerName: personName(customer, ''),
           phone: typeof customer === 'object' ? customer?.phone || '' : '',
           customerEmail: typeof customer === 'object' ? customer?.email || '' : '',
-          plate: vehiclePlate(vehicle).replace('Chưa có biển số', ''),
-          model: formatVehicleName(vehicle).replace('Chưa rõ xe', ''),
+          plate: vehiclePlate(vehicle).replace('No plate', ''),
+          model: formatVehicleName(vehicle).replace('Unknown vehicle', ''),
           vin: vehicle?.vin || vehicle?.chassisNumber || '',
         }))
         setPlateStatus('found')

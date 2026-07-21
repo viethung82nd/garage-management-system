@@ -30,10 +30,13 @@ describe("Additional Service Proposal API", () => {
       .send({ status: "sent" });
     expect(sent.status).toBe(200);
 
+    // Pricing is the SA's call, not the technician's — the create payload's
+    // laborCost/partsCost above are ignored server-side, so the SA supplies
+    // the real price here when approving.
     const approved = await request(app)
       .patch(`/api/additional-service-proposals/${created.body._id}`)
       .set(authHeader(advisor))
-      .send({ status: "approved" });
+      .send({ status: "approved", laborCost: 10000, partsCost: 20000 });
     expect(approved.status).toBe(200);
 
     const updatedOrder = await request(app).get(`/api/repair-orders/${order._id}`).set(authHeader(advisor));

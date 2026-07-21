@@ -33,16 +33,20 @@ describe("additional-service.service", () => {
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("approving pushes a line item onto the repair order", async () => {
+  it("approving pushes a line item onto the repair order, priced by the SA's override", async () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const { user: tech } = await createUser({ role: "technician" });
     const order = await orderFor(advisor);
+    // The technician can only flag the work and estimate a time — pricing is
+    // the SA's call, so laborCost/partsCost sent here are ignored.
     const proposal = await additionalServiceService.createAdditionalServiceProposal(
       { repairOrderId: order._id.toString(), serviceName: "Wiper blades", laborCost: 20000, partsCost: 30000 },
       tech._id.toString(),
     );
+    expect(proposal.laborCost).toBeUndefined();
+
     await additionalServiceService.updateAdditionalServiceProposal(
-      proposal._id.toString(), "approved", advisor._id.toString(),
+      proposal._id.toString(), "approved", advisor._id.toString(), { laborCost: 20000, partsCost: 30000 },
     );
 
     const updatedOrder = await RepairOrderModel.findById(order._id);

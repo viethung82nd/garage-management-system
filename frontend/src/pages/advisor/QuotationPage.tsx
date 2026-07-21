@@ -44,17 +44,16 @@ type QuotationLine = {
 }
 
 const kindOptions: Array<{ label: string; value: QuotationLineKind }> = [
-  { label: 'Vật tư', value: 'part' },
-  { label: 'Nhân công', value: 'labor' },
-  { label: 'Dịch vụ', value: 'service' },
+  { label: 'Part', value: 'part' },
+  { label: 'Labor', value: 'labor' },
+  { label: 'Service', value: 'service' },
 ]
 
-// Ordered sections of the printed quote, one per line kind — mirrors the
-// "PHẦN VẬT TƯ - PHỤ TÙNG / PHẦN CÔNG / …" grouping of a Vietnamese repair quote.
+// Ordered sections of the printed quote, one per line kind.
 const sections: Array<{ kind: QuotationLineKind; title: string }> = [
-  { kind: 'part', title: 'PHẦN VẬT TƯ - PHỤ TÙNG' },
-  { kind: 'labor', title: 'PHẦN CÔNG' },
-  { kind: 'service', title: 'DỊCH VỤ & KIỂM TRA' },
+  { kind: 'part', title: 'PARTS & SUPPLIES' },
+  { kind: 'labor', title: 'LABOR' },
+  { kind: 'service', title: 'SERVICES & INSPECTIONS' },
 ]
 
 function money(value: number) {
@@ -88,7 +87,7 @@ function OrderPicker({ orders, onPick }: { orders: ApiRepairOrder[]; onPick: (id
   if (!orders.length) {
     return (
       <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
-        <Empty description="Không có lệnh sửa chữa nào đang chờ báo giá." />
+        <Empty description="No repair orders pending a quotation." />
       </Card>
     )
   }
@@ -98,7 +97,7 @@ function OrderPicker({ orders, onPick }: { orders: ApiRepairOrder[]; onPick: (id
       bordered={false}
       className="bo-card-hover bo-enter rounded-2xl"
       style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}
-      title="Chọn lệnh sửa chữa để báo giá"
+      title="Select a repair order to quote"
     >
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {orders.map((order) => {
@@ -107,7 +106,7 @@ function OrderPicker({ orders, onPick }: { orders: ApiRepairOrder[]; onPick: (id
           return (
             <Card bordered key={id} size="small" hoverable onClick={() => onPick(id)} style={{ borderColor: advisorPalette.border, cursor: 'pointer' }}>
               <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{formatOrderId(order)}</div>
-              <div style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 4 }}>{personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Khách hàng')}</div>
+              <div style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 4 }}>{personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer')}</div>
               <div style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
                 {vehicleName(vehicle)} · {vehiclePlate(vehicle)}
               </div>
@@ -164,7 +163,7 @@ export function QuotationPage() {
         const response = await fetchWorkshopRepairOrders(authToken, '?status=pending')
         if (!cancelled) setPendingOrders(unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders']))
       } catch (err) {
-        if (!cancelled) showError(err instanceof Error ? err.message : 'Không tải được danh sách lệnh sửa chữa.')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load the repair order list.')
       }
     }
 
@@ -198,7 +197,7 @@ export function QuotationPage() {
           setInspection(null)
         }
       } catch (err) {
-        if (!cancelled) showError(err instanceof Error ? err.message : 'Không tải được lệnh sửa chữa này.')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load this repair order.')
       }
     }
 
@@ -220,7 +219,7 @@ export function QuotationPage() {
         setServices(Array.isArray(catalog) ? catalog : [])
         setCategories(Array.isArray(categoryResponse) ? categoryResponse : categoryResponse?.categories || [])
       } catch (err) {
-        if (!cancelled) showError(err instanceof Error ? err.message : 'Không tải được danh mục dịch vụ.')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load the service catalog.')
       }
     }
 
@@ -267,7 +266,7 @@ export function QuotationPage() {
       if (existing) {
         return current.map((line) => (line.id === existing.id ? { ...line, quantity: line.quantity + 1 } : line))
       }
-      return [...current, makeLine({ description: service.name || 'Dịch vụ', kind: 'service', serviceId, unitPrice: servicePrice(service) })]
+      return [...current, makeLine({ description: service.name || 'Service', kind: 'service', serviceId, unitPrice: servicePrice(service) })]
     })
     setPickedServiceId('')
   }
@@ -278,7 +277,7 @@ export function QuotationPage() {
       ...current,
       ...inspection.recommendedServices!.map((item: ApiRecommendedService) =>
         makeLine({
-          description: item.name || 'Dịch vụ đề xuất',
+          description: item.name || 'Recommended service',
           kind: 'service',
           serviceId: typeof item.serviceId === 'string' ? item.serviceId : item.serviceId?._id,
           unitPrice: item.price || 0,
@@ -290,15 +289,15 @@ export function QuotationPage() {
 
   function validateLines() {
     if (!lines.length) {
-      showError('Cần ít nhất một hạng mục trước khi lưu hoặc xác nhận báo giá.')
+      showError('At least one line item is required before saving or confirming a quotation.')
       return false
     }
     if (lines.some((line) => !line.description.trim())) {
-      showError('Mỗi hạng mục cần có tên công việc / vật tư.')
+      showError('Each line item needs a job / part name.')
       return false
     }
     if (lines.some((line) => line.quantity < 1)) {
-      showError('Mỗi hạng mục cần số lượng tối thiểu là 1.')
+      showError('Each line item needs a minimum quantity of 1.')
       return false
     }
     return true
@@ -336,9 +335,9 @@ export function QuotationPage() {
     clearApiMessage()
     try {
       await ensureSaved()
-      showSuccess('Đã lưu bản nháp báo giá.')
+      showSuccess('Draft quotation saved.')
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Không lưu được báo giá.')
+      showError(err instanceof Error ? err.message : 'Unable to save the quotation.')
     } finally {
       setSaving(false)
     }
@@ -353,16 +352,16 @@ export function QuotationPage() {
     clearApiMessage()
     try {
       const id = await ensureSaved()
-      if (!id) throw new Error('Không tạo được báo giá.')
+      if (!id) throw new Error('Unable to create the quotation.')
       await confirmQuotation(token!, id, approved)
       setStatus(approved ? 'approved' : 'rejected')
       if (approved) {
         navigate(`/advisor/work-orders?orderId=${orderIdParam}`)
       } else {
-        showSuccess('Khách hàng đã từ chối báo giá. Chỉnh sửa lại các hạng mục rồi xác nhận lại.')
+        showSuccess('Customer declined the quotation. Revise the line items and confirm again.')
       }
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Không ghi nhận được xác nhận của khách hàng.')
+      showError(err instanceof Error ? err.message : 'Unable to record customer confirmation.')
     } finally {
       setConfirming(false)
     }
@@ -381,24 +380,24 @@ export function QuotationPage() {
   const customer = order?.customer || vehicle?.customerId || vehicle?.customer
 
   const statusMeta = {
-    approved: { color: 'green', label: 'Khách hàng đã đồng ý' },
-    draft: { color: 'default', label: 'Đang lập báo giá' },
-    rejected: { color: 'red', label: 'Khách hàng đã từ chối' },
-    sent: { color: 'blue', label: 'Đã gửi khách hàng' },
+    approved: { color: 'green', label: 'Customer approved' },
+    draft: { color: 'default', label: 'Drafting quotation' },
+    rejected: { color: 'red', label: 'Customer declined' },
+    sent: { color: 'blue', label: 'Sent to customer' },
   }[status]
 
   const cellStyle: CSSProperties = { border: `1px solid ${advisorPalette.border}`, padding: '6px 8px', fontSize: 13, verticalAlign: 'top' }
   const headStyle: CSSProperties = { ...cellStyle, background: '#f8fafc', color: advisorPalette.textMuted, fontWeight: 700, textAlign: 'center', textTransform: 'uppercase', fontSize: 11 }
 
   return (
-    <ServiceAdvisorShell title="Báo giá sửa chữa">
+    <ServiceAdvisorShell title="Repair quotation">
       {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
       {!orderIdParam ? (
         <OrderPicker orders={pendingOrders} onPick={(id) => navigate(`/advisor/quotation?orderId=${id}`)} />
       ) : !order ? (
         <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
-          <Empty description="Đang tải lệnh sửa chữa..." />
+          <Empty description="Loading repair order..." />
         </Card>
       ) : (
         <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_320px]">
@@ -410,53 +409,53 @@ export function QuotationPage() {
                 <div style={{ color: advisorPalette.ink, fontSize: 18, fontWeight: 800 }}>{GARAGE_NAME}</div>
                 <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>{GARAGE_ADDRESS}</div>
                 <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>{GARAGE_CONTACT}</div>
-                <div style={{ textAlign: 'center', marginTop: 12 }}>
-                  <div style={{ color: advisorPalette.ink, fontSize: 24, fontWeight: 800, letterSpacing: 1 }}>PHIẾU BÁO GIÁ SỬA CHỮA</div>
-                  <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 2 }}>Số phiếu: {order.code || formatOrderId(order)}</div>
+                  <div style={{ textAlign: 'center', marginTop: 12 }}>
+                    <div style={{ color: advisorPalette.ink, fontSize: 24, fontWeight: 800, letterSpacing: 1 }}>REPAIR QUOTATION</div>
+                    <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 2 }}>Quote no.: {order.code || formatOrderId(order)}</div>
                 </div>
               </div>
 
-              {/* Thông tin báo giá */}
-              <div style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase' }}>Thông tin báo giá</div>
+              {/* Quotation info */}
+              <div style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase' }}>Quotation info</div>
               <div className="grid gap-x-8 md:grid-cols-2">
                 <div>
-                  <InfoRow label="Khách hàng" value={personName(customer, 'Khách lẻ')} />
-                  <InfoRow label="Điện thoại" value={customer?.phone} />
-                  <InfoRow label="Người liên hệ" value={personName(customer, '—')} />
-                  <InfoRow label="Loại dịch vụ" value={order.serviceCategory || 'Sửa chữa'} />
-                  <InfoRow label="Ngày vào" value={formatDateTime(order.createdAt)} />
-                  <InfoRow label="Ngày hẹn xong" value={formatDateTime(order.promisedAt)} />
+                  <InfoRow label="Customer" value={personName(customer, 'Walk-in')} />
+                  <InfoRow label="Phone" value={customer?.phone} />
+                  <InfoRow label="Contact person" value={personName(customer, '—')} />
+                  <InfoRow label="Service type" value={order.serviceCategory || 'Repair'} />
+                  <InfoRow label="Check-in date" value={formatDateTime(order.createdAt)} />
+                  <InfoRow label="Promised completion" value={formatDateTime(order.promisedAt)} />
                 </div>
                 <div>
-                  <InfoRow label="Số xe" value={vehiclePlate(vehicle)} />
-                  <InfoRow label="Hãng xe" value={vehicle?.brand} />
-                  <InfoRow label="Model / Loại xe" value={vehicle?.model} />
-                  <InfoRow label="Số khung" value={vehicle?.chassisNumber || vehicle?.vin} />
-                  <InfoRow label="Số máy" value={vehicle?.engineNumber} />
-                  <InfoRow label="Số km / Màu xe" value={[vehicle?.lastKnownMileage != null ? `${money(vehicle.lastKnownMileage)} km` : null, vehicle?.color].filter(Boolean).join(' · ') || undefined} />
+                  <InfoRow label="License plate" value={vehiclePlate(vehicle)} />
+                  <InfoRow label="Brand" value={vehicle?.brand} />
+                  <InfoRow label="Model / Type" value={vehicle?.model} />
+                  <InfoRow label="Chassis no." value={vehicle?.chassisNumber || vehicle?.vin} />
+                  <InfoRow label="Engine no." value={vehicle?.engineNumber} />
+                  <InfoRow label="Mileage / Color" value={[vehicle?.lastKnownMileage != null ? `${money(vehicle.lastKnownMileage)} km` : null, vehicle?.color].filter(Boolean).join(' · ') || undefined} />
                 </div>
               </div>
 
-              {/* Yêu cầu của khách hàng */}
-              <div style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 13, margin: '16px 0 6px', textTransform: 'uppercase' }}>Yêu cầu của khách hàng</div>
+              {/* Customer request */}
+              <div style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 13, margin: '16px 0 6px', textTransform: 'uppercase' }}>Customer request</div>
               <div style={{ border: `1px solid ${advisorPalette.border}`, borderRadius: 8, padding: 10, color: advisorPalette.ink, fontSize: 13, minHeight: 40 }}>
-                {order.issueDescription || 'Sửa chữa / bảo dưỡng theo kết quả kiểm tra.'}
+                {order.issueDescription || 'Repairs / servicing per inspection results.'}
               </div>
 
-              {/* Bảng hạng mục */}
+              {/* Line items table */}
               <div style={{ color: advisorPalette.textMuted, fontSize: 12, margin: '16px 0 8px' }}>
-                Theo yêu cầu của quý khách và sau khi kiểm tra, chúng tôi hân hạnh báo giá sửa chữa ước tính như sau:
+                Following your request and our inspection, we are pleased to submit the following estimated repair quotation:
               </div>
               <div style={{ overflowX: 'auto' }}>
                 <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
                   <thead>
                     <tr>
-                      <th style={{ ...headStyle, width: 44 }}>TT</th>
-                      <th style={{ ...headStyle, textAlign: 'left' }}>Công việc, vật tư</th>
-                      <th style={{ ...headStyle, width: 64 }}>ĐVT</th>
-                      <th style={{ ...headStyle, width: 80 }}>SL</th>
-                      <th style={{ ...headStyle, width: 130 }}>Đơn giá</th>
-                      <th style={{ ...headStyle, width: 140 }}>Thành tiền</th>
+                      <th style={{ ...headStyle, width: 44 }}>#</th>
+                      <th style={{ ...headStyle, textAlign: 'left' }}>Job / Part description</th>
+                      <th style={{ ...headStyle, width: 64 }}>Unit</th>
+                      <th style={{ ...headStyle, width: 80 }}>Qty</th>
+                      <th style={{ ...headStyle, width: 130 }}>Unit price</th>
+                      <th style={{ ...headStyle, width: 140 }}>Total</th>
                       {editable ? <th style={{ ...headStyle, width: 44 }}></th> : null}
                     </tr>
                   </thead>
@@ -464,7 +463,7 @@ export function QuotationPage() {
                     {lines.length === 0 ? (
                       <tr>
                         <td style={{ ...cellStyle, textAlign: 'center', color: advisorPalette.textMuted }} colSpan={editable ? 7 : 6}>
-                          Chưa có hạng mục nào. Thêm dịch vụ từ danh mục, từ kết quả kiểm tra, hoặc thêm dòng thủ công.
+                          No line items yet. Add services from the catalog, from the inspection results, or add a manual line.
                         </td>
                       </tr>
                     ) : (
@@ -487,14 +486,14 @@ export function QuotationPage() {
                                 <td style={cellStyle}>
                                   {editable ? (
                                     <div className="flex flex-col gap-1">
-                                      <Input size="small" value={line.description} placeholder="Tên công việc / vật tư" onChange={(event) => updateLine(line.id, { description: event.target.value })} />
+                                      <Input size="small" value={line.description} placeholder="Job / part name" onChange={(event) => updateLine(line.id, { description: event.target.value })} />
                                       <Select size="small" value={line.kind} options={kindOptions} style={{ width: 120 }} onChange={(value) => updateLine(line.id, { kind: value })} />
                                     </div>
                                   ) : (
                                     <span style={{ fontWeight: 600, color: advisorPalette.ink }}>{line.description}</span>
                                   )}
                                 </td>
-                                <td style={{ ...cellStyle, textAlign: 'center' }}>Cái</td>
+                                <td style={{ ...cellStyle, textAlign: 'center' }}>Unit</td>
                                 <td style={{ ...cellStyle, textAlign: 'center' }}>
                                   {editable ? (
                                     <InputNumber size="small" min={1} value={line.quantity} style={{ width: '100%' }} onChange={(value) => updateLine(line.id, { quantity: Math.max(1, Number(value) || 1) })} />
@@ -524,7 +523,7 @@ export function QuotationPage() {
                   <tfoot>
                     <tr>
                       <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 800, color: advisorPalette.ink, textTransform: 'uppercase' }} colSpan={5}>
-                        Tiền sửa chữa
+                        Repair total
                       </td>
                       <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 800, color: advisorPalette.red, fontSize: 15 }}>{money(grandTotal)}</td>
                       {editable ? <td style={cellStyle} /> : null}
@@ -538,7 +537,7 @@ export function QuotationPage() {
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   {inspection?.recommendedServices?.length && !inspectionLinesAdded ? (
                     <Button icon={<FileSearchOutlined />} onClick={addInspectionLines}>
-                      Thêm {inspection.recommendedServices.length} mục từ kiểm tra
+                      Add {inspection.recommendedServices.length} items from inspection
                     </Button>
                   ) : null}
                   <Select
@@ -546,55 +545,55 @@ export function QuotationPage() {
                     filterOption={(input, option) => String(option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
                     onChange={setPickedServiceId}
                     options={services.map((service) => ({ label: `${service.name} — ${money(servicePrice(service))}`, value: service._id || service.id }))}
-                    placeholder="Thêm từ danh mục dịch vụ..."
+                    placeholder="Add from service catalog..."
                     style={{ minWidth: 260 }}
                     value={pickedServiceId || undefined}
                   />
                   <Button disabled={!pickedServiceId} icon={<PlusOutlined />} onClick={addServiceLine} />
-                  <Button icon={<PlusOutlined />} onClick={() => addManualLine('part')}>Vật tư</Button>
-                  <Button icon={<PlusOutlined />} onClick={() => addManualLine('labor')}>Nhân công</Button>
-                  <Button icon={<PlusOutlined />} onClick={() => addManualLine('service')}>Dịch vụ</Button>
+                  <Button icon={<PlusOutlined />} onClick={() => addManualLine('part')}>Part</Button>
+                  <Button icon={<PlusOutlined />} onClick={() => addManualLine('labor')}>Labor</Button>
+                  <Button icon={<PlusOutlined />} onClick={() => addManualLine('service')}>Service</Button>
                 </div>
               ) : null}
 
-              <div style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 13, margin: '16px 0 6px', textTransform: 'uppercase' }}>Ghi chú</div>
-              <TextArea disabled={!editable} onChange={(event) => setNote(event.target.value)} rows={3} value={note} placeholder="Điều khoản, bảo hành, ghi chú thêm..." />
+              <div style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 13, margin: '16px 0 6px', textTransform: 'uppercase' }}>Notes</div>
+              <TextArea disabled={!editable} onChange={(event) => setNote(event.target.value)} rows={3} value={note} placeholder="Terms, warranty, additional notes..." />
             </Card>
           </div>
 
           {/* Sticky actions / totals */}
           <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
             <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Tổng báo giá</div>
+              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>Quote total</div>
               <div className="mt-4 flex flex-col gap-3" style={{ color: 'rgba(255,255,255,0.85)', fontSize: 14 }}>
                 <div className="flex items-center justify-between">
-                  <span>Tạm tính</span>
+                  <span>Subtotal</span>
                   <span style={{ fontWeight: 700 }}>{money(subtotal)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Giảm giá (%)</span>
+                  <span>Discount (%)</span>
                   <InputNumber disabled={!editable} max={100} min={0} value={discountPercent} onChange={(value) => setDiscountPercent(Math.min(100, Math.max(0, Number(value) || 0)))} />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Tiền giảm</span>
+                  <span>Discount</span>
                   <span style={{ color: '#ffb4ab', fontWeight: 700 }}>-{money(discountAmount)}</span>
                 </div>
                 <div className="flex items-center justify-between gap-3">
-                  <span>Thuế VAT (%)</span>
+                  <span>VAT tax (%)</span>
                   <InputNumber disabled={!editable} max={100} min={0} value={taxPercent} onChange={(value) => setTaxPercent(Math.min(100, Math.max(0, Number(value) || 0)))} />
                 </div>
                 <div className="flex items-center justify-between">
-                  <span>Tiền thuế</span>
+                  <span>Tax</span>
                   <span style={{ fontWeight: 700 }}>{money(taxAmount)}</span>
                 </div>
               </div>
               <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 16, paddingTop: 16 }}>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Tiền sửa chữa</div>
+                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Repair total</div>
                 <div style={{ color: '#ffb4ab', fontSize: 30, fontWeight: 800, marginTop: 8 }}>{money(grandTotal)} ₫</div>
               </div>
             </Card>
 
-            <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Xác nhận của khách hàng">
+            <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Customer confirmation">
               <div className="flex flex-col gap-3">
                 <Tag color={statusMeta.color} style={{ textAlign: 'center', width: 'fit-content' }}>
                   {statusMeta.label}
@@ -602,25 +601,25 @@ export function QuotationPage() {
 
                 {editable ? (
                   <>
-                    <p style={{ color: advisorPalette.textMuted, fontSize: 13 }}>Ghi nhận quyết định của khách hàng ngay tại quầy.</p>
+                    <p style={{ color: advisorPalette.textMuted, fontSize: 13 }}>Record the customer's decision at the counter.</p>
                     <Button block type="primary" icon={<CheckOutlined />} loading={confirming} disabled={!lines.length} onClick={() => handleConfirm(true)}>
-                      Khách hàng đồng ý
+                      Customer approves
                     </Button>
                     <Button block danger icon={<CloseOutlined />} loading={confirming} disabled={!lines.length} onClick={() => handleConfirm(false)}>
-                      Khách hàng từ chối
+                      Customer declines
                     </Button>
                     <Button block loading={saving} disabled={!lines.length} onClick={saveDraft}>
-                      Lưu nháp
+                      Save draft
                     </Button>
                   </>
                 ) : status === 'rejected' ? (
                   <Button block onClick={startNewRevision}>
-                    Lập báo giá mới
+                    Create new quotation
                   </Button>
                 ) : null}
 
                 <Button block icon={<PrinterOutlined />} onClick={() => window.print()}>
-                  In / Xuất báo giá
+                  Print / Export quotation
                 </Button>
               </div>
             </Card>

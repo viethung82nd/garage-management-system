@@ -18,12 +18,12 @@ export function isSupportedFrontendRole(role: AuthRole) {
 
 export function getRoleLabel(role: AuthRole) {
   const labels: Record<AuthRole, string> = {
-    accountant: 'Kế toán',
-    admin: 'Quản trị viên',
-    onlineCustomer: 'Khách hàng online',
-    serviceAdvisor: 'Cố vấn dịch vụ',
-    technician: 'Kỹ thuật viên',
-    walkInCustomer: 'Khách vãng lai',
+    accountant: 'Accountant',
+    admin: 'Administrator',
+    onlineCustomer: 'Online customer',
+    serviceAdvisor: 'Service advisor',
+    technician: 'Technician',
+    walkInCustomer: 'Walk-in customer',
   }
 
   return labels[role]

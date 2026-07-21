@@ -42,7 +42,7 @@ export default function MyAccountPage() {
   const unsupportedRole = user && !isSupportedFrontendRole(user.role)
   const roleNotice = useMemo(() => {
     if (!unsupportedRole || !user) return ''
-    return `${getRoleLabel(user.role)} login đã xác thực thành công, nhưng workspace frontend cho role này chưa được triển khai.`
+    return `${getRoleLabel(user.role)} login authenticated successfully, but the workspace frontend for this role has not been deployed yet.`
   }, [unsupportedRole, user])
 
   useEffect(() => {
@@ -76,7 +76,7 @@ export default function MyAccountPage() {
         return
       }
 
-      setNotice(`${getRoleLabel(session.user.role)} login thành công. Workspace frontend cho role này chưa được triển khai.`)
+      setNotice(`${getRoleLabel(session.user.role)} login successful. Workspace frontend for this role has not been deployed yet.`)
     } catch (error) {
       setLoginError(error instanceof AuthApiError ? error.message : 'Login failed. Please try again.')
     } finally {
