@@ -260,7 +260,7 @@ export default function CustomerBookingsPage() {
     <CustomerPageLayout title="Booking History" breadcrumb="Booking History">
       <section className="customer-section">
         <CustomerAccountNav />
-        <CustomerSectionHeading eyebrow="Service Records" title="Booking history" description="Latest orders in one view." compact />
+        <CustomerSectionHeading eyebrow="Service Records" title="Booking history" description="Latest orders in one view." compact centered />
 
         <div className="customer-metric-strip customer-metric-strip--three">
           <CustomerMetricCard label="Completed" value={summary.completed} />

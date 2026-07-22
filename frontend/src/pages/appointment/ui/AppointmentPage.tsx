@@ -30,28 +30,39 @@ export default function AppointmentPage() {
     })
   }, [])
 
+  const disableExistingLink = useCallback((href: string) => href.includes('/kapa-auth/') || href.includes('/external/'), [])
+
   const { markup, pageSpec } = useClonedKapaPage({
     htmlUrl: APPOINTMENT_URL,
     baseHref: APPOINTMENT_BASE,
     documentTitle: APPOINTMENT_TITLE,
     overlaySelector: OVERLAY_REVEAL_SELECTOR,
     transformDocument,
-    disableExistingLink: (href) => href.includes('/kapa-auth/') || href.includes('/external/'),
+    disableExistingLink,
   })
 
-  // Mount the booking form into the cloned template's slot ONCE per template
-  // render. Deliberately excludes `user` from the deps: when the auth profile
-  // resolves (or refreshes) the form must NOT be torn down and rebuilt — that
-  // wipes whatever the visitor was in the middle of entering (picked date,
-  // selected category). New user props are pushed to the existing root by the
-  // effect below, which React reconciles while preserving the form's state.
+  // Mount the booking form into the cloned template's slot exactly ONCE for
+  // the lifetime of this page instance — guarded by mountedSlotRef, not just
+  // the effect deps. `pageSpec` is only meant to change from null -> object
+  // a single time, but if the underlying fetch effect ever re-fires (a
+  // second in-flight request, a fast unmount/remount cycle, etc.) it hands
+  // back a new object reference and would otherwise retrigger this effect,
+  // tearing the form's React root down and recreating it — wiping whatever
+  // the visitor was in the middle of entering (picked date, selected
+  // category) and restarting the categories/slots fetches from scratch.
+  // Deliberately excludes `user` from the deps for the same reason: the auth
+  // profile resolving/refreshing must NOT rebuild the form. New user props
+  // are pushed to the existing root by the effect below, which React
+  // reconciles while preserving the form's state.
   const rootRef = useRef<Root | null>(null)
+  const mountedSlotRef = useRef(false)
   useEffect(() => {
-    if (!pageSpec) return
+    if (!pageSpec || mountedSlotRef.current) return
 
     const slot = document.getElementById('appointment-booking-slot')
     if (!slot) return
 
+    mountedSlotRef.current = true
     const root = createRoot(slot)
     rootRef.current = root
     root.render(<AppointmentBookingForm user={user} />)
@@ -61,7 +72,7 @@ export default function AppointmentPage() {
       root.unmount()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markup, pageSpec])
+  }, [pageSpec])
 
   // Push updated user props into the already-mounted form without remounting.
   useEffect(() => {

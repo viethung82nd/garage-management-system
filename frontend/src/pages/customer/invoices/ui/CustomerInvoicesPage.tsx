@@ -262,7 +262,7 @@ export default function CustomerInvoicesPage() {
     <CustomerPageLayout title="Customer Invoices" breadcrumb="Invoices">
       <section className="customer-section">
         <CustomerAccountNav />
-        <CustomerSectionHeading eyebrow="Billing Records" title="Your invoices" description="Direct invoices uploaded by Kapa accounting." compact />
+        <CustomerSectionHeading eyebrow="Billing Records" title="Your invoices" description="Direct invoices uploaded by Kapa accounting." compact centered />
 
         <div className="customer-metric-strip customer-metric-strip--four">
           <CustomerMetricCard label="Paid" value={summary.paid} />

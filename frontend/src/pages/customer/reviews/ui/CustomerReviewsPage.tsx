@@ -141,6 +141,7 @@ export default function CustomerReviewsPage() {
           title="Leave a review"
           description="Rate and comment on repair orders that have been completed."
           compact
+          centered
         />
 
         {loading ? <CustomerPanel>Loading your completed repair orders...</CustomerPanel> : null}
