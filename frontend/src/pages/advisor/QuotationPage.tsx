@@ -1010,7 +1010,6 @@ export function QuotationPage() {
                 </table>
               </div>
 
-              {/* Add controls
               {editable ? (
                 <div className="mt-4 flex flex-wrap items-center gap-2">
                   {inspection?.recommendedServices?.length &&
@@ -1063,7 +1062,7 @@ export function QuotationPage() {
                     Service
                   </Button>
                 </div>
-              ) : null} */}
+              ) : null}
 
               <div
                 style={{
@@ -1232,14 +1231,14 @@ export function QuotationPage() {
                     >
                       Customer declines
                     </Button>
-                    {/* <Button
+                    <Button
                       block
                       loading={saving}
                       disabled={!lines.length}
                       onClick={saveDraft}
                     >
                       Save draft
-                    </Button> */}
+                    </Button>
                   </>
                 ) : status === "rejected" ? (
                   <Button block onClick={startNewRevision}>

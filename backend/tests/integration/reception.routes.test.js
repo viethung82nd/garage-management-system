@@ -5,13 +5,25 @@ import { createUser, authHeader } from "../factories.js";
 
 const app = createApp();
 
+const VEHICLE_DETAILS = {
+  model: "Honda Wave",
+  vin: "1HGCM82633A004352",
+  engineNo: "EN12345",
+  mileage: "1000",
+};
+
 describe("Reception API", () => {
   it("SA receives a walk-in customer, creating a repair order shell", async () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const res = await request(app)
       .post("/api/receptions")
       .set(authHeader(advisor))
-      .send({ customerName: "Walk-in", phone: "0922222222", plate: "51K-77777" });
+      .send({
+        customerName: "Walk-in",
+        phone: "0922222222",
+        plate: "51K-77777",
+        ...VEHICLE_DETAILS,
+      });
     expect(res.status).toBe(201);
     expect(res.body.repairOrder.status).toBe("pending");
   });
@@ -27,7 +39,12 @@ describe("Reception API", () => {
     await request(app)
       .post("/api/receptions")
       .set(authHeader(advisor))
-      .send({ customerName: "History", phone: "0933333333", plate: "51K-55555" });
+      .send({
+        customerName: "History",
+        phone: "0933333333",
+        plate: "51K-55555",
+        ...VEHICLE_DETAILS,
+      });
     const res = await request(app)
       .get("/api/receptions/history")
       .set(authHeader(advisor))

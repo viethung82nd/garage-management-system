@@ -835,24 +835,33 @@ export function VehicleInspectionPage() {
             )}
           </div>
 
-          {/* {priorPhotos.length ? (
-        <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Prior inspection photos for this vehicle">
-          <Image.PreviewGroup>
-            <div className="flex flex-wrap gap-3">
-              {priorPhotos.map((photo, index) => (
-                <Image
-                  alt={`Prior inspection photo ${index + 1}`}
-                  key={photo}
-                  src={resolveApiAssetUrl(photo)}
-                  style={{ borderRadius: 12, objectFit: 'cover' }}
-                  height={84}
-                  width={84}
-                />
-              ))}
-            </div>
-          </Image.PreviewGroup>
-        </Card>
-      ) : null} */}
+          {priorPhotos.length ? (
+            <Card
+              bordered={false}
+              className="bo-card-hover bo-enter rounded-2xl"
+              style={{
+                background: advisorPalette.panel,
+                boxShadow: advisorPalette.shadow,
+                border: `1px solid ${advisorPalette.border}`,
+              }}
+              title="Prior inspection photos for this vehicle"
+            >
+              <Image.PreviewGroup>
+                <div className="flex flex-wrap gap-3">
+                  {priorPhotos.map((photo, index) => (
+                    <Image
+                      alt={`Prior inspection photo ${index + 1}`}
+                      key={photo}
+                      src={resolveApiAssetUrl(photo)}
+                      style={{ borderRadius: 12, objectFit: "cover" }}
+                      height={84}
+                      width={84}
+                    />
+                  ))}
+                </div>
+              </Image.PreviewGroup>
+            </Card>
+          ) : null}
 
           <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_360px]">
             <div className="flex flex-col gap-5">

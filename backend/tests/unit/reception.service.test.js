@@ -4,11 +4,23 @@ import * as bookingService from "../../src/services/booking.service.js";
 import { RepairOrderModel } from "../../src/models/index.js";
 import { createUser } from "../factories.js";
 
+const VEHICLE_DETAILS = {
+  model: "Honda Wave",
+  vin: "1HGCM82633A004352",
+  engineNo: "EN12345",
+  mileage: "1000",
+};
+
 describe("reception.service", () => {
   it("creates a walk-in reception with a repair order shell", async () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const result = await receptionService.createReception(
-      { customerName: "Walk-in Customer", phone: "0933333333", plate: "51K-11111" },
+      {
+        customerName: "Walk-in Customer",
+        phone: "0933333333",
+        plate: "51K-11111",
+        ...VEHICLE_DETAILS,
+      },
       advisor._id.toString(),
     );
     expect(result.repairOrder.status).toBe("pending");
@@ -31,7 +43,13 @@ describe("reception.service", () => {
       timeSlot: "09:00",
     });
     const result = await receptionService.createReception(
-      { bookingId: booking._id.toString(), customerName: "Booked Customer", phone: "0944444444", plate: "51K-33333" },
+      {
+        bookingId: booking._id.toString(),
+        customerName: "Booked Customer",
+        phone: "0944444444",
+        plate: "51K-33333",
+        ...VEHICLE_DETAILS,
+      },
       advisor._id.toString(),
     );
     expect(result.booking.repairOrderId.toString()).toBe(result.repairOrder._id.toString());
@@ -46,12 +64,24 @@ describe("reception.service", () => {
       timeSlot: "09:00",
     });
     await receptionService.createReception(
-      { bookingId: booking._id.toString(), customerName: "A", phone: "0955555555", plate: "51K-44444" },
+      {
+        bookingId: booking._id.toString(),
+        customerName: "A",
+        phone: "0955555555",
+        plate: "51K-44444",
+        ...VEHICLE_DETAILS,
+      },
       advisor._id.toString(),
     );
     await expect(
       receptionService.createReception(
-        { bookingId: booking._id.toString(), customerName: "A", phone: "0955555555", plate: "51K-44444" },
+        {
+          bookingId: booking._id.toString(),
+          customerName: "A",
+          phone: "0955555555",
+          plate: "51K-44444",
+          ...VEHICLE_DETAILS,
+        },
         advisor._id.toString(),
       ),
     ).rejects.toMatchObject({ status: 409 });
@@ -60,7 +90,12 @@ describe("reception.service", () => {
   it("getReceptionHistory reflects a prior completed order for the plate", async () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const created = await receptionService.createReception(
-      { customerName: "History Customer", phone: "0966666666", plate: "51K-55555" },
+      {
+        customerName: "History Customer",
+        phone: "0966666666",
+        plate: "51K-55555",
+        ...VEHICLE_DETAILS,
+      },
       advisor._id.toString(),
     );
     await RepairOrderModel.findByIdAndUpdate(created.repairOrder._id, { status: "completed" });
