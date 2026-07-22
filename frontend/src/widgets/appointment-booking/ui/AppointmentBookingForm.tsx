@@ -90,6 +90,36 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
   const [submitState, setSubmitState] = useState<SubmitState>({ type: 'idle', message: '' })
   const minimumDate = useMemo(() => getTodayInputValue(), [])
   const feedbackRef = useRef<HTMLDivElement | null>(null)
+  const panelRef = useRef<HTMLDivElement | null>(null)
+
+  // The cloned Kapa WordPress template ships kapa-main.js, which runs
+  // `$('select').niceSelect()` on load — replacing every native <select> with
+  // a static `.nice-select` overlay <div> and hiding the real control
+  // (inline display:none). That theme script downloads/executes on an async
+  // timeline independent of this React island, so it frequently runs AFTER
+  // our selects are already in the DOM: it then freezes an overlay on whatever
+  // the select showed at that instant ("-- Loading Service Categories --",
+  // "-- Select Date First --") that never reflects later React updates and
+  // swallows the user's clicks. That's the intermittent "can't pick a slot or
+  // service" bug. Strip any overlay it injects and restore the native selects,
+  // regardless of which timeline wins the race.
+  useEffect(() => {
+    const panel = panelRef.current
+    if (!panel) return
+
+    const neutralizeNiceSelect = () => {
+      panel.querySelectorAll('.nice-select').forEach((overlay) => overlay.remove())
+      panel.querySelectorAll('select').forEach((select) => {
+        if (select.style.display === 'none') select.style.removeProperty('display')
+      })
+    }
+
+    neutralizeNiceSelect()
+    const observer = new MutationObserver(() => neutralizeNiceSelect())
+    observer.observe(panel, { childList: true, subtree: true })
+
+    return () => observer.disconnect()
+  }, [])
 
   useEffect(() => {
     if (submitState.type !== 'idle' && submitState.message) {
@@ -211,7 +241,7 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
   }
 
   return (
-    <div className="wpcf7 js appointment-booking-panel" lang="en-US" dir="ltr" data-wpcf7-id="86">
+    <div ref={panelRef} className="wpcf7 js appointment-booking-panel" lang="en-US" dir="ltr" data-wpcf7-id="86">
       <div className="screen-reader-response">
         <p role="status" aria-live="polite" aria-atomic="true" />
         <ul />
