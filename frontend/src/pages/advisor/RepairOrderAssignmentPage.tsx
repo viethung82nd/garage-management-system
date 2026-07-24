@@ -1,8 +1,10 @@
-import { CheckOutlined, DownOutlined, ProfileOutlined } from '@ant-design/icons'
-import { Button, Card, Col, Dropdown, Empty, Input, Modal, Row, Tag } from 'antd'
+import { CarOutlined, CheckOutlined, DownOutlined, PlusOutlined, ProfileOutlined } from '@ant-design/icons'
+import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Tag, Upload } from 'antd'
+import type { UploadFile } from 'antd/es/upload/interface'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  deliverVehicleApi,
   fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
   fetchWorkshopTechnicians,
@@ -22,6 +24,18 @@ import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))} ₫`
+}
+
+// Delivery signature is captured locally as a data URL (same pattern as
+// reception's walk-around photos) rather than uploaded to a separate
+// endpoint — the deliver call is a single JSON POST.
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = reject
+    reader.readAsDataURL(file)
+  })
 }
 
 type OrderStatusKey =
@@ -164,6 +178,12 @@ export function RepairOrderAssignmentPage() {
   const [statusReasonError, setStatusReasonError] = useState<string>()
   const [statusSaving, setStatusSaving] = useState(false)
 
+  // Vehicle handover — signature + old-parts confirmation for orders ready for delivery.
+  const [deliverOpen, setDeliverOpen] = useState(false)
+  const [oldPartsReturned, setOldPartsReturned] = useState(false)
+  const [signatureFile, setSignatureFile] = useState<UploadFile[]>([])
+  const [deliverSaving, setDeliverSaving] = useState(false)
+
   useEffect(() => {
     if (!token || orderIdParam) return
     const authToken = token
@@ -281,6 +301,30 @@ export function RepairOrderAssignmentPage() {
     }
   }
 
+  function openDeliverModal() {
+    setDeliverOpen(true)
+    setOldPartsReturned(false)
+    setSignatureFile([])
+  }
+
+  async function confirmDeliver() {
+    if (!token || !orderIdParam) return
+    setDeliverSaving(true)
+    clearApiMessage()
+    try {
+      const file = signatureFile[0]
+      const signature = file ? file.url || (file.originFileObj ? await fileToDataUrl(file.originFileObj as File) : undefined) : undefined
+      const updated = await deliverVehicleApi(token, orderIdParam, { oldPartsReturned, signature })
+      setOrder(updated)
+      showSuccess('Đã bàn giao xe cho khách.')
+      setDeliverOpen(false)
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to deliver the vehicle')
+    } finally {
+      setDeliverSaving(false)
+    }
+  }
+
   const vehicle = order?.vehicleId || order?.vehicle
 
   return (
@@ -303,14 +347,21 @@ export function RepairOrderAssignmentPage() {
                   <Tag color={statusColor(order.status)}>{statusLabel(order.status)}</Tag>
                   {order.isComeback ? <Tag color={advisorPalette.amber}>Comeback</Tag> : null}
                 </div>
-                <Dropdown
-                  menu={{ items: WAITING_STATUS_MENU_ITEMS, onClick: ({ key }) => openStatusModal(key) }}
-                  trigger={['click']}
-                >
-                  <Button size="small">
-                    Chuyển trạng thái <DownOutlined />
-                  </Button>
-                </Dropdown>
+                <div className="flex items-center gap-2">
+                  {order.status === 'readyForDelivery' ? (
+                    <Button icon={<CarOutlined />} onClick={openDeliverModal} size="small" type="primary">
+                      Bàn giao xe
+                    </Button>
+                  ) : null}
+                  <Dropdown
+                    menu={{ items: WAITING_STATUS_MENU_ITEMS, onClick: ({ key }) => openStatusModal(key) }}
+                    trigger={['click']}
+                  >
+                    <Button size="small">
+                      Chuyển trạng thái <DownOutlined />
+                    </Button>
+                  </Dropdown>
+                </div>
               </div>
               <Row gutter={[16, 4]} style={{ marginTop: 12 }}>
                 <Col span={12}>
@@ -456,6 +507,40 @@ export function RepairOrderAssignmentPage() {
           value={statusReason}
         />
         {statusReasonError ? <div style={{ color: advisorPalette.red, fontSize: 12, marginTop: 4 }}>{statusReasonError}</div> : null}
+      </Modal>
+
+      <Modal
+        cancelText="Hủy"
+        confirmLoading={deliverSaving}
+        okText="Xác nhận bàn giao"
+        onCancel={() => setDeliverOpen(false)}
+        onOk={confirmDeliver}
+        open={deliverOpen}
+        title="Bàn giao xe"
+      >
+        <Checkbox checked={oldPartsReturned} onChange={(event) => setOldPartsReturned(event.target.checked)}>
+          Đã trả phụ tùng cũ cho khách
+        </Checkbox>
+        <div style={{ marginTop: 16 }}>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
+            Chữ ký khách hàng
+          </div>
+          <Upload
+            accept="image/*"
+            beforeUpload={() => false}
+            fileList={signatureFile}
+            listType="picture-card"
+            maxCount={1}
+            onChange={({ fileList }) => setSignatureFile(fileList)}
+          >
+            {signatureFile.length >= 1 ? null : (
+              <div>
+                <PlusOutlined />
+                <div style={{ marginTop: 8 }}>Upload</div>
+              </div>
+            )}
+          </Upload>
+        </div>
       </Modal>
     </ServiceAdvisorShell>
   )

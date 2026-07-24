@@ -1,5 +1,5 @@
 import { CheckOutlined, SendOutlined, ToolOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Image, Input, Select, Table, Tag } from 'antd'
+import { Avatar, Button, Card, Image, Input, InputNumber, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -98,6 +98,7 @@ export function QualityVerificationPage() {
   const [selectedId, setSelectedId] = useState('')
   const [checklistByOrder, setChecklistByOrder] = useState<Record<string, CheckItem[]>>({})
   const [reworkNote, setReworkNote] = useState('')
+  const [testDriveKm, setTestDriveKm] = useState<number | null>(null)
   const [verdictByOrder, setVerdictByOrder] = useState<Record<string, 'passed' | 'rework'>>({})
   const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
@@ -217,6 +218,7 @@ export function QualityVerificationPage() {
         note: reworkNote,
         passed,
         reworkReason: passed ? undefined : reworkNote,
+        testDriveKm: testDriveKm ?? undefined,
       })
       setVerdictByOrder((current) => ({ ...current, [selectedOrder.id]: passed ? 'passed' : 'rework' }))
       showSuccess(passed ? 'Passed and moved to handover.' : 'Sent back to the technician for rework.')
@@ -405,6 +407,15 @@ export function QualityVerificationPage() {
                   </div>
                 ) : (
                   <>
+                    <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
+                      Km chạy thử
+                    </div>
+                    <InputNumber
+                      min={0}
+                      onChange={(value) => setTestDriveKm(typeof value === 'number' ? value : null)}
+                      style={{ marginBottom: 16, width: '100%' }}
+                      value={testDriveKm}
+                    />
                     <TextArea onChange={(event) => setReworkNote(event.target.value)} placeholder="Result notes or reason for returning to the technician..." rows={4} value={reworkNote} />
                     <div className="mt-4 flex flex-col gap-3">
                       <Button block disabled={saving || !allDecided} icon={<CheckOutlined />} onClick={() => submitVerdict(true)} type="primary">

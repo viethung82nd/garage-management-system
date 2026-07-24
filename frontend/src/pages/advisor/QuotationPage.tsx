@@ -23,12 +23,15 @@ import {
   unwrapArray,
   vehicleName,
   vehiclePlate,
+  JOB_TYPES,
+  JOB_TYPE_LABELS,
   type ApiInspectionReport,
   type ApiQuotation,
   type ApiRecommendedService,
   type ApiRepairOrder,
   type ApiService,
   type ApiServiceCategory,
+  type JobType,
   type QuotationLineKind,
 } from "../../shared/api/workshop";
 import { useAuth } from "../../shared/auth";
@@ -51,6 +54,7 @@ type QuotationLine = {
   serviceId?: string;
   description: string;
   kind: QuotationLineKind;
+  jobType: JobType;
   quantity: number;
   unitPrice: number;
 };
@@ -60,6 +64,10 @@ const kindOptions: Array<{ label: string; value: QuotationLineKind }> = [
   { label: "Labor", value: "labor" },
   { label: "Service", value: "service" },
 ];
+
+const jobTypeOptions: Array<{ label: string; value: JobType }> = JOB_TYPES.map(
+  (type) => ({ label: JOB_TYPE_LABELS[type], value: type }),
+);
 
 // Ordered sections of the printed quote, one per line kind.
 const sections: Array<{ kind: QuotationLineKind; title: string }> = [
@@ -99,6 +107,7 @@ function makeLine(partial: Partial<QuotationLine> = {}): QuotationLine {
     description: partial.description ?? "",
     id: partial.id ?? crypto.randomUUID(),
     kind: partial.kind ?? "service",
+    jobType: partial.jobType ?? "customerPay",
     quantity: partial.quantity ?? 1,
     serviceId: partial.serviceId,
     unitPrice: partial.unitPrice ?? 0,
@@ -482,6 +491,7 @@ export function QuotationPage() {
         serviceId: line.serviceId,
         description: line.description,
         kind: line.kind,
+        jobType: line.jobType,
         quantity: line.quantity,
         unitPrice: line.unitPrice,
       })),
@@ -771,7 +781,7 @@ export function QuotationPage() {
                   style={{
                     width: "100%",
                     borderCollapse: "collapse",
-                    minWidth: 760,
+                    minWidth: 880,
                   }}
                 >
                   <thead>
@@ -780,6 +790,7 @@ export function QuotationPage() {
                       <th style={{ ...headStyle, textAlign: "left" }}>
                         Job / Part description
                       </th>
+                      <th style={{ ...headStyle, width: 120 }}>Job type</th>
                       <th style={{ ...headStyle, width: 64 }}>Unit</th>
                       <th style={{ ...headStyle, width: 80 }}>Qty</th>
                       <th style={{ ...headStyle, width: 130 }}>Unit price</th>
@@ -798,7 +809,7 @@ export function QuotationPage() {
                             textAlign: "center",
                             color: advisorPalette.textMuted,
                           }}
-                          colSpan={editable ? 7 : 6}
+                          colSpan={editable ? 8 : 7}
                         >
                           No line items yet. Add services from the catalog, from
                           the inspection results, or add a manual line.
@@ -826,7 +837,7 @@ export function QuotationPage() {
                                   fontWeight: 800,
                                   color: advisorPalette.ink,
                                 }}
-                                colSpan={5}
+                                colSpan={6}
                               >
                                 {section.title}
                               </td>
@@ -890,6 +901,24 @@ export function QuotationPage() {
                                       {line.description}
                                     </span>
                                   )}
+                                </td>
+                                <td style={cellStyle}>
+                                  {editable ? (
+                                    <Select
+                                      size="small"
+                                      value={line.jobType}
+                                      options={jobTypeOptions}
+                                      style={{ width: "100%" }}
+                                      onChange={(value) =>
+                                        updateLine(line.id, { jobType: value })
+                                      }
+                                    />
+                                  ) : line.jobType &&
+                                    line.jobType !== "customerPay" ? (
+                                    <Tag color={advisorPalette.amber}>
+                                      {JOB_TYPE_LABELS[line.jobType]}
+                                    </Tag>
+                                  ) : null}
                                 </td>
                                 <td
                                   style={{ ...cellStyle, textAlign: "center" }}
@@ -989,7 +1018,7 @@ export function QuotationPage() {
                           color: advisorPalette.ink,
                           textTransform: "uppercase",
                         }}
-                        colSpan={5}
+                        colSpan={6}
                       >
                         Repair total
                       </td>
@@ -1108,6 +1137,15 @@ export function QuotationPage() {
                 }}
               >
                 Quote total
+              </div>
+              <div
+                style={{
+                  color: "rgba(255,255,255,0.45)",
+                  fontSize: 11,
+                  marginTop: 4,
+                }}
+              >
+                Chỉ tính dòng Khách trả
               </div>
               <div
                 className="mt-4 flex flex-col gap-3"

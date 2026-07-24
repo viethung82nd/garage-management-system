@@ -109,11 +109,24 @@ export type ApiAdditionalServiceProposal = {
 
 export type QuotationLineKind = 'service' | 'part' | 'labor'
 
+/** Who pays for a line. Only customerPay lines are billed to the customer. */
+export const JOB_TYPES = ['customerPay', 'warranty', 'internal', 'insurance', 'goodwill'] as const
+export type JobType = (typeof JOB_TYPES)[number]
+
+export const JOB_TYPE_LABELS: Record<JobType, string> = {
+  customerPay: 'Khách trả',
+  warranty: 'Bảo hành hãng',
+  internal: 'Nội bộ (gara chịu)',
+  insurance: 'Bảo hiểm',
+  goodwill: 'Thiện chí',
+}
+
 export type ApiQuotationLine = {
   id?: string
   serviceId?: string
   description?: string
   kind?: QuotationLineKind
+  jobType?: JobType
   quantity?: number
   unitPrice?: number
 }
@@ -236,6 +249,43 @@ export function forwardRepairOrderToAccountant(token: string, id: string) {
   return apiRequest<{ message?: string; order?: ApiRepairOrder }>(`/api/repair-orders/${id}/forward-to-accountant`, {
     method: 'POST',
     token,
+  })
+}
+
+/** Hand the vehicle back to the customer. Gated server-side on QC-passed +
+ *  invoice paid; optionally records the customer's signature and whether the
+ *  old parts were returned. */
+export function deliverVehicleApi(
+  token: string,
+  id: string,
+  payload: { signature?: string; oldPartsReturned?: boolean; note?: string } = {},
+) {
+  return apiRequest<ApiRepairOrder>(`/api/repair-orders/${id}/deliver`, {
+    method: 'POST',
+    token,
+    body: JSON.stringify(payload),
+  })
+}
+
+// ===== Appointments: no-show + reminders (Step 1) =====
+
+export function markBookingNoShow(token: string, id: string) {
+  return apiRequest<{ booking?: ApiBooking }>(`/api/bookings/${id}/no-show`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({}),
+  })
+}
+
+export function fetchNoShowBookings(token: string) {
+  return apiRequest<{ bookings?: ApiBooking[] } | ApiBooking[]>('/api/bookings/no-shows', { token })
+}
+
+export function sendAppointmentReminders(token: string) {
+  return apiRequest<{ count?: number }>('/api/bookings/appointment-reminders', {
+    method: 'POST',
+    token,
+    body: JSON.stringify({}),
   })
 }
 
@@ -363,6 +413,8 @@ export type ApiQualityCheck = {
   items?: ApiQualityCheckItem[]
   note?: string
   reworkReason?: string
+  /** Distance driven on the QC test drive, in km. */
+  testDriveKm?: number
 }
 
 export function submitQualityCheck(token: string, repairOrderId: string, payload: ApiQualityCheck) {
