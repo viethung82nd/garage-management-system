@@ -44,7 +44,7 @@
 |:-----:|-----|----------------|:----------:|:-------:|:---------:|
 | **1** | Nền tảng & Kiểm soát | Cross-cutting, §6/§19/§20 | ✅ | 20/20 | 4–6 buổi |
 | **2** | Cổng nghiệp vụ: Báo giá → Duyệt → QC → Bàn giao | §5, §7, §8, §9, §10 (bước 3-6) | 🟢 | 18/18 | 5–7 buổi |
-| **3** | Luồng Vật tư: Kho & Phụ tùng (+ Mua hàng) | §9 | ⚪ | 0/14 | 5–7 buổi |
+| **3** | Luồng Vật tư: Kho & Phụ tùng (+ Mua hàng) | §9 | 🟢 | 14/14 | 5–7 buổi |
 | **4** | Luồng Tiền & KPI: Giá vốn, Giờ công, Công nợ | §14, §15, §16 | ⚪ | 0/12 | 5–7 buổi |
 | **5** | CSKH, Bảo hành, Nhắc lịch, Hồ sơ xe | §3, §11, §12, §13 | ⚪ | 0/13 | 4–6 buổi |
 
@@ -62,7 +62,10 @@
 | 24/07/2026 | 1 | **Phase 1 code hoàn tất (20/20)** | Chờ bạn test & báo cáo trước khi sang Phase 2 |
 | 24/07/2026 | 1 | ✅ **Phase 1 NGHIỆM THU** | Người dùng test thành công, chốt Phase 1 |
 | 24/07/2026 | 2 | Bắt đầu Phase 2 | Agent Sonnet làm QC gate + state machine/bàn giao; Opus làm báo giá/phê duyệt/change order |
-| 24/07/2026 | 2 | **Phase 2 code hoàn tất (18/18)** | BE 275/275 pass (40 file); FE build OK + 2/2 test; chờ bạn test |
+| 24/07/2026 | 2 | **Phase 2 code hoàn tất (18/18)** | BE 275/275 pass (40 file); FE build OK + 2/2 test |
+| 24/07/2026 | — | Commit git (chưa push) | 3 commit: docs / implementation phase 1-2 / tooling. Giữ nguyên 3 thay đổi có sẵn không thuộc phạm vi (DATABASE_SCHEMA.md, 2 file kapa-auth) |
+| 24/07/2026 | 3 | Bắt đầu Phase 3 | Người dùng chọn sang Phase 3 (Phase 2 chưa test thủ công — vẫn để 🟢) |
+| 24/07/2026 | 3 | **Phase 3 code hoàn tất (14/14)** | Luồng vật tư liền mạch + mua hàng/NCC. BE 328/328 (44 file); FE build OK. Chờ bạn test |
 | | | | |
 
 ---
@@ -188,7 +191,7 @@
 
 ---
 
-## 5. PHASE 3 — LUỒNG VẬT TƯ: KHO & PHỤ TÙNG ⚪
+## 5. PHASE 3 — LUỒNG VẬT TƯ: KHO & PHỤ TÙNG 🟢
 
 > **Vì sao làm thứ 3:** đây là **luồng đang đứt hoàn toàn** (W1 — lỗi nặng nhất), tương ứng [§9](NGHIEP_VU_GARA_OTO.md). Cần Phase 1 (vai trò `partsStaff`, audit `stockAdjusted`) và Phase 2 (báo giá đã versioning) làm nền.
 
@@ -197,29 +200,29 @@
 ### Công việc
 
 **A. Liên kết phụ tùng vào chứng từ (W1 gốc)**
-- [ ] **[BẮT BUỘC]** Thêm `partId` (ref `Part`) vào dòng báo giá/RO/hóa đơn có `kind:"part"`; SA chọn từ danh mục thay vì gõ tay. 📍 `service-quote.model.js`, `repair-order.model.js`, `invoice.model.js`
-- [ ] **[BẮT BUỘC]** Mở quyền đọc danh mục phụ tùng cho `serviceAdvisor` (hiện chỉ admin). 📍 `part.routes.js`
+- [x] **[BẮT BUỘC]** `partId` (ref `Part`) vào dòng báo giá/RO/hóa đơn `kind:"part"`; SA chọn từ danh mục. Hóa đơn thêm `partCondition` (mới/tái chế/…).
+- [x] **[BẮT BUỘC]** Mở quyền đọc danh mục phụ tùng cho `serviceAdvisor` (đã làm ở Phase 1).
 
 **B. Chuyển động tồn kho (W1 lõi)**
-- [ ] **[BẮT BUỘC]** Thêm `InventoryTransaction` (`IN/OUT/ADJUST/RETURN`, ref part, ref RO, số lượng, giá vốn tại thời điểm). 📍 model mới
-- [ ] **[BẮT BUỘC]** Khi RO hoàn tất/bàn giao → sinh phiếu xuất, **trừ `stockQuantity`** (giao dịch atomic). 📍 `repair-order.service.js`
-- [ ] **[BẮT BUỘC]** Giữ chỗ (reservation): khi báo giá duyệt, giữ số lượng; `available = onHand − reserved`. Không cho xuất quá tồn khả dụng (BR-PRT-01/02).
-- [ ] **[BẮT BUỘC]** Không cho chuyển RO sang `waitingParts`/thi công nếu thiếu tồn; khi thiếu → gắn `waitingParts` với danh sách phụ tùng thiếu (nối với Phase 2 status).
+- [x] **[BẮT BUỘC]** `InventoryTransaction` (receipt/issue/return/adjustment/writeOff, ref part+RO+PO, giá vốn đóng băng, `balanceAfter`). `utils/stock.js` là cổng duy nhất.
+- [x] **[BẮT BUỘC]** `POST /:id/issue-parts` trừ `stockQuantity` + ghi sổ; auto-consume ở bàn giao (lưới an toàn, idempotent); giao dịch atomic.
+- [x] **[BẮT BUỘC]** `StockReservation` — duyệt báo giá thì giữ chỗ; `available = onHand − reserved`; không quote đè phần đã giữ. Xóa RO → trả hàng.
+- [x] **[BẮT BUỘC]** Thiếu tồn → RO tự chuyển `waitingParts` kèm lý do (nối status Phase 2) + ghi `shortfall` để mua bù.
 
 **C. Giá vốn (chuẩn bị cho Phase 4)**
-- [ ] **[BẮT BUỘC]** Thêm `costPrice` vào `Part`; giá vốn được **đóng băng vào dòng RO** lúc xuất (BR-PRT-03). 📍 `part.model.js`
-- [ ] **[NÊN]** Min-Max + cảnh báo tồn dưới mức tối thiểu.
+- [x] **[BẮT BUỘC]** `costPrice` (bình quân gia quyền) trên `Part`; đóng băng vào dòng ledger lúc xuất (BR-PRT-03).
+- [x] **[NÊN]** Min/Max + `reorderPoint`; lọc `?lowStock=true` + gợi ý đặt hàng.
 
 **D. Kiểm kê & điều chỉnh**
-- [ ] **[NÊN]** Chức năng điều chỉnh kho có lý do + ghi audit `stockAdjusted`; phiếu kiểm kê.
+- [x] **[NÊN]** `POST /:id/adjust` bắt buộc lý do + ghi audit `stockAdjusted` + ledger; `stockQuantity` **không** sửa qua PUT nữa; sổ `/:id/transactions`.
 
-**E. Mua hàng (Q2 — ĐÃ CHỐT LÀM)**
-- [ ] **[BẮT BUỘC]** `Supplier` (danh mục nhà cung cấp) + `PurchaseOrder` → `GoodsReceipt` (nhận từng phần).
-- [ ] **[BẮT BUỘC]** Công nợ phải trả (AP) theo NCC; backorder liên kết ngược RO đang chờ.
-- [ ] **[NÊN]** Đặt hàng riêng cho một RO (special order); trả hàng/trả bảo hành NCC.
+**E. Mua hàng (Q2 — ĐÃ CHỐT LÀM) — agent Sonnet**
+- [x] **[BẮT BUỘC]** `Supplier` (soft-delete) + `PurchaseOrder` (draft→sent→partiallyReceived→received; cancel chỉ khi chưa nhận gì); **nhận hàng từng phần** qua nhiều đợt, cập nhật kho + bình quân giá vốn.
+- [x] **[BẮT BUỘC]** Công nợ phải trả (AP) theo NCC + tuổi nợ (current/0-30/31-60/61-90/90+); `recordSupplierPayment` chặn trả vượt; PO line có `repairOrderId`/backorder liên kết ngược.
+- [x] **[NÊN]** `getReorderSuggestions` (part ≤ reorderPoint → SL đề xuất + NCC ưu tiên).
 
 ### Thay đổi schema
-`Part` (+`costPrice`, +Min-Max, +`isActive`) · dòng part trên Quote/RO/Invoice (+`partId`) · **model mới:** `InventoryTransaction` · *(stretch: `Supplier`, `PurchaseOrder`, `GoodsReceipt`)*.
+`Part` (+`costPrice`, +`reservedQuantity`, +Min/Max/`reorderPoint`, +`condition`, +`isActive`, +virtual `availableQuantity`) · dòng part trên Quote/RO/Invoice (+`partId`, +`partCondition`) · **model mới:** `InventoryTransaction`, `StockReservation`, `Supplier`, `PurchaseOrder`.
 
 ### ✅ Tiêu chí nghiệm thu Phase 3 (bạn test)
 1. Báo giá một phụ tùng → chọn từ danh mục (không gõ tay); duyệt → tồn khả dụng của phụ tùng đó **giảm phần giữ chỗ**.

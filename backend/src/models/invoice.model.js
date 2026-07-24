@@ -23,6 +23,17 @@ const lineItemSchema = new Schema(
       enum: ["service", "part", "labor"],
       default: "service",
     },
+    partId: {
+      type: Schema.Types.ObjectId,
+      ref: "Part",
+    },
+    // Whether the customer was charged for a new, OEM, aftermarket,
+    // reconditioned or used part. Stated on the invoice because a customer is
+    // entitled to know which of those they paid for.
+    partCondition: {
+      type: String,
+      trim: true,
+    },
     source: {
       type: String,
       enum: ["quote", "additionalService"],

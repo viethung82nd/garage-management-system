@@ -15,6 +15,8 @@ import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
 import { generateCode } from "../utils/sequence.js";
 import { recordStatusChange } from "../utils/orderStatus.js";
 import { logAudit } from "../utils/audit.js";
+import { runInTransaction } from "../utils/transaction.js";
+import { issueReservedStock, releaseReservations } from "../utils/stock.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 
@@ -428,7 +430,12 @@ export async function deleteRepairOrder(id) {
     throw new ApiError(400, "Can only delete repair orders with pending status");
   }
 
-  await repairOrderRepository.deleteById(id);
+  // Any stock held for this order has to go back to being sellable, or it
+  // stays invisibly committed to an order that no longer exists.
+  await runInTransaction(async (session) => {
+    await releaseReservations({ repairOrderId: order._id }, session);
+    await repairOrderRepository.model.findByIdAndDelete(id).session(session);
+  });
 
   return { message: "Repair order deleted successfully", id };
 }
@@ -779,10 +786,20 @@ export async function deliverVehicle(id, { note }, actorId) {
   }
 
   const previousStatus = order.status;
-  order.deliveredAt = new Date();
-  order.deliveredBy = actorId;
-  order.status = "delivered";
-  await order.save();
+
+  await runInTransaction(async (session) => {
+    order.deliveredAt = new Date();
+    order.deliveredBy = actorId;
+    order.status = "delivered";
+    await order.save({ session });
+
+    // Safety net: normally the store issues parts explicitly (POST
+    // /:id/issue-parts) while the job is in progress. If that was skipped, the
+    // car must not leave with stock still shown as sitting on the shelf — so
+    // any reservation still outstanding is consumed here. Idempotent: an order
+    // whose parts were already issued has no active reservations left.
+    await issueReservedStock({ repairOrderId: order._id, actorId }, session);
+  });
 
   await recordStatusChange({
     repairOrderId: order._id,
@@ -797,4 +814,40 @@ export async function deliverVehicle(id, { note }, actorId) {
   ]);
 
   return order;
+}
+
+/**
+ * The store hands the reserved parts to the technician. This is the moment
+ * stock physically leaves the shelf, so it is when `stockQuantity` drops and
+ * an `issue` ledger entry is written with the cost frozen at that instant.
+ *
+ * Separate from delivery on purpose: parts are consumed while the job is being
+ * worked, not when the customer collects the car, and it gives the parts desk
+ * an explicit action rather than making stock a silent side effect.
+ */
+export async function issuePartsForOrder(id, actorId) {
+  if (!id.match(OID_RE)) {
+    throw new ApiError(400, "Invalid repair order ID format");
+  }
+
+  const order = await repairOrderRepository.findById(id);
+  if (!order) {
+    throw new ApiError(404, "Repair order not found");
+  }
+  if (TERMINAL_ORDER_STATUSES.includes(order.status)) {
+    throw new ApiError(409, `Cannot issue parts for a ${order.status} repair order`);
+  }
+
+  const result = await runInTransaction(async (session) =>
+    issueReservedStock({ repairOrderId: order._id, actorId }, session),
+  );
+
+  if (result.issued.length === 0) {
+    return { message: "No parts were awaiting issue for this repair order", issued: [] };
+  }
+
+  return {
+    message: `Issued ${result.issued.length} part line(s) to the repair order`,
+    issued: result.issued,
+  };
 }

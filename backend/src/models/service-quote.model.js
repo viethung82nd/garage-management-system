@@ -26,6 +26,11 @@ const quoteLineSchema = new Schema(
     // for a hand-typed custom line. Lets confirmQuotation carry a real
     // service reference through to RepairOrder.services instead of losing it.
     serviceId: { type: Schema.Types.ObjectId, ref: "Service" },
+    // Set on `kind: "part"` lines picked from the parts catalogue. This is what
+    // connects a quote to real inventory: without it a part line was just
+    // typed text and a typed price, so approving it could never reserve stock
+    // or reduce it, and the shelf count never reflected what had been sold.
+    partId: { type: Schema.Types.ObjectId, ref: "Part" },
     description: { type: String, trim: true },
     kind: { type: String, enum: QUOTE_LINE_KINDS, default: "service" },
     quantity: { type: Number, default: 1, min: 0 },

@@ -136,3 +136,13 @@ export async function deliverVehicle(req, res) {
   const order = await repairOrderService.deliverVehicle(req.params.id, req.body ?? {}, req.user.sub);
   res.json(order);
 }
+
+/**
+ * POST /api/repair-orders/:id/issue-parts
+ * The parts desk hands the reserved parts to the technician — the moment
+ * stock actually leaves the shelf.
+ */
+export async function issuePartsForOrder(req, res) {
+  const result = await repairOrderService.issuePartsForOrder(req.params.id, req.user.sub);
+  res.json(result);
+}

@@ -1,8 +1,16 @@
 import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Table } from 'antd'
+import { Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Table, Tag, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
-import { createPart, deletePart, fetchParts, updatePart, type PartPayload, type PartRecord } from '../api/partsApi'
+import {
+  adjustPartStock,
+  createPart,
+  deletePart,
+  fetchParts,
+  updatePart,
+  type CreatePartPayload,
+  type PartRecord,
+} from '../api/partsApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
 import { InlineBanner } from '../../../../widgets/backoffice-shell'
 import { useAuth } from '../../../../shared/auth'
@@ -21,7 +29,10 @@ export default function AdminPartsPage() {
   const [editingPart, setEditingPart] = useState<PartRecord | null>(null)
   const [saving, setSaving] = useState(false)
   const [deletingId, setDeletingId] = useState<string | null>(null)
-  const [form] = Form.useForm<PartPayload>()
+  const [form] = Form.useForm<CreatePartPayload>()
+  const [adjustingPart, setAdjustingPart] = useState<PartRecord | null>(null)
+  const [adjustForm] = Form.useForm<{ newQuantity: number; reason: string }>()
+  const [adjusting, setAdjusting] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -71,13 +82,16 @@ export default function AdminPartsPage() {
     setModalOpen(true)
   }
 
-  async function handleSubmit(values: PartPayload) {
+  async function handleSubmit(values: CreatePartPayload) {
     if (!token) return
     setSaving(true)
     setRequestError('')
     try {
       if (editingPart) {
-        const response = await updatePart(token, editingPart._id, values)
+        // stockQuantity is intentionally dropped on edit — on-hand stock is
+        // only ever changed through an adjustment, which records a reason.
+        const { stockQuantity: _ignored, ...editable } = values
+        const response = await updatePart(token, editingPart._id, editable)
         setParts((current) => current.map((part) => (part._id === editingPart._id ? response.part : part)))
       } else {
         const response = await createPart(token, values)
@@ -88,6 +102,27 @@ export default function AdminPartsPage() {
       setRequestError(error instanceof Error ? error.message : 'Unable to save this part.')
     } finally {
       setSaving(false)
+    }
+  }
+
+  function openAdjustModal(part: PartRecord) {
+    setAdjustingPart(part)
+    setRequestError('')
+    adjustForm.setFieldsValue({ newQuantity: part.stockQuantity, reason: '' })
+  }
+
+  async function handleAdjust(values: { newQuantity: number; reason: string }) {
+    if (!token || !adjustingPart) return
+    setAdjusting(true)
+    setRequestError('')
+    try {
+      const response = await adjustPartStock(token, adjustingPart._id, values)
+      setParts((current) => current.map((part) => (part._id === adjustingPart._id ? response.part : part)))
+      setAdjustingPart(null)
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : 'Unable to adjust stock.')
+    } finally {
+      setAdjusting(false)
     }
   }
 
@@ -109,7 +144,26 @@ export default function AdminPartsPage() {
       { title: 'Name', dataIndex: 'name', key: 'name' },
       { title: 'SKU', dataIndex: 'sku', key: 'sku' },
       { title: 'Unit price', dataIndex: 'unitPrice', key: 'unitPrice', render: (value: number) => formatMoney(value) },
-      { title: 'Stock', dataIndex: 'stockQuantity', key: 'stockQuantity' },
+      {
+        title: 'On hand',
+        dataIndex: 'stockQuantity',
+        key: 'stockQuantity',
+        render: (value: number, part) => {
+          const reserved = part.reservedQuantity ?? 0
+          const available = part.availableQuantity ?? value - reserved
+          return (
+            <div className="flex items-center gap-2">
+              <span>{value}</span>
+              {reserved > 0 ? (
+                <Tooltip title={`${reserved} committed to approved repair orders — ${available} free to sell`}>
+                  <Tag color="gold">{available} free</Tag>
+                </Tooltip>
+              ) : null}
+              {available <= (part.reorderPoint ?? 0) ? <Tag color="red">Reorder</Tag> : null}
+            </div>
+          )
+        },
+      },
       {
         title: 'Action',
         key: 'action',
@@ -118,9 +172,17 @@ export default function AdminPartsPage() {
             <Button size="small" onClick={() => openEditModal(part)}>
               Edit
             </Button>
-            <Popconfirm title="Remove this part?" okText="Remove" onConfirm={() => handleDelete(part)}>
+            <Button size="small" onClick={() => openAdjustModal(part)}>
+              Adjust stock
+            </Button>
+            <Popconfirm
+              title="Retire this part?"
+              description="It stays on past invoices and orders, but is hidden from the catalogue."
+              okText="Retire"
+              onConfirm={() => handleDelete(part)}
+            >
               <Button size="small" danger loading={deletingId === part._id}>
-                Remove
+                Retire
               </Button>
             </Popconfirm>
           </div>
@@ -181,11 +243,62 @@ export default function AdminPartsPage() {
           <Form.Item name="sku" label="SKU" rules={[{ required: true, message: 'SKU is required' }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="unitPrice" label="Unit price (VND)" rules={[{ required: true, message: 'Unit price is required' }]}>
+          <Form.Item name="unitPrice" label="Selling price (VND)" rules={[{ required: true, message: 'Unit price is required' }]}>
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item name="stockQuantity" label="Stock quantity" rules={[{ required: true, message: 'Stock quantity is required' }]}>
+          <Form.Item
+            name="costPrice"
+            label="Cost price (VND)"
+            extra="What the part costs us. Needed to report margin, and updated automatically as stock is received."
+          >
             <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item name="reorderPoint" label="Reorder point" extra="Flag the part for reordering once free stock falls to this level.">
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          {editingPart ? (
+            <p style={{ color: adminPalette.textMuted, fontSize: 12, marginBottom: 0 }}>
+              On-hand stock isn&apos;t editable here — it&apos;s the balance of the stock ledger. Use{' '}
+              <strong>Adjust stock</strong> to correct it, which records a reason.
+            </p>
+          ) : (
+            <Form.Item
+              name="stockQuantity"
+              label="Opening stock"
+              rules={[{ required: true, message: 'Stock quantity is required' }]}
+            >
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+          )}
+        </Form>
+      </Modal>
+
+      <Modal
+        title={adjustingPart ? `Adjust stock — ${adjustingPart.name}` : 'Adjust stock'}
+        open={Boolean(adjustingPart)}
+        onCancel={() => setAdjustingPart(null)}
+        onOk={() => adjustForm.submit()}
+        confirmLoading={adjusting}
+        okText="Record adjustment"
+      >
+        <p style={{ color: adminPalette.textMuted, fontSize: 13, marginBottom: 16 }}>
+          Use this after a physical count, or to write off damaged stock. The change is written to the part&apos;s
+          ledger and the audit log, so an unexplained quantity can never appear.
+        </p>
+        <Form form={adjustForm} layout="vertical" onFinish={handleAdjust}>
+          <Form.Item
+            name="newQuantity"
+            label="Counted quantity"
+            rules={[{ required: true, message: 'Enter the quantity actually on the shelf' }]}
+          >
+            <InputNumber min={0} style={{ width: '100%' }} />
+          </Form.Item>
+          <Form.Item
+            name="reason"
+            label="Reason"
+            rules={[{ required: true, message: 'A reason is required' }]}
+          >
+            <Input.TextArea autoSize={{ maxRows: 4, minRows: 2 }} placeholder="e.g. Stock count — 2 units damaged" />
           </Form.Item>
         </Form>
       </Modal>

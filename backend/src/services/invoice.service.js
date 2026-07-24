@@ -8,6 +8,7 @@ import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
 import { logAudit } from "../utils/audit.js";
 import { generateCode } from "../utils/sequence.js";
+import { PartModel } from "../models/index.js";
 
 const INVOICE_TERM_DAYS = 15;
 
@@ -255,11 +256,25 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     throw new ApiError(409, "invoice already exists for this repair order");
   }
 
+  // A customer is entitled to know whether they were charged for a new, OEM,
+  // reconditioned or used part, so the invoice carries each part's condition
+  // rather than just a description and a price. Looked up in one batch.
+  const partIds = order.services.map((s) => s.partId).filter(Boolean);
+  const partConditions = new Map();
+  if (partIds.length > 0) {
+    const parts = await PartModel.find({ _id: { $in: partIds } }).select("condition");
+    for (const part of parts) {
+      partConditions.set(String(part._id), part.condition);
+    }
+  }
+
   const lineItems = order.services.map((s) => ({
     description: s.name,
     quantity: s.quantity,
     unitPrice: s.priceAtTime,
     kind: s.kind || "service",
+    partId: s.partId || undefined,
+    partCondition: s.partId ? partConditions.get(String(s.partId)) : undefined,
     source: s.source || "quote",
   }));
 

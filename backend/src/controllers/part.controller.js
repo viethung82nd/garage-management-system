@@ -24,8 +24,23 @@ export async function updatePart(req, res) {
   res.json({ part });
 }
 
-/** DELETE /api/admin/parts/:id — remove a part (Admin only). */
+/** DELETE /api/admin/parts/:id — retire a part (soft delete). */
 export async function deletePart(req, res) {
   const result = await partService.deletePart(req.params.id);
+  res.json(result);
+}
+
+/**
+ * POST /api/admin/parts/:id/adjust — correct on-hand stock after a physical
+ * count, or write it off. Body: { newQuantity, reason, type? }
+ */
+export async function adjustPartStock(req, res) {
+  const part = await partService.adjustPartStock(req.params.id, req.body ?? {}, req.user.sub);
+  res.json({ part });
+}
+
+/** GET /api/admin/parts/:id/transactions — the movement ledger for a part. */
+export async function getPartTransactions(req, res) {
+  const result = await partService.getPartTransactions(req.params.id, req.query ?? {});
   res.json(result);
 }

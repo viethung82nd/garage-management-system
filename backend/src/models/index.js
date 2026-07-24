@@ -24,3 +24,7 @@ export * from "./repair-order-status-history.model.js";
 export * from "./approval.schema.js";
 export * from "./quote-version.model.js";
 export * from "./deferred-work.model.js";
+export * from "./inventory-transaction.model.js";
+export * from "./stock-reservation.model.js";
+export * from "./supplier.model.js";
+export * from "./purchase-order.model.js";

@@ -44,6 +44,13 @@ const orderServiceSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "Service",
     },
+    // Carried through from the approved quote line for `kind: "part"` entries,
+    // so the order knows which catalogue item to reserve and later issue from
+    // the store — and so cost of goods sold can be attributed to this job.
+    partId: {
+      type: Schema.Types.ObjectId,
+      ref: "Part",
+    },
     name: {
       type: String,
       required: true,

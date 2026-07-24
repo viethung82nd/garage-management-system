@@ -18,6 +18,7 @@ import {
   submitQualityCheck,
   forwardToAccountant,
   deliverVehicle,
+  issuePartsForOrder,
 } from "../controllers/repair-order.controller.js";
 
 export const repairOrderRouter = Router();
@@ -147,4 +148,12 @@ repairOrderRouter.post(
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
   catchAsync(deliverVehicle),
+);
+
+// The parts desk issues reserved stock to the technician working this order.
+repairOrderRouter.post(
+  "/:id/issue-parts",
+  requireAuth,
+  requireRole("partsStaff", "serviceAdvisor", "admin"),
+  catchAsync(issuePartsForOrder),
 );

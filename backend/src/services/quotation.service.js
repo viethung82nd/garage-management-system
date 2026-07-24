@@ -7,6 +7,8 @@ import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
 import { runInTransaction } from "../utils/transaction.js";
 import { logAudit } from "../utils/audit.js";
+import { reserveStock } from "../utils/stock.js";
+import { recordStatusChange } from "../utils/orderStatus.js";
 import {
   APPROVAL_CHANNELS,
   DeferredWorkModel,
@@ -327,6 +329,11 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
         ? "approved"
         : "partiallyApproved";
 
+  // Collected while reserving stock below; a non-empty list moves the order to
+  // waitingParts so the delay has a recorded, measurable cause.
+  const shortages = [];
+  let previousOrderStatus = null;
+
   // Quote decision, repair-order population and deferred-work capture are one
   // logical act. A partial commit would leave a terminally-decided quote whose
   // work never reached the order (or declined lines lost entirely).
@@ -374,6 +381,7 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
         const quantity = Number(line.quantity) || 1;
         processedServices.push({
           serviceId: line.serviceId || undefined,
+          partId: line.partId || undefined,
           name: name || "Line item",
           priceAtTime,
           quantity,
@@ -381,6 +389,26 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
           source: "quote",
         });
         totalCost += priceAtTime * quantity;
+
+        // The customer has now agreed to this part, so commit the stock to
+        // this order. Reserving (rather than deducting) keeps it on the shelf
+        // until a technician actually takes it, while making it unavailable to
+        // quote against a second job. A shortfall doesn't fail the approval —
+        // the sale is already made — it flags the order as waiting on parts.
+        if (line.partId && (line.kind === "part" || !line.kind)) {
+          const { shortfall } = await reserveStock(
+            {
+              partId: line.partId,
+              repairOrderId: order._id,
+              quantity,
+              actorId,
+            },
+            session,
+          );
+          if (shortfall > 0) {
+            shortages.push(`${name || "part"} (thiếu ${shortfall})`);
+          }
+        }
       }
 
       order.services = processedServices;
@@ -392,6 +420,16 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
       order.quotedDiscountPercent = quote.discountPercent;
       order.quotedTaxPercent = quote.taxPercent;
       order.quotedTotal = quote.totalEstimate;
+
+      // Stock couldn't cover the approved parts, so the job cannot start yet.
+      // Recording that as waitingParts (with the specific shortage as the
+      // reason) is what makes "why has this car been here three days"
+      // answerable, and keeps the wait out of technician productivity.
+      if (shortages.length > 0 && order.status === "pending") {
+        previousOrderStatus = order.status;
+        order.status = "waitingParts";
+      }
+
       await order.save({ session });
     }
 
@@ -419,6 +457,18 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
       );
     }
   });
+
+  // Recorded outside the transaction, like every other status change, so the
+  // history entry survives even if auditing itself hiccups.
+  if (previousOrderStatus) {
+    await recordStatusChange({
+      repairOrderId: quote.repairOrderId,
+      from: previousOrderStatus,
+      to: "waitingParts",
+      changedBy: actorId,
+      reason: `Chờ phụ tùng: ${shortages.join(", ")}`,
+    });
+  }
 
   await logAudit({
     action: nextStatus === "rejected" ? "quoteRejected" : "quoteApproved",
