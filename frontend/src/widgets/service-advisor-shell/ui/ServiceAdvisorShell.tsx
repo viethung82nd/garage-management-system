@@ -5,6 +5,7 @@ import {
   DashboardOutlined,
   FileSearchOutlined,
   FileTextOutlined,
+  HeartOutlined,
   PlusCircleOutlined,
   SwapOutlined,
   ToolOutlined,
@@ -28,6 +29,7 @@ function activeMenuKey(pathname: string) {
   if (pathname.startsWith("/advisor/quality-check")) return "quality-check";
   if (pathname.startsWith("/advisor/transfer-requests"))
     return "transfer-requests";
+  if (pathname.startsWith("/advisor/customer-care")) return "customer-care";
   if (pathname.startsWith("/advisor/dashboard")) return "dashboard";
   return "";
 }
@@ -122,6 +124,11 @@ export function ServiceAdvisorShell({
             label: (
               <Link to="/advisor/transfer-requests">Transfer requests</Link>
             ),
+          },
+          {
+            key: "customer-care",
+            icon: <HeartOutlined />,
+            label: <Link to="/advisor/customer-care">Customer care</Link>,
           },
         ]}
       >

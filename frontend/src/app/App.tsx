@@ -54,6 +54,9 @@ const TransferRequestReviewPage = lazy(() =>
 const ServiceAdvisorProfilePage = lazy(() =>
   import('../pages/advisor/ServiceAdvisorProfilePage').then((module) => ({ default: module.ServiceAdvisorProfilePage })),
 )
+const CustomerCarePage = lazy(() =>
+  import('../pages/advisor/CustomerCarePage').then((module) => ({ default: module.CustomerCarePage })),
+)
 const TechnicianWorkOrdersPage = lazy(() =>
   import('../pages/technician/TechnicianWorkOrdersPage').then((module) => ({ default: module.TechnicianWorkOrdersPage })),
 )
@@ -399,6 +402,18 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['serviceAdvisor']}>
                 <TransferRequestReviewPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/advisor/customer-care"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['serviceAdvisor']}>
+                <CustomerCarePage />
               </RequireRole>
             </RequireAuth>
           </Suspense>
