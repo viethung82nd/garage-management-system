@@ -106,12 +106,44 @@ export async function recordPayment({ invoiceId, method, amount, reference }, ac
   await payment.save();
 
   // Only a successful charge settles the invoice.
+  let invoiceStatus = invoice.status;
   if (result.status === "succeeded") {
-    invoice.amountPaid = (invoice.amountPaid || 0) + chargeAmount;
-    const remaining = invoice.total - invoice.amountPaid;
-    invoice.status = remaining <= 0 ? "paid" : "partiallyPaid";
-    await invoice.save();
+    // Settle atomically. The previous code read amountPaid into memory, added
+    // to it and saved — so two payments landing together each read the old
+    // total and the second overwrote the first, losing a payment. This applies
+    // the increment and recomputes status server-side in one operation, and the
+    // $expr guard refuses an increment that would push past the total (two
+    // payments can both clear the up-front balance check under concurrency).
+    const settled = await invoiceRepository.model.findOneAndUpdate(
+      {
+        _id: invoice._id,
+        $expr: { $lte: [{ $add: ["$amountPaid", chargeAmount] }, "$total"] },
+      },
+      [
+        { $set: { amountPaid: { $add: ["$amountPaid", chargeAmount] } } },
+        {
+          $set: {
+            status: { $cond: [{ $gte: ["$amountPaid", "$total"] }, "paid", "partiallyPaid"] },
+          },
+        },
+      ],
+      { new: true },
+    );
 
+    if (!settled) {
+      // Another payment settled the balance first. Void this charge rather than
+      // overshoot the invoice.
+      payment.status = "refunded";
+      payment.gatewayPayload = {
+        ...(payment.gatewayPayload || {}),
+        voided: "would exceed invoice balance",
+      };
+      await payment.save();
+      throw new ApiError(409, "This payment would exceed the invoice balance and was not applied");
+    }
+
+    invoiceStatus = settled.status;
+    const remaining = settled.total - settled.amountPaid;
     const refSuffix = trimmedReference ? ` (ref ${trimmedReference})` : "";
     await logAudit({
       action: "paymentRecorded",
@@ -125,7 +157,7 @@ export async function recordPayment({ invoiceId, method, amount, reference }, ac
     });
   }
 
-  return { payment, invoiceStatus: invoice.status };
+  return { payment, invoiceStatus };
 }
 
 /** List every payment attempt, newest first — the accountant's payments ledger. */

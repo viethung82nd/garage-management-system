@@ -149,6 +149,30 @@ function serializeInvoice(invoice, latestPayment) {
   };
 }
 
+/**
+ * Total unpaid balance a customer is carrying across all their vehicles —
+ * the figure a credit limit is checked against.
+ */
+async function sumOutstandingForCustomer(customerId) {
+  const vehicles = await vehicleRepository.model.find({ customerId }).select("_id");
+  if (vehicles.length === 0) return 0;
+  const orders = await repairOrderRepository.model
+    .find({ vehicleId: { $in: vehicles.map((v) => v._id) } })
+    .select("_id");
+  if (orders.length === 0) return 0;
+
+  const rows = await invoiceRepository.aggregate([
+    {
+      $match: {
+        repairOrderId: { $in: orders.map((o) => o._id) },
+        status: { $in: ["unpaid", "partiallyPaid"] },
+      },
+    },
+    { $group: { _id: null, outstanding: { $sum: { $subtract: ["$total", "$amountPaid"] } } } },
+  ]);
+  return rows[0]?.outstanding || 0;
+}
+
 async function getLatestPayments(invoiceIds) {
   if (invoiceIds.length === 0) {
     return new Map();
@@ -299,6 +323,38 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
   const issuedAt = new Date();
   const dueAt = new Date(issuedAt.getTime() + INVOICE_TERM_DAYS * 24 * 60 * 60 * 1000);
 
+  // Snapshot who and what is being billed, so the invoice stays correct even
+  // if the customer or vehicle record changes later. A company customer's tax
+  // identity (needed on a VAT invoice) comes from their profile; the vehicle
+  // and odometer make the invoice a complete record of the job.
+  const vehicle = await vehicleRepository.model
+    .findById(order.vehicleId)
+    .populate("customerId", "fullName taxCode billingName billingAddress creditLimit");
+  const customer = vehicle?.customerId;
+
+  // Credit control. A creditLimit of 0 is an ordinary cash customer — no credit
+  // extended, and the paid-before-handover gate already covers them, so the
+  // check is skipped. A trade customer with a positive limit may carry unpaid
+  // invoices up to it; once their outstanding balance has reached the limit,
+  // more billable work is refused until they settle up (BR-ACC-03).
+  if (customer?.creditLimit > 0) {
+    const outstanding = await sumOutstandingForCustomer(customer._id);
+    if (outstanding >= customer.creditLimit) {
+      throw new ApiError(
+        409,
+        `Customer is at their credit limit (${outstanding.toLocaleString("vi-VN")} ₫ outstanding of ${customer.creditLimit.toLocaleString("vi-VN")} ₫). Settle outstanding invoices before billing more work.`,
+      );
+    }
+  }
+  const billing = {
+    customerName: customer?.billingName || customer?.fullName,
+    taxCode: customer?.taxCode,
+    address: customer?.billingAddress,
+    vehiclePlate: vehicle?.licensePlate,
+    vehicleVin: vehicle?.chassisNumber,
+    odometer: vehicle?.lastKnownMileage,
+  };
+
   const invoice = await invoiceRepository.create({
     code: await generateCode("INV"),
     repairOrderId,
@@ -311,6 +367,7 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     status: "unpaid",
     issuedAt,
     dueAt,
+    billing,
     quoteId: order.quoteId || undefined,
     quotedTotal: order.quotedTotal ?? undefined,
   });
@@ -328,6 +385,55 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     details: `${invoice.code || formatDisplayId("INV", invoice._id)} generated for ${total.toLocaleString("vi-VN")} ₫`,
   });
 
+  return { invoice: serializeInvoice(invoice, null) };
+}
+
+/**
+ * Issues a legal e-invoice for an existing invoice — DEMO ONLY.
+ *
+ * Vietnam requires a registered e-invoice carrying a symbol, a number and a
+ * lookup code, normally minted by an authorised provider that reports to the
+ * tax authority. This mints those values locally so the full lifecycle (issue,
+ * then adjust/replace on a correction) can be shown end to end, WITHOUT any
+ * real external call — the scope decision for this project. Swapping the mint
+ * step for a provider SDK is the only change a real integration would need.
+ */
+export async function issueEInvoice(id, actorId) {
+  if (!mongoose.isValidObjectId(id)) {
+    throw new ApiError(400, "invoice id is not a valid id");
+  }
+
+  const invoice = await invoiceRepository.model.findById(id);
+  if (!invoice) {
+    throw new ApiError(404, "invoice not found");
+  }
+  if (invoice.einvoice?.status && invoice.einvoice.status !== "none") {
+    throw new ApiError(409, `An e-invoice has already been issued for this invoice (${invoice.einvoice.status})`);
+  }
+
+  const now = new Date();
+  // Symbol format mirrors the real one (e.g. "C26TAA"): 1 letter + 2-digit
+  // year + a series code. The number is a monthly sequence, the lookup code a
+  // random token a customer could "verify" against the mock portal.
+  const seq = await generateCode("EINV", { date: now, pad: 8 });
+  invoice.einvoice = {
+    status: "issued",
+    symbol: `C${String(now.getFullYear()).slice(-2)}TAA`,
+    number: seq.split("-").pop(),
+    lookupCode: `${Math.random().toString(36).slice(2, 10)}${Math.random().toString(36).slice(2, 6)}`.toUpperCase(),
+    issuedAt: now,
+  };
+  await invoice.save();
+
+  await logAudit({
+    action: "invoiceGenerated",
+    actorId,
+    invoiceId: invoice._id,
+    repairOrderId: invoice.repairOrderId,
+    details: `E-invoice issued: ${invoice.einvoice.symbol} No.${invoice.einvoice.number} (lookup ${invoice.einvoice.lookupCode})`,
+  });
+
+  await invoice.populate(invoicePopulate);
   return { invoice: serializeInvoice(invoice, null) };
 }
 

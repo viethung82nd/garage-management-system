@@ -108,6 +108,40 @@ const invoiceSchema = new Schema(
     sentAt: {
       type: Date,
     },
+
+    // ===== Snapshot of who/what was billed =====
+    // Denormalised at generation time so the invoice reads correctly forever,
+    // even if the customer or vehicle record changes later — the same pattern
+    // the repair order uses for its line items.
+    billing: {
+      customerName: { type: String, trim: true },
+      taxCode: { type: String, trim: true },
+      address: { type: String, trim: true },
+      vehiclePlate: { type: String, trim: true },
+      vehicleVin: { type: String, trim: true },
+      odometer: { type: Number, min: 0 },
+    },
+
+    // ===== E-invoice (demo) =====
+    // Vietnam requires a legal e-invoice with a symbol, a number and a lookup
+    // code. This is a self-contained mock — it mints those and a fake lookup
+    // code so the whole issue/adjust/replace flow can be demonstrated, without
+    // calling a real tax-authority provider.
+    einvoice: {
+      // "issued" once minted, "adjusted"/"replaced" if later corrected.
+      status: {
+        type: String,
+        enum: ["none", "issued", "adjusted", "replaced", "cancelled"],
+        default: "none",
+      },
+      symbol: { type: String, trim: true },
+      number: { type: String, trim: true },
+      lookupCode: { type: String, trim: true },
+      issuedAt: { type: Date },
+      // For an adjustment/replacement, the invoice it supersedes — the
+      // backward link a correction must carry.
+      replacesInvoiceId: { type: Schema.Types.ObjectId, ref: "Invoice" },
+    },
     // Snapshot references to the ServiceQuote this invoice was generated
     // from, so the accountant can always see what was originally quoted.
     quoteId: {

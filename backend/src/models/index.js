@@ -28,3 +28,4 @@ export * from "./inventory-transaction.model.js";
 export * from "./stock-reservation.model.js";
 export * from "./supplier.model.js";
 export * from "./purchase-order.model.js";
+export * from "./time-log.model.js";

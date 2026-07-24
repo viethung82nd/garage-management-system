@@ -3,6 +3,7 @@ import { serviceRepository } from "../repositories/service.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { invoiceRepository } from "../repositories/invoice.repository.js";
+import { TimeLogModel } from "../models/index.js";
 import {
   REPAIR_ORDER_STATUSES,
   ORDER_SERVICE_STATUSES,
@@ -850,4 +851,157 @@ export async function issuePartsForOrder(id, actorId) {
     message: `Issued ${result.issued.length} part line(s) to the repair order`,
     issued: result.issued,
   };
+}
+
+// ============= TECHNICIAN TIME LOGGING (Phase 4a) =============
+//
+// clockOn/clockOff bracket a single span of hands-on work by one technician
+// on one order (optionally one service line) — see time-log.model.js for why
+// this exists: none of the workshop's real KPIs (technician productivity,
+// technician efficiency, effective labour rate) can be computed from the
+// order's own startedAt/completedAt alone, since those span waiting time too.
+//
+// Time accrued while an order sits in a WAITING_STATUSES state is never
+// captured here. That's not a filter applied afterwards — clockOn refuses
+// outright to open a span while the order is waitingParts/waitingCustomer/
+// onHold, so there is never an open time log to mis-attribute to the
+// technician in the first place. That's what keeps waiting time out of
+// technician productivity instead of it having to be subtracted back out of
+// the numbers later.
+
+/**
+ * Technician clocks on to start hands-on work on a repair order (optionally
+ * pinned to one service line). Opens a TimeLog row; the first clock-on on a
+ * still-pending order also moves it into "inProgress".
+ */
+export async function clockOn(orderId, { lineIndex, note }, technicianId) {
+  if (!orderId.match(OID_RE)) {
+    throw new ApiError(400, "Invalid repair order ID format");
+  }
+
+  const order = await repairOrderRepository.findById(orderId);
+  if (!order) {
+    throw new ApiError(404, "Repair order not found");
+  }
+
+  if (TERMINAL_ORDER_STATUSES.includes(order.status)) {
+    throw new ApiError(409, `Cannot clock on to a ${order.status} repair order`);
+  }
+
+  // The whole point of the waiting/on-hold states is that the vehicle is
+  // parked on something outside the workshop's control — a technician cannot
+  // be "working" it while it's there, so no time log may open in this state.
+  if (WAITING_STATUSES.includes(order.status)) {
+    throw new ApiError(
+      409,
+      `Cannot clock on to a repair order that is ${order.status} — resolve the wait before logging time on it`,
+    );
+  }
+
+  // One pair of hands can't be on two jobs at once. This checks across ALL
+  // orders, not just this one, so a technician can't forget to clock off job
+  // A before clocking on to job B.
+  const openElsewhere = await TimeLogModel.findOne({ technicianId, endedAt: null });
+  if (openElsewhere) {
+    throw new ApiError(
+      409,
+      "You already have an open time log running; clock off it before starting another",
+    );
+  }
+
+  let normalizedLineIndex;
+  if (lineIndex !== undefined && lineIndex !== null) {
+    normalizedLineIndex = Number(lineIndex);
+    if (
+      !Number.isInteger(normalizedLineIndex) ||
+      normalizedLineIndex < 0 ||
+      normalizedLineIndex >= order.services.length
+    ) {
+      throw new ApiError(400, "Invalid lineIndex");
+    }
+  }
+
+  const timeLog = await TimeLogModel.create({
+    repairOrderId: order._id,
+    technicianId,
+    ...(normalizedLineIndex !== undefined ? { lineIndex: normalizedLineIndex } : {}),
+    startedAt: new Date(),
+    endedAt: null,
+    ...(note?.trim() ? { note: note.trim() } : {}),
+  });
+
+  // A fresh order's first hands-on work is what actually starts the job.
+  // An order that's already inProgress/readyForDelivery/etc. is left alone —
+  // a second technician (or the same one) clocking on to another line must
+  // not reset or otherwise disturb its current status.
+  if (order.status === "pending") {
+    const previousStatus = order.status;
+    order.status = "inProgress";
+    if (!order.startedAt) order.startedAt = new Date();
+    await order.save();
+
+    await recordStatusChange({
+      repairOrderId: order._id,
+      from: previousStatus,
+      to: order.status,
+      changedBy: technicianId,
+      reason: "Technician clocked on",
+    });
+  }
+
+  return timeLog;
+}
+
+/**
+ * Technician clocks off, closing their own open time log on this order.
+ * Purely "hands off for now" — it deliberately does not touch the order's
+ * status. Marking the work done is a separate, explicit action
+ * (updateRepairProgress), so a technician stepping away for a break doesn't
+ * accidentally complete or otherwise progress the job.
+ */
+export async function clockOff(orderId, { pauseReason, note }, technicianId) {
+  if (!orderId.match(OID_RE)) {
+    throw new ApiError(400, "Invalid repair order ID format");
+  }
+
+  const timeLog = await TimeLogModel.findOne({
+    repairOrderId: orderId,
+    technicianId,
+    endedAt: null,
+  });
+  if (!timeLog) {
+    throw new ApiError(409, "You have no open time log on this repair order");
+  }
+
+  const endedAt = new Date();
+  const durationMinutes = Math.max(0, Math.round((endedAt - timeLog.startedAt) / 60000));
+
+  timeLog.endedAt = endedAt;
+  timeLog.durationMinutes = durationMinutes;
+  if (pauseReason !== undefined) timeLog.pauseReason = pauseReason?.trim() || undefined;
+  if (note !== undefined) timeLog.note = note?.trim() || undefined;
+
+  await timeLog.save();
+
+  return timeLog;
+}
+
+/** All time logs for a repair order, plus the total minutes across closed spans. */
+export async function getOrderTimeLogs(orderId) {
+  if (!orderId.match(OID_RE)) {
+    throw new ApiError(400, "Invalid repair order ID format");
+  }
+
+  const order = await repairOrderRepository.findById(orderId);
+  if (!order) {
+    throw new ApiError(404, "Repair order not found");
+  }
+
+  const timeLogs = await TimeLogModel.find({ repairOrderId: orderId })
+    .populate("technicianId", "fullName")
+    .sort({ startedAt: 1 });
+
+  const totalMinutes = timeLogs.reduce((sum, log) => sum + (log.durationMinutes || 0), 0);
+
+  return { timeLogs, totalMinutes };
 }

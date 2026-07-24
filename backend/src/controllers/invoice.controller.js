@@ -31,3 +31,9 @@ export async function sendInvoiceToCustomer(req, res) {
   const result = await invoiceService.sendInvoiceToCustomer(req.params.id, req.user.sub);
   res.json(result);
 }
+
+/** POST /api/invoices/:id/einvoice — issue the legal e-invoice (demo mint). */
+export async function issueEInvoice(req, res) {
+  const result = await invoiceService.issueEInvoice(req.params.id, req.user.sub);
+  res.json(result);
+}

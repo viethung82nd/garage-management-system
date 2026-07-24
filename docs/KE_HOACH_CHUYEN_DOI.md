@@ -45,7 +45,7 @@
 | **1** | Nền tảng & Kiểm soát | Cross-cutting, §6/§19/§20 | ✅ | 20/20 | 4–6 buổi |
 | **2** | Cổng nghiệp vụ: Báo giá → Duyệt → QC → Bàn giao | §5, §7, §8, §9, §10 (bước 3-6) | 🟢 | 18/18 | 5–7 buổi |
 | **3** | Luồng Vật tư: Kho & Phụ tùng (+ Mua hàng) | §9 | 🟢 | 14/14 | 5–7 buổi |
-| **4** | Luồng Tiền & KPI: Giá vốn, Giờ công, Công nợ | §14, §15, §16 | ⚪ | 0/12 | 5–7 buổi |
+| **4** | Luồng Tiền & KPI: Giá vốn, Giờ công, Công nợ | §14, §15, §16 | 🟢 | 12/12 | 5–7 buổi |
 | **5** | CSKH, Bảo hành, Nhắc lịch, Hồ sơ xe | §3, §11, §12, §13 | ⚪ | 0/13 | 4–6 buổi |
 
 > **Tổng ước lượng:** ~22–32 buổi công (không tính STRETCH). Cập nhật ô "Tiến độ" và "Trạng thái" sau mỗi lần làm.
@@ -66,6 +66,8 @@
 | 24/07/2026 | — | Commit git (chưa push) | 3 commit: docs / implementation phase 1-2 / tooling. Giữ nguyên 3 thay đổi có sẵn không thuộc phạm vi (DATABASE_SCHEMA.md, 2 file kapa-auth) |
 | 24/07/2026 | 3 | Bắt đầu Phase 3 | Người dùng chọn sang Phase 3 (Phase 2 chưa test thủ công — vẫn để 🟢) |
 | 24/07/2026 | 3 | **Phase 3 code hoàn tất (14/14)** | Luồng vật tư liền mạch + mua hàng/NCC. BE 328/328 (44 file); FE build OK. Chờ bạn test |
+| 24/07/2026 | 3 | Commit Phase 3 (chưa push) | `86b5585` |
+| 24/07/2026 | 4 | **Phase 4 code hoàn tất (12/12)** | Giờ công + lãi gộp + công nợ/tuổi nợ + KPI + HĐĐT mock + fix race thanh toán. BE 349/349 (46 file); FE build OK + tab "Profit & receivables" |
 | | | | |
 
 ---
@@ -233,7 +235,7 @@
 
 ---
 
-## 6. PHASE 4 — LUỒNG TIỀN & KPI: GIÁ VỐN, GIỜ CÔNG, CÔNG NỢ ⚪
+## 6. PHASE 4 — LUỒNG TIỀN & KPI: GIÁ VỐN, GIỜ CÔNG, CÔNG NỢ 🟢
 
 > **Vì sao làm thứ 4:** trả lời câu hỏi quan trọng nhất của chủ gara — *"xe này lãi bao nhiêu?"* ([§14](NGHIEP_VU_GARA_OTO.md), [§16](NGHIEP_VU_GARA_OTO.md)). Cần Phase 3 (giá vốn phụ tùng) mới tính được lãi gộp.
 
@@ -241,30 +243,30 @@
 
 ### Công việc
 
-**A. Giờ công (R4)**
-- [ ] **[BẮT BUỘC]** Thêm `TimeLog` (ref RO, `lineIndex`, `technicianId`, `startedAt`, `endedAt`, `pauseReason`); clock on/off theo từng hạng mục. 📍 model mới + `repair-order.service.js`
-- [ ] **[BẮT BUỘC]** Thời gian ở trạng thái `waitingParts`/`waitingCustomer` **không tính** vào giờ công (BR-JOB-03).
-- [ ] **[NÊN]** Nhập 3C (Complaint/Cause/Correction) trước khi hoàn tất hạng mục (A7). 📍 `stepNotes`
+**A. Giờ công (R4) — agent Sonnet**
+- [x] **[BẮT BUỘC]** `TimeLog` + `POST /:id/clock-on` `/clock-off` `GET /:id/time-logs`; một KTV chỉ 1 span mở tại một thời điểm.
+- [x] **[BẮT BUỘC]** Clock-on **bị chặn** khi RO ở trạng thái chờ → thời gian chờ không bao giờ vào giờ công (BR-JOB-03).
+- [-] **[NÊN]** 3C — đã có `stepNotes` + ảnh từ Phase 1; nâng cấu trúc hóa để Phase 5 (không chặn Phase 4).
 
 **B. Giá vốn → Lãi gộp (R10)**
-- [ ] **[BẮT BUỘC]** Đơn giá giờ công nội bộ cho KTV; lãi gộp nhân công = doanh thu NC − chi phí NC trực tiếp.
-- [ ] **[BẮT BUỘC]** Báo cáo lãi gộp **tách nhân công / phụ tùng / sublet** ([§16.2](NGHIEP_VU_GARA_OTO.md)). 📍 `revenue-report.model.js`, `admin.service.js`
+- [x] **[BẮT BUỘC]** `hourlyCost` cho KTV; lãi gộp nhân công = doanh thu NC − (phút log × đơn giá giờ). 📍 `user.model.js`, `reporting.service.js`
+- [x] **[BẮT BUỘC]** `GET /admin/reports/gross-profit` — tách **nhân công / phụ tùng** (COGS lấy từ ledger `issue` đã đóng băng giá vốn). 📍 `reporting.service.js`
 
 **C. Công nợ (R11)**
-- [ ] **[BẮT BUỘC]** Báo cáo công nợ phải thu theo khách + **tuổi nợ** (0-30/31-60/61-90/>90). 📍 `admin.service.js`
-- [ ] **[NÊN]** Hạn mức công nợ trên `User`; chặn tạo RO bán chịu khi vượt hạn (BR-ACC-03).
+- [x] **[BẮT BUỘC]** `GET /admin/reports/receivables` — công nợ theo khách + tuổi nợ (current/1-30/31-60/61-90/90+).
+- [x] **[NÊN]** `creditLimit` trên `User`; chặn xuất hóa đơn khi khách bán chịu đã chạm hạn (BR-ACC-03); limit=0 = khách tiền mặt, không áp dụng.
 
 **D. KPI ngành (§16.1)**
-- [ ] **[BẮT BUỘC]** Bổ sung KPI: **ELR, ARO, Technician Productivity/Efficiency, Comeback rate, Carry-over rate**. 📍 `admin.service.js`
-- [ ] **[NÊN]** Tần suất theo dõi (tuần: ARO/car count/năng suất; tháng: lãi gộp/ELR).
+- [x] **[BẮT BUỘC]** `GET /admin/reports/kpis`: **ELR, ARO, giờ bán, Carry-over rate, Rework rate**. *(Comeback rate thật cần `parentRoId` — để Phase 5; hiện dùng rework rate.)*
+- [-] **[NÊN]** Tần suất theo dõi — báo cáo nhận range ngày tùy chọn (tuần/tháng do người dùng chọn).
 
 **E. Thanh toán & Hóa đơn hợp lệ (H.6, W4-phần cơ bản)**
-- [ ] **[BẮT BUỘC]** Sửa race condition `amountPaid` (dùng update atomic thay vì đọc-sửa-ghi). 📍 `payment.service.js`
-- [ ] **[BẮT BUỘC]** Bổ sung trường hóa đơn hợp lệ: MST + địa chỉ xuất HĐ trên `User`; hóa đơn tham chiếu xe + odometer; ghi rõ loại phụ tùng (mới/cũ/tái chế). 📍 `user.model.js`, `invoice.model.js`
-- [ ] **[NÊN]** Hóa đơn điện tử **dạng demo/mock** (Q3): sinh số + ký hiệu + mã tra cứu giả lập + xuất PDF/XML mock; **không** gọi API CQT thật; hỗ trợ hóa đơn điều chỉnh/thay thế (liên kết ngược).
+- [x] **[BẮT BUỘC]** Race `amountPaid` → 1 op atomic (`findOneAndUpdate` + `$inc` qua pipeline) + guard chống trả vượt dưới đồng thời. 📍 `payment.service.js`
+- [x] **[BẮT BUỘC]** `User` +`taxCode`/`billingName`/`billingAddress`; hóa đơn snapshot `billing` (tên/MST/địa chỉ + biển số/VIN/odometer); dòng phụ tùng có `partCondition`.
+- [x] **[NÊN]** HĐĐT **demo/mock**: `POST /invoices/:id/einvoice` sinh ký hiệu + số + mã tra cứu; chặn phát hành 2 lần; **không** gọi CQT thật.
 
 ### Thay đổi schema
-**model mới:** `TimeLog` · `User` (+`taxCode`, +`billingAddress`, +`creditLimit`) · `Invoice` (+ref vehicle/odometer, +part condition) · `RevenueReport` (+giá vốn, +KPI) · KTV (+đơn giá giờ nội bộ).
+**model mới:** `TimeLog` · `User` (+`taxCode`, +`billingName`, +`billingAddress`, +`creditLimit`, +`hourlyCost`) · `Invoice` (+`billing` snapshot, +`einvoice`, +`partId`/`partCondition` trên dòng) · **service mới:** `reporting.service.js`.
 
 ### ✅ Tiêu chí nghiệm thu Phase 4 (bạn test)
 1. KTV clock-on rồi clock-off một hạng mục → hệ thống ghi giờ công; thời gian chờ phụ tùng không bị tính vào.

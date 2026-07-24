@@ -60,6 +60,40 @@ const userSchema = new Schema(
       type: Boolean,
       default: true,
     },
+
+    // ===== Billing identity (business/fleet customers) =====
+    // Required on a VAT invoice to a company; a walk-in individual has none of
+    // these, which is exactly why they're optional.
+    taxCode: {
+      type: String,
+      trim: true,
+    },
+    billingName: {
+      type: String,
+      trim: true,
+    },
+    billingAddress: {
+      type: String,
+      trim: true,
+    },
+    // Trade customers are often billed on terms. This caps how much unpaid
+    // invoicing they may carry; 0 means cash-only (no credit), the safe default
+    // for an ordinary customer.
+    creditLimit: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
+
+    // ===== Technician labour costing =====
+    // Internal cost of an hour of this technician's time — the basis for labour
+    // gross profit (labour revenue minus what the labour actually costs us).
+    // Only meaningful for the technician role.
+    hourlyCost: {
+      type: Number,
+      min: 0,
+      default: 0,
+    },
     isEmailVerified: {
       type: Boolean,
       default: false,

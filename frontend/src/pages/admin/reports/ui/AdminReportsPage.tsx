@@ -26,6 +26,7 @@ import {
 } from '../api/reportsApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
 import { InlineBanner, StatCard } from '../../../../widgets/backoffice-shell'
+import { ProfitAndReceivablesPanel } from './ProfitAndReceivablesPanel'
 
 const { RangePicker } = DatePicker
 
@@ -199,7 +200,7 @@ function TableCard({ title, extra, children }: { title: string; extra: ReactNode
   )
 }
 
-type TabKey = 'service' | 'payment' | 'technician'
+type TabKey = 'service' | 'payment' | 'technician' | 'profit'
 
 export default function AdminReportsPage() {
   const { token } = useAuth()
@@ -213,11 +214,20 @@ export default function AdminReportsPage() {
   const serviceRef = useRef<HTMLDivElement | null>(null)
   const paymentRef = useRef<HTMLDivElement | null>(null)
   const technicianRef = useRef<HTMLDivElement | null>(null)
-  const tabRefs: Record<TabKey, typeof serviceRef> = { service: serviceRef, payment: paymentRef, technician: technicianRef }
+  // The profit tab has its own self-contained cards and no CSV/PDF export, so
+  // it keeps an (unused) ref only to satisfy the Record<TabKey> shape.
+  const profitRef = useRef<HTMLDivElement | null>(null)
+  const tabRefs: Record<TabKey, typeof serviceRef> = {
+    service: serviceRef,
+    payment: paymentRef,
+    technician: technicianRef,
+    profit: profitRef,
+  }
   const tabLabels: Record<TabKey, string> = {
     service: 'revenue-by-service',
     payment: 'revenue-by-payment-method',
     technician: 'technician-performance',
+    profit: 'profit-and-receivables',
   }
 
   async function loadReport(start: Dayjs, end: Dayjs) {
@@ -572,6 +582,22 @@ export default function AdminReportsPage() {
                       scroll={{ x: 640 }}
                     />
                   </TableCard>
+                </div>
+              ),
+            },
+            {
+              key: 'profit',
+              label: (
+                <span className="flex items-center gap-2 px-1">
+                  <RiseOutlined /> Profit &amp; receivables
+                </span>
+              ),
+              children: (
+                <div ref={profitRef}>
+                  <ProfitAndReceivablesPanel
+                    startDate={range[0].format('YYYY-MM-DD')}
+                    endDate={range[1].format('YYYY-MM-DD')}
+                  />
                 </div>
               ),
             },

@@ -9,6 +9,11 @@ import {
   listUsers,
   deactivateUser,
 } from "../controllers/admin.controller.js";
+import {
+  getGrossProfitReport,
+  getReceivablesReport,
+  getWorkshopKpis,
+} from "../controllers/reporting.controller.js";
 
 export const adminRouter = Router();
 
@@ -55,4 +60,24 @@ adminRouter.get(
   requireAuth,
   requireRole("admin", "accountant"),
   catchAsync(getTechnicianPerformance)
+);
+
+// Phase 4 management reports: profit, receivables and workshop KPIs.
+adminRouter.get(
+  "/reports/gross-profit",
+  requireAuth,
+  requireRole("admin", "accountant"),
+  catchAsync(getGrossProfitReport)
+);
+adminRouter.get(
+  "/reports/receivables",
+  requireAuth,
+  requireRole("admin", "accountant"),
+  catchAsync(getReceivablesReport)
+);
+adminRouter.get(
+  "/reports/kpis",
+  requireAuth,
+  requireRole("admin", "accountant"),
+  catchAsync(getWorkshopKpis)
 );

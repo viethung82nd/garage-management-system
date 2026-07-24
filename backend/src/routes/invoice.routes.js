@@ -7,6 +7,7 @@ import {
   listInvoices,
   listMyInvoices,
   sendInvoiceToCustomer,
+  issueEInvoice,
 } from "../controllers/invoice.controller.js";
 
 export const invoiceRouter = Router();
@@ -45,4 +46,12 @@ invoiceRouter.patch(
   requireAuth,
   requireRole("accountant", "admin"),
   catchAsync(sendInvoiceToCustomer),
+);
+
+// Issue the legal e-invoice (demo mint — no real tax-authority call).
+invoiceRouter.post(
+  "/:id/einvoice",
+  requireAuth,
+  requireRole("accountant", "admin"),
+  catchAsync(issueEInvoice),
 );

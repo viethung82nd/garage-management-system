@@ -19,6 +19,9 @@ import {
   forwardToAccountant,
   deliverVehicle,
   issuePartsForOrder,
+  clockOn,
+  clockOff,
+  getOrderTimeLogs,
 } from "../controllers/repair-order.controller.js";
 
 export const repairOrderRouter = Router();
@@ -156,4 +159,33 @@ repairOrderRouter.post(
   requireAuth,
   requireRole("partsStaff", "serviceAdvisor", "admin"),
   catchAsync(issuePartsForOrder),
+);
+
+// ============= TECHNICIAN TIME LOGGING (Phase 4a) =============
+
+// Technician clocks on to start hands-on work — refused while the order is
+// waiting/on-hold or terminal, and refused if the technician already has
+// another job's clock left running. See repair-order.service.js#clockOn.
+repairOrderRouter.post(
+  "/:id/clock-on",
+  requireAuth,
+  requireRole("technician", "admin"),
+  catchAsync(clockOn),
+);
+
+// Technician clocks off, closing their own open time log on this order. Does
+// not change the order's status — that stays a separate, explicit action.
+repairOrderRouter.post(
+  "/:id/clock-off",
+  requireAuth,
+  requireRole("technician", "admin"),
+  catchAsync(clockOff),
+);
+
+// All time logs for a repair order, plus total closed minutes.
+repairOrderRouter.get(
+  "/:id/time-logs",
+  requireAuth,
+  requireRole("technician", "serviceAdvisor", "admin"),
+  catchAsync(getOrderTimeLogs),
 );

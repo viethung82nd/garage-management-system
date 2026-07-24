@@ -146,3 +146,33 @@ export async function issuePartsForOrder(req, res) {
   const result = await repairOrderService.issuePartsForOrder(req.params.id, req.user.sub);
   res.json(result);
 }
+
+// ============= TECHNICIAN TIME LOGGING =============
+
+/**
+ * POST /api/repair-orders/:id/clock-on
+ * Technician clocks on to start hands-on work on a repair order (optionally
+ * one service line).
+ */
+export async function clockOn(req, res) {
+  const timeLog = await repairOrderService.clockOn(req.params.id, req.body ?? {}, req.user.sub);
+  res.status(201).json(timeLog);
+}
+
+/**
+ * POST /api/repair-orders/:id/clock-off
+ * Technician clocks off, closing their own open time log on this order.
+ */
+export async function clockOff(req, res) {
+  const timeLog = await repairOrderService.clockOff(req.params.id, req.body ?? {}, req.user.sub);
+  res.json(timeLog);
+}
+
+/**
+ * GET /api/repair-orders/:id/time-logs
+ * All time logs for a repair order, plus the total minutes across closed spans.
+ */
+export async function getOrderTimeLogs(req, res) {
+  const result = await repairOrderService.getOrderTimeLogs(req.params.id);
+  res.json(result);
+}
