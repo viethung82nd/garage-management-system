@@ -23,6 +23,7 @@ const ServicesPage = lazy(() => import('../pages/services').then((module) => ({ 
 const AdminUsersPage = lazy(() => import('../pages/admin/users').then((module) => ({ default: module.AdminUsersPage })))
 const AdminServicesPage = lazy(() => import('../pages/admin/services').then((module) => ({ default: module.AdminServicesPage })))
 const AdminPartsPage = lazy(() => import('../pages/admin/parts').then((module) => ({ default: module.AdminPartsPage })))
+const AdminPurchasingPage = lazy(() => import('../pages/admin/purchasing').then((module) => ({ default: module.AdminPurchasingPage })))
 const AdminConfigPage = lazy(() => import('../pages/admin/config').then((module) => ({ default: module.AdminConfigPage })))
 const AdminReportsPage = lazy(() => import('../pages/admin/reports').then((module) => ({ default: module.AdminReportsPage })))
 const AdminProfilePage = lazy(() => import('../pages/admin/profile').then((module) => ({ default: module.AdminProfilePage })))
@@ -194,6 +195,18 @@ export default function App() {
             <RequireAuth>
               <RequireRole roles={['admin']}>
                 <AdminPartsPage />
+              </RequireRole>
+            </RequireAuth>
+          </Suspense>
+        }
+      />
+      <Route
+        path="/admin/purchasing"
+        element={
+          <Suspense fallback={<RouteFallback />}>
+            <RequireAuth>
+              <RequireRole roles={['admin']}>
+                <AdminPurchasingPage />
               </RequireRole>
             </RequireAuth>
           </Suspense>
