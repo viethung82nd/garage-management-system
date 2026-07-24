@@ -29,3 +29,6 @@ export * from "./stock-reservation.model.js";
 export * from "./supplier.model.js";
 export * from "./purchase-order.model.js";
 export * from "./time-log.model.js";
+export * from "./odometer-log.model.js";
+export * from "./reminder.model.js";
+export * from "./follow-up.model.js";

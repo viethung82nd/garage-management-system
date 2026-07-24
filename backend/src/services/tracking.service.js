@@ -40,6 +40,58 @@ function getStatusMeta(status) {
         progress: "1 / 5 steps",
         completedSteps: 1,
       };
+    // A car being re-worked has clearly been taken in and worked on — showing it
+    // as "awaiting intake" (the old fall-through) told the customer the opposite
+    // of what was happening.
+    case "reworkRequired":
+      return {
+        label: "Quality re-check in progress",
+        tone: "in-progress",
+        stageValue: "Addressing a quality issue before handover",
+        progress: "4 / 5 steps",
+        completedSteps: 4,
+      };
+    case "waitingParts":
+      return {
+        label: "Waiting for parts",
+        tone: "in-progress",
+        stageValue: "Sourcing the parts your repair needs",
+        progress: "3 / 5 steps",
+        completedSteps: 3,
+      };
+    case "waitingCustomer":
+      return {
+        label: "Waiting for your approval",
+        tone: "in-progress",
+        stageValue: "Awaiting your decision to proceed",
+        progress: "3 / 5 steps",
+        completedSteps: 3,
+      };
+    case "onHold":
+      return {
+        label: "On hold",
+        tone: "pending",
+        stageValue: "Temporarily paused",
+        progress: "3 / 5 steps",
+        completedSteps: 3,
+      };
+    case "readyForDelivery":
+      return {
+        label: "Ready for handover",
+        tone: "ready",
+        stageValue: "Quality check passed — ready to collect",
+        progress: "5 / 5 steps",
+        completedSteps: 5,
+      };
+    case "delivered":
+    case "closed":
+      return {
+        label: "Handed over",
+        tone: "completed",
+        stageValue: "Vehicle returned to the customer",
+        progress: "5 / 5 steps",
+        completedSteps: 5,
+      };
     case "pending":
     default:
       return {

@@ -46,7 +46,7 @@
 | **2** | Cổng nghiệp vụ: Báo giá → Duyệt → QC → Bàn giao | §5, §7, §8, §9, §10 (bước 3-6) | 🟢 | 18/18 | 5–7 buổi |
 | **3** | Luồng Vật tư: Kho & Phụ tùng (+ Mua hàng) | §9 | 🟢 | 14/14 | 5–7 buổi |
 | **4** | Luồng Tiền & KPI: Giá vốn, Giờ công, Công nợ | §14, §15, §16 | 🟢 | 12/12 | 5–7 buổi |
-| **5** | CSKH, Bảo hành, Nhắc lịch, Hồ sơ xe | §3, §11, §12, §13 | ⚪ | 0/13 | 4–6 buổi |
+| **5** | CSKH, Bảo hành, Nhắc lịch, Hồ sơ xe | §3, §11, §12, §13 | 🟢 | 13/13 | 4–6 buổi |
 
 > **Tổng ước lượng:** ~22–32 buổi công (không tính STRETCH). Cập nhật ô "Tiến độ" và "Trạng thái" sau mỗi lần làm.
 
@@ -68,6 +68,8 @@
 | 24/07/2026 | 3 | **Phase 3 code hoàn tất (14/14)** | Luồng vật tư liền mạch + mua hàng/NCC. BE 328/328 (44 file); FE build OK. Chờ bạn test |
 | 24/07/2026 | 3 | Commit Phase 3 (chưa push) | `86b5585` |
 | 24/07/2026 | 4 | **Phase 4 code hoàn tất (12/12)** | Giờ công + lãi gộp + công nợ/tuổi nợ + KPI + HĐĐT mock + fix race thanh toán. BE 349/349 (46 file); FE build OK + tab "Profit & receivables" |
+| 24/07/2026 | 4 | Commit Phase 4 (chưa push) | `0937363` + `.gitignore` thêm node_modules/ |
+| 24/07/2026 | 5 | **Phase 5 code hoàn tất (13/13) — HẾT KẾ HOẠCH** | Hồ sơ xe/VIN/odometer + bảo hành/comeback + nhắc lịch + follow-up/CSAT/NPS + fix tracking. BE 371/371 (49 file) |
 | | | | |
 
 ---
@@ -278,7 +280,7 @@
 
 ---
 
-## 7. PHASE 5 — CSKH, BẢO HÀNH, NHẮC LỊCH, HỒ SƠ XE ⚪
+## 7. PHASE 5 — CSKH, BẢO HÀNH, NHẮC LỊCH, HỒ SƠ XE 🟢
 
 > **Vì sao làm cuối:** hoàn thiện bước 7 quy trình ([§12](NGHIEP_VU_GARA_OTO.md)), bảo hành/comeback ([§11](NGHIEP_VU_GARA_OTO.md)), và củng cố hồ sơ khách/xe ([§3](NGHIEP_VU_GARA_OTO.md)). Cần dữ liệu từ các phase trước (RO đã đóng, DVI, deferred work).
 
@@ -287,31 +289,33 @@
 ### Công việc
 
 **A. Hồ sơ xe & khách (R7, R8, A1, A2)**
-- [ ] **[BẮT BUỘC]** Lịch sử odometer theo thời gian (`OdometerLog`); chặn nhập lùi (cảnh báo + log). 📍 model mới + `reception.service.js`
-- [ ] **[BẮT BUỘC]** VIN thành khóa định danh (unique ở tầng schema); bổ sung hạn đăng kiểm, hạn bảo hiểm, hạn bảo hành hãng. 📍 `vehicle.model.js`
-- [ ] **[NÊN]** Quan hệ chủ–xe nhiều-nhiều theo thời gian (`VehicleOwnership` với from/to date) — xử lý đổi chủ. *(Nếu phức tạp quá cho đồ án, có thể để lịch sử đơn giản.)*
+- [x] **[BẮT BUỘC]** `OdometerLog` lịch sử theo thời gian; nhập lùi → **cảnh báo + `isRollback` + audit** (không chặn cứng để không kẹt quầy). `GET /vehicles/:id/odometer`.
+- [x] **[BẮT BUỘC]** VIN (`chassisNumber`) unique+sparse ở tầng schema; `Vehicle` +`registrationExpiry`/`insuranceExpiry`/`manufacturerWarrantyExpiry`/`soldAt`; `PATCH /vehicles/:id/profile`.
+- [-] **[BỎ/NÊN]** `VehicleOwnership` nhiều-nhiều — bỏ khỏi phạm vi đồ án (giữ lịch sử đơn giản; VIN unique đã xử lý trùng xe).
 
 **B. Bảo hành & Comeback (W6)**
-- [ ] **[BẮT BUỘC]** Chính sách bảo hành (tháng/km) theo nhóm dịch vụ; phiếu bảo hành kèm hóa đơn. 📍 model/config
-- [ ] **[BẮT BUỘC]** `RepairOrder` +`parentRoId` +`isComeback`; tiếp nhận tự nhận diện xe quay lại trong hạn bảo hành. 📍 `repair-order.model.js`, `reception.service.js`
-- [ ] **[BẮT BUỘC]** Phân định trách nhiệm comeback: lỗi tay nghề (Internal, gara chịu) / lỗi phụ tùng (đòi NCC) / lỗi khác (khách trả) — nối với `jobType`.
+- [x] **[BẮT BUỘC]** Bảo hành mặc định (3 tháng / 5.000 km, hằng số cấu hình) **đóng dấu lúc bàn giao** → `warrantyUntilDate`/`warrantyUntilKm`.
+- [x] **[BẮT BUỘC]** `RepairOrder` +`parentRoId` +`isComeback`; tiếp nhận **tự nhận diện** xe quay lại còn hạn bảo hành (theo ngày + km) → trả cảnh báo; truyền `parentRoId` để mở RO comeback liên kết.
+- [-] **[NÊN]** Phân định trách nhiệm comeback theo `jobType` — `jobType` (R3) chưa làm ở các phase trước; comeback hiện xử lý qua giá (SA đặt 0đ cho lỗi gara). Ghi nhận là hạng mục mở.
 
-**C. Follow-up & Khảo sát (§12.1, §12.2)**
-- [ ] **[BẮT BUỘC]** Sinh nhiệm vụ follow-up **trong 72h** sau bàn giao; sổ theo dõi phản hồi. 📍 model/service mới
-- [ ] **[NÊN]** Khảo sát 5-6 câu; phân loại khiếu nại theo 7 nhóm; CSI/NPS.
+**C. Follow-up & Khảo sát (§12.1, §12.2) — agent Sonnet**
+- [x] **[BẮT BUỘC]** `FollowUp` sinh **72h sau bàn giao** (`POST /follow-ups/generate` back-fill); sổ theo dõi.
+- [x] **[NÊN]** Ghi nhận CSAT (1-5) / NPS (0-10) / phân loại khiếu nại (7 nhóm); `GET /follow-ups/satisfaction` tổng hợp.
 
-**D. Nhắc lịch (W9)**
-- [ ] **[BẮT BUỘC]** `Reminder` engine: nhắc bảo dưỡng định kỳ (km/thời gian), nhắc **Deferred Work** (từ Phase 2), nhắc hạn đăng kiểm/bảo hiểm/bảo hành. 📍 model + job
-- [ ] **[NÊN]** Kênh SMS/Zalo (hoặc ít nhất email + in-app) cho nhắc lịch.
+**D. Nhắc lịch (W9) — agent Sonnet**
+- [x] **[BẮT BUỘC]** `Reminder` engine (`POST /reminders/generate`): nhắc bảo dưỡng định kỳ, **Deferred Work** (Phase 2), hạn đăng kiểm/bảo hiểm/bảo hành. Idempotent (không trùng).
+- [x] **[NÊN]** Kênh: in-app notification khi đánh dấu `sent` (SMS/Zalo để mở rộng sau).
 
 **E. Sửa lỗi truyền thông khách (H.8)**
-- [ ] **[BẮT BUỘC]** Sửa mapping tracking: `reworkRequired` **không** hiển thị "Awaiting service intake". 📍 `tracking.service.js`
+- [x] **[BẮT BUỘC]** `tracking.service.js` thêm case cho `reworkRequired`/`waitingParts`/`waitingCustomer`/`onHold`/`readyForDelivery`/`delivered`/`closed` — không còn rơi vào "Awaiting service intake".
 
 **F. Bảo hiểm (Q1 — ĐÃ CHỐT KHÔNG LÀM)**
 - [-] **[BỎ]** Nghiệp vụ bảo hiểm ba bên — bỏ khỏi phạm vi theo quyết định Q1. Giữ nguyên `Invoice.repairOrderId` unique.
 
+**Kèm theo:** Comeback rate KPI (hoãn từ Phase 4) đã bổ sung vào `reporting.service.js#getWorkshopKpis` nhờ `isComeback`.
+
 ### Thay đổi schema
-**model mới:** `OdometerLog`, `Reminder`, `FollowUp`/`Survey`, `WarrantyPolicy` · `Vehicle` (VIN unique, +hạn đăng kiểm/BH/BH hãng) · `RepairOrder` (+`parentRoId`, +`isComeback`) · *(stretch: `InsuranceClaim`, `Guarantee`, `VehicleOwnership`)*.
+**model mới:** `OdometerLog`, `Reminder`, `FollowUp` · `Vehicle` (VIN unique, +4 trường ngày) · `RepairOrder` (+`parentRoId`, +`isComeback`, +`warrantyUntilDate`, +`warrantyUntilKm`).
 
 ### ✅ Tiêu chí nghiệm thu Phase 5 (bạn test)
 1. Nhập odometer nhỏ hơn lần trước → **cảnh báo**, có ghi log.

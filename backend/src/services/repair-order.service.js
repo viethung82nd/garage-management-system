@@ -21,6 +21,12 @@ import { issueReservedStock, releaseReservations } from "../utils/stock.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 
+// Default service-warranty window stamped at handover — whichever limit the
+// vehicle reaches first. Kept as constants so a shop can tune its guarantee in
+// one place.
+const WARRANTY_MONTHS = 3;
+const WARRANTY_KM = 5000;
+
 const vehicleCustomerPopulate = {
   path: "customerId",
   select: "fullName phone email accountType role",
@@ -788,10 +794,26 @@ export async function deliverVehicle(id, { note }, actorId) {
 
   const previousStatus = order.status;
 
+  // Stamp the service warranty at handover. It runs until whichever comes first
+  // — WARRANTY_MONTHS from today, or the current odometer + WARRANTY_KM — so a
+  // later return is checkable as "still covered" instead of being argued about.
+  const deliveredAt = new Date();
+  const warrantyUntilDate = new Date(deliveredAt);
+  warrantyUntilDate.setMonth(warrantyUntilDate.getMonth() + WARRANTY_MONTHS);
+  const vehicleForWarranty = await vehicleRepository.model
+    .findById(order.vehicleId)
+    .select("lastKnownMileage");
+  const warrantyUntilKm =
+    typeof vehicleForWarranty?.lastKnownMileage === "number"
+      ? vehicleForWarranty.lastKnownMileage + WARRANTY_KM
+      : undefined;
+
   await runInTransaction(async (session) => {
-    order.deliveredAt = new Date();
+    order.deliveredAt = deliveredAt;
     order.deliveredBy = actorId;
     order.status = "delivered";
+    order.warrantyUntilDate = warrantyUntilDate;
+    if (warrantyUntilKm !== undefined) order.warrantyUntilKm = warrantyUntilKm;
     await order.save({ session });
 
     // Safety net: normally the store issues parts explicitly (POST

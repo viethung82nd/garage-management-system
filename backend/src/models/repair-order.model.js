@@ -238,6 +238,33 @@ const repairOrderSchema = new Schema(
       ref: "User",
     },
 
+    // ===== Service warranty =====
+    // Stamped at delivery. The job is guaranteed until whichever of these comes
+    // first — a date, or an odometer reading. They're what makes a later return
+    // checkable as "still under warranty" rather than a judgement call.
+    warrantyUntilDate: {
+      type: Date,
+    },
+    warrantyUntilKm: {
+      type: Number,
+      min: 0,
+    },
+
+    // ===== Comeback =====
+    // A comeback is a customer returning because a previous repair didn't hold
+    // — distinct from reworkRequired, which is QC catching it BEFORE the car
+    // ever left. Set when this order was opened to redo earlier work; parentRoId
+    // points at that original order so the workmanship can be traced and the
+    // comeback rate measured.
+    parentRoId: {
+      type: Schema.Types.ObjectId,
+      ref: "RepairOrder",
+    },
+    isComeback: {
+      type: Boolean,
+      default: false,
+    },
+
     // Set by POST /:id/forward-to-accountant once QC has passed — the SA's
     // signal that this order is ready to be invoiced. Also doubles as the
     // "already forwarded" flag so the action isn't offered twice.

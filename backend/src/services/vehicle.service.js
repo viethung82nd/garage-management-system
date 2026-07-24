@@ -1,6 +1,7 @@
 import mongoose from "mongoose";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
+import { OdometerLogModel } from "../models/index.js";
 import { ApiError } from "../utils/apiError.js";
 
 const CUSTOMER_ROLES = ["onlineCustomer", "walkInCustomer"];
@@ -95,4 +96,51 @@ export async function createVehicle(body, user) {
     }
     throw err;
   }
+}
+
+const OID_RE = /^[0-9a-fA-F]{24}$/;
+
+/**
+ * Updates a vehicle's renewal dates — the registration, insurance and
+ * manufacturer-warranty expiries that drive the highest-value reminders. Kept
+ * to these fields (not the identity fields like plate/VIN) because that's what
+ * the front desk actually updates as a customer brings paperwork in.
+ */
+export async function updateVehicleProfile(id, body) {
+  if (!OID_RE.test(String(id))) {
+    throw new ApiError(400, "Invalid vehicle ID format");
+  }
+  const vehicle = await vehicleRepository.findById(id);
+  if (!vehicle) {
+    throw new ApiError(404, "Vehicle not found");
+  }
+
+  const dateFields = ["registrationExpiry", "insuranceExpiry", "manufacturerWarrantyExpiry", "soldAt"];
+  for (const field of dateFields) {
+    if (body?.[field] !== undefined) {
+      if (body[field] === null || body[field] === "") {
+        vehicle[field] = undefined;
+        continue;
+      }
+      const date = new Date(body[field]);
+      if (Number.isNaN(date.getTime())) {
+        throw new ApiError(400, `${field} must be a valid date`);
+      }
+      vehicle[field] = date;
+    }
+  }
+
+  await vehicle.save();
+  return vehicle;
+}
+
+/** The dated odometer history for a vehicle, newest first. */
+export async function getOdometerHistory(id) {
+  if (!OID_RE.test(String(id))) {
+    throw new ApiError(400, "Invalid vehicle ID format");
+  }
+  const readings = await OdometerLogModel.find({ vehicleId: id })
+    .sort({ recordedAt: -1 })
+    .limit(100);
+  return { readings };
 }

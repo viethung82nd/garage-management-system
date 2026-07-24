@@ -216,17 +216,26 @@ export async function getWorkshopKpis({ startDate, endDate }) {
   if (end < start) throw new ApiError(400, "endDate must be on or after startDate");
   const range = { $gte: start, $lte: end };
 
-  const [paidInvoices, ordersOpened, ordersCompleted, reworkOrderIds, laborMinutes] =
-    await Promise.all([
-      InvoiceModel.find({ status: "paid", issuedAt: range }).select("total lineItems"),
-      RepairOrderModel.find({ createdAt: range }).select("createdAt deliveredAt completedAt status"),
-      RepairOrderModel.countDocuments({ completedAt: range }),
-      RepairOrderStatusHistoryModel.distinct("repairOrderId", { to: "reworkRequired", changedAt: range }),
-      TimeLogModel.aggregate([
-        { $match: { endedAt: { $ne: null }, startedAt: range } },
-        { $group: { _id: null, minutes: { $sum: "$durationMinutes" } } },
-      ]),
-    ]);
+  const [
+    paidInvoices,
+    ordersOpened,
+    ordersCompleted,
+    reworkOrderIds,
+    laborMinutes,
+    comebacksOpened,
+  ] = await Promise.all([
+    InvoiceModel.find({ status: "paid", issuedAt: range }).select("total lineItems"),
+    RepairOrderModel.find({ createdAt: range }).select("createdAt deliveredAt completedAt status"),
+    RepairOrderModel.countDocuments({ completedAt: range }),
+    RepairOrderStatusHistoryModel.distinct("repairOrderId", { to: "reworkRequired", changedAt: range }),
+    TimeLogModel.aggregate([
+      { $match: { endedAt: { $ne: null }, startedAt: range } },
+      { $group: { _id: null, minutes: { $sum: "$durationMinutes" } } },
+    ]),
+    // A true comeback: a NEW order opened in the period to redo earlier work
+    // (distinct from reworkRequired, which is caught before handover).
+    RepairOrderModel.countDocuments({ createdAt: range, isComeback: true }),
+  ]);
 
   const invoiceCount = paidInvoices.length;
   const revenue = paidInvoices.reduce((sum, inv) => sum + (inv.total || 0), 0);
@@ -263,5 +272,9 @@ export async function getWorkshopKpis({ startDate, endDate }) {
     ordersCompleted,
     carryOverRate: ordersOpened.length > 0 ? round1((carriedOver / ordersOpened.length) * 100) : 0,
     reworkRate: ordersCompleted > 0 ? round1((reworkOrderIds.length / ordersCompleted) * 100) : 0,
+    // Comebacks as a share of orders opened — the "didn't hold the first time"
+    // measure, now that comebacks are linked to their original order.
+    comebacksOpened,
+    comebackRate: ordersOpened.length > 0 ? round1((comebacksOpened / ordersOpened.length) * 100) : 0,
   };
 }

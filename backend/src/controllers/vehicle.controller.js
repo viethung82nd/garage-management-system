@@ -14,3 +14,16 @@ export async function createVehicle(req, res) {
   const vehicle = await vehicleService.createVehicle(req.body ?? {}, req.user);
   res.status(201).json({ vehicle });
 }
+
+/** PATCH /api/vehicles/:id/profile — update renewal dates (registration,
+ *  insurance, manufacturer warranty). */
+export async function updateVehicleProfile(req, res) {
+  const vehicle = await vehicleService.updateVehicleProfile(req.params.id, req.body ?? {});
+  res.json({ vehicle });
+}
+
+/** GET /api/vehicles/:id/odometer — the dated odometer history. */
+export async function getOdometerHistory(req, res) {
+  const result = await vehicleService.getOdometerHistory(req.params.id);
+  res.json(result);
+}

@@ -4,6 +4,8 @@ import { catchAsync } from "../utils/catchAsync.js";
 import {
   createVehicle,
   checkVehicleExists,
+  updateVehicleProfile,
+  getOdometerHistory,
 } from "../controllers/vehicle.controller.js";
 
 export const vehicleRouter = Router();
@@ -24,4 +26,20 @@ vehicleRouter.post(
   requireAuth,
   requireRole("serviceAdvisor", "admin", "onlineCustomer"),
   catchAsync(createVehicle)
+);
+
+// Update renewal dates — the reminder triggers.
+vehicleRouter.patch(
+  "/:id/profile",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  catchAsync(updateVehicleProfile)
+);
+
+// The dated odometer history behind a vehicle's current reading.
+vehicleRouter.get(
+  "/:id/odometer",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  catchAsync(getOdometerHistory)
 );

@@ -2,10 +2,12 @@ import { bookingRepository } from "../repositories/booking.repository.js";
 import { repairOrderRepository } from "../repositories/repair-order.repository.js";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { resolveCustomer, resolveVehicle } from "./booking.service.js";
+import { OdometerLogModel } from "../models/index.js";
 import { ApiError } from "../utils/apiError.js";
 import { runInTransaction } from "../utils/transaction.js";
 import { generateCode } from "../utils/sequence.js";
 import { recordStatusChange } from "../utils/orderStatus.js";
+import { logAudit } from "../utils/audit.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -32,6 +34,10 @@ export async function createReception(
     mileage,
     issueDescription,
     promisedAt,
+    // When the advisor opens this intake as a comeback (a return under a prior
+    // repair's warranty), the id of that original order — see the comeback
+    // detection returned from a previous reception.
+    parentRoId,
   },
   advisorId,
 ) {
@@ -164,12 +170,20 @@ export async function createReception(
       session,
     );
 
+    // An odometer only ever goes up. A reading below the last recorded one is
+    // either a keying error or a tampered/rolled-back meter — we accept it (so
+    // the front desk isn't blocked) but flag it, log it, and warn the advisor,
+    // rather than silently overwriting the history with a smaller number.
+    const previousMileage = vehicle.lastKnownMileage;
+    const isRollback = typeof previousMileage === "number" && parsedMileage < previousMileage;
+
     vehicle.chassisNumber = normalizedVin;
     vehicle.engineNumber = engineNo.trim();
     vehicle.lastKnownMileage = parsedMileage;
 
     await vehicle.save({ session });
 
+    const isComeback = Boolean(parentRoId && OID_RE.test(String(parentRoId)));
     const [repairOrder] = await repairOrderRepository.model.create(
       [
         {
@@ -181,6 +195,24 @@ export async function createReception(
           issueDescription: issueDescription?.trim() || undefined,
           serviceCategory: booking?.serviceCategory || undefined,
           promisedAt: parsedPromisedAt,
+          isComeback,
+          parentRoId: isComeback ? parentRoId : undefined,
+        },
+      ],
+      { session },
+    );
+
+    // Append to the odometer history (drives maintenance-interval reminders and
+    // preserves the rollback flag).
+    await OdometerLogModel.create(
+      [
+        {
+          vehicleId: vehicle._id,
+          mileage: parsedMileage,
+          source: "reception",
+          repairOrderId: repairOrder._id,
+          recordedBy: advisorId,
+          isRollback,
         },
       ],
       { session },
@@ -197,7 +229,7 @@ export async function createReception(
       await booking.save({ session });
     }
 
-    return { customer, vehicle, repairOrder, booking };
+    return { customer, vehicle, repairOrder, booking, isRollback, previousMileage };
   });
 
   await recordStatusChange({
@@ -208,7 +240,73 @@ export async function createReception(
     reason: "Vehicle received at front desk",
   });
 
-  return result;
+  if (result.isRollback) {
+    await logAudit({
+      action: "stockAdjusted", // reused generic audit action; see details text
+      actorId: advisorId,
+      repairOrderId: result.repairOrder._id,
+      targetModel: "Vehicle",
+      targetId: result.vehicle._id,
+      details: `Odometer rollback: entered ${parsedMileage} km, previous was ${result.previousMileage} km`,
+    });
+  }
+
+  // Surface a comeback: this vehicle returning while a previous repair is still
+  // under its service warranty. The advisor sees it at intake so the new order
+  // can be opened as a comeback (linked to the original) rather than as fresh
+  // paid work — see findActiveWarrantyOrder.
+  const comeback = await findActiveWarrantyOrder(
+    result.vehicle._id,
+    parsedMileage,
+    result.repairOrder._id,
+  );
+
+  return {
+    ...result,
+    warnings: {
+      odometerRollback: result.isRollback
+        ? `Odometer entered (${parsedMileage} km) is lower than the last reading (${result.previousMileage} km).`
+        : null,
+      comeback,
+    },
+  };
+}
+
+/**
+ * Finds a prior delivered order on this vehicle whose service warranty still
+ * covers the vehicle now — by date and, if a warranty kilometre cap was set, by
+ * odometer. The basis for flagging a return as a comeback rather than new work.
+ * Excludes the just-created order.
+ */
+async function findActiveWarrantyOrder(vehicleId, currentMileage, excludeOrderId) {
+  const now = new Date();
+  const candidate = await repairOrderRepository.model
+    .findOne({
+      _id: { $ne: excludeOrderId },
+      vehicleId,
+      deliveredAt: { $ne: null },
+      warrantyUntilDate: { $gte: now },
+    })
+    .sort({ deliveredAt: -1 })
+    .select("code deliveredAt warrantyUntilDate warrantyUntilKm");
+
+  if (!candidate) return null;
+  // If a kilometre cap was set, the car must also be within it.
+  if (
+    typeof candidate.warrantyUntilKm === "number" &&
+    typeof currentMileage === "number" &&
+    currentMileage > candidate.warrantyUntilKm
+  ) {
+    return null;
+  }
+
+  return {
+    parentRoId: candidate._id,
+    parentCode: candidate.code,
+    deliveredAt: candidate.deliveredAt,
+    warrantyUntilDate: candidate.warrantyUntilDate,
+    message: `This vehicle's previous repair (${candidate.code}) is under service warranty until ${candidate.warrantyUntilDate.toISOString().slice(0, 10)} — consider opening this as a comeback.`,
+  };
 }
 
 /**
