@@ -1,9 +1,12 @@
-import { RightOutlined } from '@ant-design/icons'
-import { Card, Empty, Segmented, Tag } from 'antd'
+import { ClockCircleOutlined, PauseCircleOutlined, PlayCircleOutlined, RightOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Modal, Segmented, Select, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../shared/auth'
 import {
+  clockOff,
+  clockOn,
+  fetchTimeLogs,
   fetchWorkshopRepairOrders,
   orderId,
   personName,
@@ -46,6 +49,25 @@ const statusTagColors: Record<WorkOrderStatus, string> = {
   reworkRequired: 'gold',
 }
 
+type TimeLogInfo = {
+  totalMinutes: number
+  openLogId?: string
+}
+
+const PAUSE_REASON_OPTIONS = [
+  { label: 'Chờ phụ tùng', value: 'Chờ phụ tùng' },
+  { label: 'Chờ khách', value: 'Chờ khách' },
+  { label: 'Hết ca', value: 'Hết ca' },
+  { label: 'Tạm nghỉ', value: 'Tạm nghỉ' },
+]
+
+function formatDuration(totalMinutes: number) {
+  const minutes = Math.max(0, Math.round(totalMinutes))
+  const hours = Math.floor(minutes / 60)
+  const rest = minutes % 60
+  return `${hours}h ${rest}m`
+}
+
 function tabOf(status: WorkOrderStatus): TabKey {
   if (status === 'inProgress' || status === 'reworkRequired') return 'active'
   if (status === 'pending') return 'queued'
@@ -74,47 +96,95 @@ function mapRepairOrder(order: ApiRepairOrder): WorkOrder {
   }
 }
 
-function OrderCard({ order, onOpen }: { order: WorkOrder; onOpen: () => void }) {
+function OrderCard({
+  order,
+  onOpen,
+  timeInfo,
+  onClockOn,
+  onClockOff,
+  clockBusy,
+  clockOnDisabled,
+}: {
+  order: WorkOrder
+  onOpen: () => void
+  timeInfo?: TimeLogInfo
+  onClockOn: () => void
+  onClockOff: () => void
+  clockBusy: boolean
+  clockOnDisabled: boolean
+}) {
   const pct = order.stepsTotal ? Math.round((order.stepsDone / order.stepsTotal) * 100) : 0
   const isActive = order.status === 'inProgress' || order.status === 'reworkRequired'
+  const hasOpenLog = Boolean(timeInfo?.openLogId)
+
   return (
-    <button
+    <div
       className="bo-card-hover"
-      onClick={onOpen}
-      type="button"
       style={{
-        alignItems: 'center',
         background: technicianPalette.panel,
         border: `1px solid ${technicianPalette.border}`,
         borderRadius: 14,
-        cursor: 'pointer',
-        display: 'flex',
-        gap: 16,
         padding: '16px 18px',
-        textAlign: 'left',
-        width: '100%',
       }}
     >
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="flex items-center gap-2">
-          <span style={{ color: technicianPalette.ink, fontSize: 16, fontWeight: 700 }}>{order.vehicle}</span>
-          <span style={{ color: technicianPalette.textMuted, fontSize: 14, fontWeight: 600 }}>· {order.plate}</span>
-          <Tag color={statusTagColors[order.status]} style={{ marginInline: 4 }}>{statusLabels[order.status]}</Tag>
-        </div>
-        <div style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 3 }}>
-          {order.code} · {order.service}
-        </div>
-        {order.stepsTotal ? (
-          <div className="mt-3 flex items-center gap-3" style={{ maxWidth: 340 }}>
-            <div style={{ background: technicianPalette.panelAlt, borderRadius: 999, flex: 1, height: 6, overflow: 'hidden' }}>
-              <div style={{ background: isActive ? technicianPalette.red : technicianPalette.ink, borderRadius: 999, height: '100%', width: `${pct}%` }} />
-            </div>
-            <span style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{order.stepsDone}/{order.stepsTotal} steps</span>
+      <button
+        onClick={onOpen}
+        type="button"
+        style={{
+          alignItems: 'center',
+          background: 'none',
+          border: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          gap: 16,
+          padding: 0,
+          textAlign: 'left',
+          width: '100%',
+        }}
+      >
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="flex items-center gap-2">
+            <span style={{ color: technicianPalette.ink, fontSize: 16, fontWeight: 700 }}>{order.vehicle}</span>
+            <span style={{ color: technicianPalette.textMuted, fontSize: 14, fontWeight: 600 }}>· {order.plate}</span>
+            <Tag color={statusTagColors[order.status]} style={{ marginInline: 4 }}>{statusLabels[order.status]}</Tag>
           </div>
-        ) : null}
-      </div>
-      <RightOutlined style={{ color: technicianPalette.textMuted, fontSize: 16 }} />
-    </button>
+          <div style={{ color: technicianPalette.textMuted, fontSize: 13, marginTop: 3 }}>
+            {order.code} · {order.service}
+          </div>
+          {order.stepsTotal ? (
+            <div className="mt-3 flex items-center gap-3" style={{ maxWidth: 340 }}>
+              <div style={{ background: technicianPalette.panelAlt, borderRadius: 999, flex: 1, height: 6, overflow: 'hidden' }}>
+                <div style={{ background: isActive ? technicianPalette.red : technicianPalette.ink, borderRadius: 999, height: '100%', width: `${pct}%` }} />
+              </div>
+              <span style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap' }}>{order.stepsDone}/{order.stepsTotal} steps</span>
+            </div>
+          ) : null}
+        </div>
+        <RightOutlined style={{ color: technicianPalette.textMuted, fontSize: 16 }} />
+      </button>
+
+      {isActive ? (
+        <div
+          className="mt-3 flex items-center justify-between gap-3"
+          style={{ borderTop: `1px solid ${technicianPalette.border}`, paddingTop: 12 }}
+        >
+          <span style={{ alignItems: 'center', color: technicianPalette.textMuted, display: 'inline-flex', fontSize: 12, fontWeight: 600, gap: 6 }}>
+            <ClockCircleOutlined /> {formatDuration(timeInfo?.totalMinutes ?? 0)} logged
+          </span>
+          <Button
+            danger={hasOpenLog}
+            disabled={!hasOpenLog && clockOnDisabled}
+            icon={hasOpenLog ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+            loading={clockBusy}
+            onClick={hasOpenLog ? onClockOff : onClockOn}
+            size="small"
+            type="primary"
+          >
+            {hasOpenLog ? 'Clock off' : 'Clock on'}
+          </Button>
+        </div>
+      ) : null}
+    </div>
   )
 }
 
@@ -124,7 +194,13 @@ export function TechnicianWorkOrdersPage() {
   const [orders, setOrders] = useState<WorkOrder[]>([])
   const [loaded, setLoaded] = useState(false)
   const [tab, setTab] = useState<TabKey | null>(null)
-  const { message: apiMessage, tone: apiTone, showError, clear: clearApiMessage } = useApiMessage()
+  const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
+
+  const [timeLogInfo, setTimeLogInfo] = useState<Record<string, TimeLogInfo>>({})
+  const [clockBusyId, setClockBusyId] = useState<string | null>(null)
+  const [pauseModalOrderId, setPauseModalOrderId] = useState<string | null>(null)
+  const [pauseReason, setPauseReason] = useState<string | undefined>()
+  const [pauseSaving, setPauseSaving] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -163,6 +239,72 @@ export function TechnicianWorkOrdersPage() {
   const effectiveTab = tab ?? smartDefaultTab
   const visibleOrders = effectiveTab === 'active' ? activeOrders : effectiveTab === 'queued' ? queuedOrders : doneOrders
 
+  // The time clock only applies to orders currently being worked (active tab)
+  // — fetch each one's log summary so the card can show accumulated time and
+  // whether this technician has an open span running on it.
+  const activeOrderIds = useMemo(() => activeOrders.map((order) => order.id).join(','), [activeOrders])
+
+  async function loadTimeLogInfo(authToken: string, id: string) {
+    try {
+      const response = await fetchTimeLogs(authToken, id)
+      const logs = response.timeLogs || []
+      const openLog = logs.find((log) => !log.endedAt)
+      setTimeLogInfo((current) => ({ ...current, [id]: { totalMinutes: response.totalMinutes || 0, openLogId: openLog?._id } }))
+    } catch {
+      // Best-effort — the clock control just falls back to "Clock on" with no elapsed time shown.
+    }
+  }
+
+  useEffect(() => {
+    if (!token || !activeOrderIds) return
+    const authToken = token
+    activeOrderIds.split(',').forEach((id) => {
+      void loadTimeLogInfo(authToken, id)
+    })
+  }, [token, activeOrderIds])
+
+  // A technician can only have one open time log at all — used to disable
+  // "Clock on" on every other card once one is already running.
+  const openLogOrderId = Object.entries(timeLogInfo).find(([, info]) => info.openLogId)?.[0]
+
+  async function handleClockOn(id: string) {
+    if (!token) return
+    setClockBusyId(id)
+    clearApiMessage()
+    try {
+      await clockOn(token, id)
+      await loadTimeLogInfo(token, id)
+      showSuccess('Clocked on.')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to clock on to this repair order')
+    } finally {
+      setClockBusyId(null)
+    }
+  }
+
+  function openClockOffModal(id: string) {
+    setPauseModalOrderId(id)
+    setPauseReason(undefined)
+  }
+
+  async function confirmClockOff() {
+    if (!token || !pauseModalOrderId) return
+    const id = pauseModalOrderId
+    setPauseSaving(true)
+    clearApiMessage()
+    try {
+      await clockOff(token, id, pauseReason ? { pauseReason } : undefined)
+      await loadTimeLogInfo(token, id)
+      showSuccess('Clocked off.')
+      setPauseModalOrderId(null)
+      setPauseReason(undefined)
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to clock off this repair order')
+    } finally {
+      setPauseSaving(false)
+    }
+  }
+
   function openOrder(id: string) {
     navigate(`/technician/repair-notes?orderId=${id}`)
   }
@@ -194,7 +336,18 @@ export function TechnicianWorkOrdersPage() {
             />
             <div className="mt-5 flex flex-col gap-3">
               {visibleOrders.length ? (
-                visibleOrders.map((order) => <OrderCard key={order.id} onOpen={() => openOrder(order.id)} order={order} />)
+                visibleOrders.map((order) => (
+                  <OrderCard
+                    clockBusy={clockBusyId === order.id}
+                    clockOnDisabled={Boolean(openLogOrderId && openLogOrderId !== order.id)}
+                    key={order.id}
+                    onClockOff={() => openClockOffModal(order.id)}
+                    onClockOn={() => void handleClockOn(order.id)}
+                    onOpen={() => openOrder(order.id)}
+                    order={order}
+                    timeInfo={timeLogInfo[order.id]}
+                  />
+                ))
               ) : (
                 <Empty
                   description={
@@ -209,6 +362,34 @@ export function TechnicianWorkOrdersPage() {
           <Empty description="No repair orders assigned to you yet." image={Empty.PRESENTED_IMAGE_SIMPLE} />
         )}
       </Card>
+
+      <Modal
+        cancelText="Cancel"
+        confirmLoading={pauseSaving}
+        okText="Clock off"
+        onCancel={() => {
+          setPauseModalOrderId(null)
+          setPauseReason(undefined)
+        }}
+        onOk={confirmClockOff}
+        open={Boolean(pauseModalOrderId)}
+        title="Clock off"
+      >
+        <div style={{ color: technicianPalette.textMuted, fontSize: 13, marginBottom: 16 }}>
+          Stop the timer running on this repair order.
+        </div>
+        <div style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 6, textTransform: 'uppercase' }}>
+          Pause reason
+        </div>
+        <Select
+          allowClear
+          onChange={setPauseReason}
+          options={PAUSE_REASON_OPTIONS}
+          placeholder="Select a reason"
+          style={{ width: '100%' }}
+          value={pauseReason}
+        />
+      </Modal>
     </TechnicianShell>
   )
 }

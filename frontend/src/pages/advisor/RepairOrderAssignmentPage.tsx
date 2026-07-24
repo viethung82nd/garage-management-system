@@ -1,5 +1,5 @@
-import { CheckOutlined, ProfileOutlined } from '@ant-design/icons'
-import { Button, Card, Col, Empty, Row, Tag } from 'antd'
+import { CheckOutlined, DownOutlined, ProfileOutlined } from '@ant-design/icons'
+import { Button, Card, Col, Dropdown, Empty, Input, Modal, Row, Tag } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -9,6 +9,7 @@ import {
   orderId as formatOrderId,
   personName,
   unwrapArray,
+  updateRepairOrderStatus,
   updateWorkshopRepairOrder,
   vehicleName,
   vehiclePlate,
@@ -16,12 +17,68 @@ import {
   type ApiTechnician,
 } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
-import { InlineBanner, advisorPalette } from '../../widgets/backoffice-shell'
+import { InlineBanner, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))} ₫`
 }
+
+type OrderStatusKey =
+  | 'pending'
+  | 'inProgress'
+  | 'waitingParts'
+  | 'waitingCustomer'
+  | 'onHold'
+  | 'completed'
+  | 'reworkRequired'
+  | 'readyForDelivery'
+  | 'delivered'
+  | 'closed'
+  | 'cancelled'
+
+const orderStatusLabels: Record<OrderStatusKey, string> = {
+  pending: 'Chờ xử lý',
+  inProgress: 'Đang sửa chữa',
+  waitingParts: 'Chờ phụ tùng',
+  waitingCustomer: 'Chờ khách',
+  onHold: 'Tạm dừng',
+  completed: 'Hoàn thành',
+  reworkRequired: 'Cần làm lại',
+  readyForDelivery: 'Sẵn sàng bàn giao',
+  delivered: 'Đã bàn giao',
+  closed: 'Đã đóng',
+  cancelled: 'Đã hủy',
+}
+
+const orderStatusColors: Record<OrderStatusKey, string> = {
+  pending: 'default',
+  inProgress: 'red',
+  waitingParts: 'gold',
+  waitingCustomer: 'gold',
+  onHold: 'orange',
+  completed: 'green',
+  reworkRequired: 'volcano',
+  readyForDelivery: 'blue',
+  delivered: 'cyan',
+  closed: 'default',
+  cancelled: 'default',
+}
+
+function statusLabel(status?: string) {
+  return status && status in orderStatusLabels ? orderStatusLabels[status as OrderStatusKey] : status || 'Unknown'
+}
+
+function statusColor(status?: string) {
+  return status && status in orderStatusColors ? orderStatusColors[status as OrderStatusKey] : 'default'
+}
+
+/** Statuses the advisor can move an order into from here — each requires a reason, enforced by the backend. */
+const WAITING_STATUS_MENU_ITEMS = [
+  { key: 'waitingParts', label: orderStatusLabels.waitingParts },
+  { key: 'waitingCustomer', label: orderStatusLabels.waitingCustomer },
+  { key: 'onHold', label: orderStatusLabels.onHold },
+]
 
 type Technician = {
   id: string
@@ -70,7 +127,10 @@ function OrderPicker({ orders, onPick }: { orders: ApiRepairOrder[]; onPick: (id
           const vehicle = order.vehicleId || order.vehicle
           return (
             <Card bordered key={id} size="small" hoverable onClick={() => onPick(id)} style={{ borderColor: advisorPalette.border, cursor: 'pointer' }}>
-              <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{formatOrderId(order)}</div>
+              <div className="flex items-center justify-between gap-2">
+                <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{formatOrderId(order)}</span>
+                {order.isComeback ? <Tag color={advisorPalette.amber} style={{ marginInlineEnd: 0 }}>Comeback</Tag> : null}
+              </div>
               <div style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 4 }}>{personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer')}</div>
               <div style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
                 {vehicleName(vehicle)} · {vehiclePlate(vehicle)}
@@ -94,9 +154,15 @@ export function RepairOrderAssignmentPage() {
   const [assignableOrders, setAssignableOrders] = useState<ApiRepairOrder[]>([])
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
-  const [apiMessage, setApiMessage] = useState<string>()
+  const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
+
+  // Move-to-waiting-status control — the backend requires a reason for these.
+  const [statusTarget, setStatusTarget] = useState<string | null>(null)
+  const [statusReason, setStatusReason] = useState('')
+  const [statusReasonError, setStatusReasonError] = useState<string>()
+  const [statusSaving, setStatusSaving] = useState(false)
 
   useEffect(() => {
     if (!token || orderIdParam) return
@@ -110,7 +176,7 @@ export function RepairOrderAssignmentPage() {
         const orders = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
         setAssignableOrders(orders.filter((item) => (item.services?.length || 0) > 0 && !item.technicianId))
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load repair orders from the API')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load repair orders from the API')
       }
     }
 
@@ -136,7 +202,7 @@ export function RepairOrderAssignmentPage() {
         const existingTechId = loadedOrder.technicianId?._id || (loadedOrder.technicianId as unknown as string)
         if (existingTechId) setSelectedTechnicianId(String(existingTechId))
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load this repair order')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load this repair order')
       }
     }
 
@@ -156,7 +222,7 @@ export function RepairOrderAssignmentPage() {
         const technicianList = await fetchWorkshopTechnicians(authToken)
         if (!cancelled) setTechnicians(technicianList.map(mapTechnician))
       } catch (err) {
-        if (!cancelled) setApiMessage(err instanceof Error ? err.message : 'Unable to load technicians from the API')
+        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load technicians from the API')
       }
     }
 
@@ -174,7 +240,7 @@ export function RepairOrderAssignmentPage() {
     if (!token || !orderIdParam || !selectedTechnicianId) return
 
     setSaving(true)
-    setApiMessage(undefined)
+    clearApiMessage()
     try {
       await updateWorkshopRepairOrder(token, orderIdParam, { technicianId: selectedTechnicianId })
       setSaved(true)
@@ -182,9 +248,36 @@ export function RepairOrderAssignmentPage() {
       // still waiting on an assignment.
       navigate('/advisor/work-orders')
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Unable to assign a technician to this order')
+      showError(err instanceof Error ? err.message : 'Unable to assign a technician to this order')
     } finally {
       setSaving(false)
+    }
+  }
+
+  function openStatusModal(target: string) {
+    setStatusTarget(target)
+    setStatusReason('')
+    setStatusReasonError(undefined)
+  }
+
+  async function confirmStatusChange() {
+    if (!token || !orderIdParam || !statusTarget) return
+    if (!statusReason.trim()) {
+      setStatusReasonError('Vui lòng nhập lý do.')
+      return
+    }
+    setStatusSaving(true)
+    clearApiMessage()
+    try {
+      const updated = await updateRepairOrderStatus(token, orderIdParam, statusTarget, statusReason.trim())
+      setOrder(updated)
+      showSuccess('Đã cập nhật trạng thái đơn hàng.')
+      setStatusTarget(null)
+      setStatusReason('')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to update this repair order status')
+    } finally {
+      setStatusSaving(false)
     }
   }
 
@@ -192,7 +285,7 @@ export function RepairOrderAssignmentPage() {
 
   return (
     <ServiceAdvisorShell title="Work orders">
-      {apiMessage ? <InlineBanner tone="error">{apiMessage}</InlineBanner> : null}
+      {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
       {!orderIdParam ? (
         <OrderPicker orders={assignableOrders} onPick={(id) => navigate(`/advisor/work-orders?orderId=${id}`)} />
@@ -204,8 +297,22 @@ export function RepairOrderAssignmentPage() {
         <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="flex flex-col gap-5">
             <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Customer & vehicle">
-              <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{formatOrderId(order)}</div>
-              <Row gutter={[16, 4]} style={{ marginTop: 8 }}>
+              <div className="flex items-center justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{formatOrderId(order)}</span>
+                  <Tag color={statusColor(order.status)}>{statusLabel(order.status)}</Tag>
+                  {order.isComeback ? <Tag color={advisorPalette.amber}>Comeback</Tag> : null}
+                </div>
+                <Dropdown
+                  menu={{ items: WAITING_STATUS_MENU_ITEMS, onClick: ({ key }) => openStatusModal(key) }}
+                  trigger={['click']}
+                >
+                  <Button size="small">
+                    Chuyển trạng thái <DownOutlined />
+                  </Button>
+                </Dropdown>
+              </div>
+              <Row gutter={[16, 4]} style={{ marginTop: 12 }}>
                 <Col span={12}>
                   <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>Customer</div>
                   <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>{personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer')}</div>
@@ -326,6 +433,30 @@ export function RepairOrderAssignmentPage() {
           </div>
         </div>
       )}
+
+      <Modal
+        cancelText="Hủy"
+        confirmLoading={statusSaving}
+        okText="Xác nhận"
+        onCancel={() => setStatusTarget(null)}
+        onOk={confirmStatusChange}
+        open={Boolean(statusTarget)}
+        title={statusTarget ? `Chuyển trạng thái sang: ${statusLabel(statusTarget)}` : ''}
+      >
+        <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
+          Lý do *
+        </div>
+        <Input.TextArea
+          autoSize={{ minRows: 2, maxRows: 4 }}
+          onChange={(event) => {
+            setStatusReason(event.target.value)
+            if (statusReasonError) setStatusReasonError(undefined)
+          }}
+          status={statusReasonError ? 'error' : undefined}
+          value={statusReason}
+        />
+        {statusReasonError ? <div style={{ color: advisorPalette.red, fontSize: 12, marginTop: 4 }}>{statusReasonError}</div> : null}
+      </Modal>
     </ServiceAdvisorShell>
   )
 }

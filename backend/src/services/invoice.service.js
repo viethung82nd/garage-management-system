@@ -75,6 +75,28 @@ function serializeInvoice(invoice, latestPayment) {
     balanceDue: invoice.total - (invoice.amountPaid || 0),
     quoteId: invoice.quoteId ? String(invoice.quoteId) : null,
     quotedTotal: invoice.quotedTotal ?? null,
+    // Snapshot billing identity (name/tax code/address + vehicle/odometer) and
+    // the demo e-invoice, so the invoice screen can show a compliant document
+    // and its issue state.
+    billing: invoice.billing
+      ? {
+          customerName: invoice.billing.customerName || null,
+          taxCode: invoice.billing.taxCode || null,
+          address: invoice.billing.address || null,
+          vehiclePlate: invoice.billing.vehiclePlate || null,
+          vehicleVin: invoice.billing.vehicleVin || null,
+          odometer: invoice.billing.odometer ?? null,
+        }
+      : null,
+    einvoice: invoice.einvoice?.status
+      ? {
+          status: invoice.einvoice.status,
+          symbol: invoice.einvoice.symbol || null,
+          number: invoice.einvoice.number || null,
+          lookupCode: invoice.einvoice.lookupCode || null,
+          issuedAt: invoice.einvoice.issuedAt || null,
+        }
+      : null,
     lineItems: invoice.lineItems.map((item, index) => ({
       id: `${invoice._id}-${index}`,
       description: item.description,

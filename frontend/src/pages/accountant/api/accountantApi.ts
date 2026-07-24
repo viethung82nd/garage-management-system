@@ -63,6 +63,21 @@ export type InvoiceApiRecord = {
   balanceDue: number
   quoteId?: string | null
   quotedTotal?: number | null
+  billing?: {
+    customerName?: string | null
+    taxCode?: string | null
+    address?: string | null
+    vehiclePlate?: string | null
+    vehicleVin?: string | null
+    odometer?: number | null
+  } | null
+  einvoice?: {
+    status: string
+    symbol?: string | null
+    number?: string | null
+    lookupCode?: string | null
+    issuedAt?: string | null
+  } | null
   lineItems: Array<{
     id: string
     description: string
@@ -210,6 +225,14 @@ export function recordInvoicePayment(token: string, invoiceId: string, method: s
 export function sendInvoiceToCustomer(token: string, invoiceId: string) {
   return apiRequest<InvoiceDetailResponse>(`/api/invoices/${invoiceId}/send`, {
     method: 'PATCH',
+    token,
+  })
+}
+
+/** Issue the legal e-invoice (demo mint — no real tax-authority call). */
+export function issueEInvoice(token: string, invoiceId: string) {
+  return apiRequest<InvoiceDetailResponse>(`/api/invoices/${invoiceId}/einvoice`, {
+    method: 'POST',
     token,
   })
 }

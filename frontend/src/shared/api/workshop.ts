@@ -74,6 +74,10 @@ export type ApiRepairOrder = {
   promisedAt?: string
   updatedAt?: string
   createdAt?: string
+  /** True when this order was opened as a return under a prior repair's service warranty — see parentRoId. */
+  isComeback?: boolean
+  /** The original repair order this comeback was opened against, when isComeback is true. */
+  parentRoId?: string
 }
 
 export type ApiTechnician = AuthUser & {
@@ -163,11 +167,24 @@ export type ReceptionPayload = {
   promisedAt?: string
 }
 
+/** Surfaced when a comeback vehicle is still under a prior repair's warranty — see findActiveWarrantyOrder on the backend. */
+export type ComebackWarning = {
+  parentRoId?: string
+  parentCode?: string
+  deliveredAt?: string
+  warrantyUntilDate?: string
+  message?: string
+}
+
 export type ReceptionResponse = {
   customer: AuthUser
   vehicle: ApiVehicle
   repairOrder: ApiRepairOrder
   booking: ApiBooking | null
+  warnings?: {
+    comeback?: ComebackWarning | null
+    odometerRollback?: string | null
+  }
 }
 
 export function fetchAdvisorDashboard(token: string) {
@@ -547,4 +564,50 @@ export function formatApiDate(value?: string) {
   const date = new Date(value)
   if (Number.isNaN(date.getTime())) return value
   return new Intl.DateTimeFormat('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(date)
+}
+
+// ============= TECHNICIAN TIME LOGGING (Phase 4a) =============
+
+export type ApiTimeLog = {
+  _id?: string
+  repairOrderId?: string
+  technicianId?: AuthUser | string
+  lineIndex?: number
+  startedAt?: string
+  endedAt?: string | null
+  durationMinutes?: number
+  pauseReason?: string
+  note?: string
+}
+
+export type ApiTimeLogsResponse = {
+  timeLogs?: ApiTimeLog[]
+  totalMinutes?: number
+}
+
+/** Technician clocks on to start hands-on work on a repair order (optionally pinned to one service line via lineIndex). */
+export function clockOn(token: string, orderId: string, body?: { lineIndex?: number; note?: string }) {
+  return apiRequest<ApiTimeLog>(`/api/repair-orders/${orderId}/clock-on`, { method: 'POST', token, body: JSON.stringify(body || {}) })
+}
+
+/** Technician clocks off, closing their own open time log on this order. 409s if there is no open log. */
+export function clockOff(token: string, orderId: string, body?: { pauseReason?: string; note?: string }) {
+  return apiRequest<ApiTimeLog>(`/api/repair-orders/${orderId}/clock-off`, { method: 'POST', token, body: JSON.stringify(body || {}) })
+}
+
+/** All time logs for a repair order, plus the total minutes accrued across closed spans. */
+export function fetchTimeLogs(token: string, orderId: string) {
+  return apiRequest<ApiTimeLogsResponse>(`/api/repair-orders/${orderId}/time-logs`, { token })
+}
+
+/**
+ * Moves a repair order to a new status. The backend requires a non-empty
+ * `reason` when moving into a waiting status (waitingParts/waitingCustomer/onHold).
+ */
+export function updateRepairOrderStatus(token: string, orderId: string, status: string, reason?: string) {
+  return apiRequest<ApiRepairOrder>(`/api/repair-orders/${orderId}`, {
+    method: 'PUT',
+    token,
+    body: JSON.stringify(reason ? { status, reason } : { status }),
+  })
 }

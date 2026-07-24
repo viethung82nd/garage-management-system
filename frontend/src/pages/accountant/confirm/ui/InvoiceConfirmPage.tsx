@@ -1,4 +1,4 @@
-import { CheckCircleOutlined, FileSearchOutlined, PrinterOutlined, SelectOutlined, SendOutlined } from '@ant-design/icons'
+import { CheckCircleOutlined, FileDoneOutlined, FileSearchOutlined, PrinterOutlined, SelectOutlined, SendOutlined } from '@ant-design/icons'
 import { Button, Card, Divider, Empty, Input, InputNumber, Modal, Select, Space } from 'antd'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -13,6 +13,7 @@ import {
   generateInvoice,
   recordInvoicePayment,
   sendInvoiceToCustomer,
+  issueEInvoice,
   type InvoiceApiRecord,
   type QuoteApiRecord,
   type RepairOrderApiRecord,
@@ -141,6 +142,7 @@ export default function InvoiceConfirmPage() {
   const [successMessage, setSuccessMessage] = useState('')
   const [isPrinting, setIsPrinting] = useState(false)
   const [isSendingInvoice, setIsSendingInvoice] = useState(false)
+  const [isIssuingEInvoice, setIsIssuingEInvoice] = useState(false)
   const [quote, setQuote] = useState<QuoteApiRecord | null>(null)
   const [isQuoteModalOpen, setIsQuoteModalOpen] = useState(false)
   const [isLoadingQuote, setIsLoadingQuote] = useState(false)
@@ -432,6 +434,26 @@ export default function InvoiceConfirmPage() {
     }
   }
 
+  const handleIssueEInvoice = async () => {
+    if (!token || !viewState || viewState.kind !== 'invoice') {
+      return
+    }
+
+    setIsIssuingEInvoice(true)
+    setRequestError('')
+    setSuccessMessage('')
+
+    try {
+      const response = await issueEInvoice(token, viewState.detail.id)
+      setViewState({ kind: 'invoice', detail: response.invoice })
+      setSuccessMessage('E-invoice issued.')
+    } catch (error) {
+      setRequestError(error instanceof Error ? error.message : 'Unable to issue the e-invoice.')
+    } finally {
+      setIsIssuingEInvoice(false)
+    }
+  }
+
   return (
     <AccountantShell eyebrow="Accountant dashboard" title="Confirm invoice">
       {!kind || !id ? (
@@ -676,6 +698,27 @@ export default function InvoiceConfirmPage() {
                 <Button icon={<PrinterOutlined />} size="large" loading={isPrinting} disabled={!detailMeta} onClick={handlePrintCopy}>
                   {isPrinting ? 'Preparing PDF...' : 'Print invoice copy'}
                 </Button>
+
+                {viewState?.kind === 'invoice' ? (
+                  viewState.detail.einvoice ? (
+                    <div
+                      className="rounded-xl px-4 py-3 text-sm"
+                      style={{ background: accountantPalette.panelAlt, border: `1px solid ${accountantPalette.border}` }}
+                    >
+                      <div style={{ fontWeight: 700, color: accountantPalette.ink }}>E-invoice issued</div>
+                      <div style={{ color: accountantPalette.textMuted }}>
+                        {viewState.detail.einvoice.symbol} · No. {viewState.detail.einvoice.number}
+                      </div>
+                      <div style={{ color: accountantPalette.textMuted }}>
+                        Lookup: {viewState.detail.einvoice.lookupCode}
+                      </div>
+                    </div>
+                  ) : (
+                    <Button icon={<FileDoneOutlined />} size="large" loading={isIssuingEInvoice} onClick={handleIssueEInvoice}>
+                      Issue e-invoice
+                    </Button>
+                  )
+                ) : null}
               </Space>
             </Card>
           </div>

@@ -5,6 +5,7 @@ import {
   UserAddOutlined,
 } from "@ant-design/icons";
 import {
+  Alert,
   Avatar,
   Button,
   Card,
@@ -26,6 +27,7 @@ import {
   vehicleName as formatVehicleName,
   vehiclePlate,
   type ApiBooking,
+  type ReceptionResponse,
 } from "../../shared/api/workshop";
 import { getUserInitials, useAuth } from "../../shared/auth";
 import {
@@ -174,6 +176,13 @@ export function VehicleReceptionPage() {
   const [appliedSuggestionId, setAppliedSuggestionId] = useState<string>();
   const [newWalkIn, setNewWalkIn] = useState(false);
   const [sourceBooking, setSourceBooking] = useState<ApiBooking | null>(null);
+  // Set only when the just-saved reception came back with a comeback/odometer
+  // warning — holds navigation so the advisor actually sees it instead of it
+  // flashing by on the way to the inspection page.
+  const [receptionWarnings, setReceptionWarnings] = useState<
+    ReceptionResponse["warnings"]
+  >();
+  const [pendingOrderId, setPendingOrderId] = useState<string>();
 
   // Arriving from "Confirm" on the booking-requests queue: pre-fill from the
   // booking instead of asking the SA to search for a customer that's already
@@ -465,12 +474,19 @@ export function VehicleReceptionPage() {
             ).toISOString()
           : undefined,
       });
+      const newOrderId = response.repairOrder._id || response.repairOrder.id;
+
       // The reception just minted the repair order every later stage
       // attaches to — carry it forward instead of dropping the SA back into
-      // an empty form with no way to continue the job.
-      navigate(
-        `/advisor/inspection?orderId=${response.repairOrder._id || response.repairOrder.id}`,
-      );
+      // an empty form with no way to continue the job. But if the backend
+      // flagged a comeback or odometer rollback, hold here so the advisor
+      // actually sees it instead of it flashing by during the redirect.
+      if (response.warnings?.comeback || response.warnings?.odometerRollback) {
+        setReceptionWarnings(response.warnings);
+        setPendingOrderId(newOrderId);
+      } else {
+        navigate(`/advisor/inspection?orderId=${newOrderId}`);
+      }
     } catch (err) {
       showError(
         err instanceof Error
@@ -495,6 +511,45 @@ export function VehicleReceptionPage() {
     <ServiceAdvisorShell title="Vehicle reception">
       {apiMessage ? (
         <InlineBanner tone="error">{apiMessage}</InlineBanner>
+      ) : null}
+
+      {receptionWarnings ? (
+        <Card
+          bordered={false}
+          className="bo-enter rounded-2xl"
+          style={{
+            background: advisorPalette.panel,
+            boxShadow: advisorPalette.shadow,
+            border: `1px solid ${advisorPalette.border}`,
+            marginBottom: 20,
+          }}
+        >
+          <div className="flex flex-col gap-3">
+            {receptionWarnings.comeback ? (
+              <Alert
+                message={`Xe đang trong hạn bảo hành của lần sửa trước (${receptionWarnings.comeback.parentCode || "N/A"}) — cân nhắc mở lệnh comeback.`}
+                showIcon
+                type="warning"
+              />
+            ) : null}
+            {receptionWarnings.odometerRollback ? (
+              <Alert
+                message={receptionWarnings.odometerRollback}
+                showIcon
+                type="warning"
+              />
+            ) : null}
+            <Button
+              onClick={() =>
+                pendingOrderId &&
+                navigate(`/advisor/inspection?orderId=${pendingOrderId}`)
+              }
+              type="primary"
+            >
+              Continue to inspection
+            </Button>
+          </div>
+        </Card>
       ) : null}
 
       <form
