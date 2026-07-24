@@ -1,6 +1,7 @@
 import {
   CarOutlined,
   CheckOutlined,
+  PlusOutlined,
   SearchOutlined,
   UserAddOutlined,
 } from "@ant-design/icons";
@@ -9,13 +10,18 @@ import {
   Avatar,
   Button,
   Card,
+  Checkbox,
   Col,
   Empty,
+  Image,
   Input,
   InputNumber,
   Row,
+  Select,
   Tag,
+  Upload,
 } from "antd";
+import type { UploadFile } from "antd/es/upload/interface";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
@@ -128,6 +134,33 @@ function normalizePlate(value: string) {
   return value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
 }
 
+const fuelLevelOptions = ["Empty", "1/4", "1/2", "3/4", "Full"];
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+// Walk-around photos and the signature pad are captured locally as data URLs
+// (see the FileReader above) rather than uploaded to a separate endpoint —
+// reception stays a single JSON POST, and the file already has a `url` when
+// it came back from a prior save, so that's reused instead of re-reading it.
+async function filesToDataUrls(files: UploadFile[]): Promise<string[]> {
+  const converted = await Promise.all(
+    files.map((file) => {
+      if (file.url) return Promise.resolve(file.url);
+      return file.originFileObj
+        ? fileToDataUrl(file.originFileObj as File)
+        : Promise.resolve("");
+    }),
+  );
+  return converted.filter(Boolean);
+}
+
 function LabeledField({
   label,
   children,
@@ -183,6 +216,16 @@ export function VehicleReceptionPage() {
     ReceptionResponse["warnings"]
   >();
   const [pendingOrderId, setPendingOrderId] = useState<string>();
+  // Walk-around intake capture — fuel level, tow-in flag, damage photos and
+  // the customer's authorising signature, gathered while circling the
+  // vehicle at hand-in. Kept outside `form` since none of it participates in
+  // validateForm()'s pass-through-from-history semantics.
+  const [fuelLevel, setFuelLevel] = useState<string>();
+  const [isTowIn, setIsTowIn] = useState(false);
+  const [photoFiles, setPhotoFiles] = useState<UploadFile[]>([]);
+  const [signatureFile, setSignatureFile] = useState<UploadFile[]>([]);
+  const [previewImage, setPreviewImage] = useState("");
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   // Arriving from "Confirm" on the booking-requests queue: pre-fill from the
   // booking instead of asking the SA to search for a customer that's already
@@ -457,6 +500,9 @@ export function VehicleReceptionPage() {
         return;
       }
 
+      const receptionPhotos = await filesToDataUrls(photoFiles);
+      const [receptionSignature] = await filesToDataUrls(signatureFile);
+
       const response = await createVehicleReception(token, {
         bookingId: sourceBooking?.id || sourceBooking?._id || bookingId,
         customerName: form.customerName,
@@ -473,6 +519,10 @@ export function VehicleReceptionPage() {
               `${form.appointmentDate}T${form.appointmentTime || "00:00"}`,
             ).toISOString()
           : undefined,
+        fuelLevel,
+        isTowIn,
+        receptionPhotos: receptionPhotos.length ? receptionPhotos : undefined,
+        receptionSignature,
       });
       const newOrderId = response.repairOrder._id || response.repairOrder.id;
 
@@ -951,6 +1001,115 @@ export function VehicleReceptionPage() {
                       </Col>
                     </Row>
                   </div>
+                </Card>
+
+                <Card
+                  bordered={false}
+                  className="bo-card-hover bo-enter rounded-2xl"
+                  style={{
+                    background: advisorPalette.panel,
+                    boxShadow: advisorPalette.shadow,
+                    border: `1px solid ${advisorPalette.border}`,
+                  }}
+                  title="Walk-around intake"
+                >
+                  <Row gutter={16}>
+                    <Col span={12}>
+                      <LabeledField label="Fuel level">
+                        <Select
+                          allowClear
+                          onChange={setFuelLevel}
+                          options={fuelLevelOptions.map((level) => ({
+                            label: level,
+                            value: level,
+                          }))}
+                          style={{ width: "100%" }}
+                          value={fuelLevel}
+                        />
+                      </LabeledField>
+                    </Col>
+                    <Col span={12} style={{ display: "flex", alignItems: "flex-end" }}>
+                      <Checkbox
+                        checked={isTowIn}
+                        onChange={(event) => setIsTowIn(event.target.checked)}
+                      >
+                        Vehicle arrived on a tow
+                      </Checkbox>
+                    </Col>
+                  </Row>
+
+                  <div style={{ marginTop: 20 }}>
+                    <LabeledField label="Photos">
+                      <Upload
+                        accept="image/*"
+                        beforeUpload={() => false}
+                        fileList={photoFiles}
+                        listType="picture-card"
+                        multiple
+                        onChange={({ fileList }) => setPhotoFiles(fileList)}
+                        onPreview={async (file) => {
+                          const src =
+                            file.url ||
+                            file.preview ||
+                            (file.originFileObj
+                              ? await fileToDataUrl(file.originFileObj as File)
+                              : "");
+                          if (!src) return;
+                          setPreviewImage(src);
+                          setPreviewOpen(true);
+                        }}
+                      >
+                        {photoFiles.length >= 10 ? null : (
+                          <div>
+                            <PlusOutlined />
+                            <div style={{ marginTop: 8 }}>Upload</div>
+                          </div>
+                        )}
+                      </Upload>
+                    </LabeledField>
+                  </div>
+
+                  <div style={{ marginTop: 20 }}>
+                    <LabeledField label="Customer signature">
+                      <Upload
+                        accept="image/*"
+                        beforeUpload={() => false}
+                        fileList={signatureFile}
+                        listType="picture-card"
+                        maxCount={1}
+                        onChange={({ fileList }) => setSignatureFile(fileList)}
+                        onPreview={async (file) => {
+                          const src =
+                            file.url ||
+                            file.preview ||
+                            (file.originFileObj
+                              ? await fileToDataUrl(file.originFileObj as File)
+                              : "");
+                          if (!src) return;
+                          setPreviewImage(src);
+                          setPreviewOpen(true);
+                        }}
+                      >
+                        {signatureFile.length >= 1 ? null : (
+                          <div>
+                            <PlusOutlined />
+                            <div style={{ marginTop: 8 }}>Upload</div>
+                          </div>
+                        )}
+                      </Upload>
+                    </LabeledField>
+                  </div>
+
+                  {previewImage ? (
+                    <Image
+                      preview={{
+                        onVisibleChange: setPreviewOpen,
+                        visible: previewOpen,
+                      }}
+                      src={previewImage}
+                      style={{ display: "none" }}
+                    />
+                  ) : null}
                 </Card>
               </div>
 

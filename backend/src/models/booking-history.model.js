@@ -6,6 +6,7 @@ export const BOOKING_HISTORY_ACTIONS = [
   "cancelled",
   "rescheduled",
   "completed",
+  "noShow",
 ];
 
 const bookingHistorySchema = new Schema(

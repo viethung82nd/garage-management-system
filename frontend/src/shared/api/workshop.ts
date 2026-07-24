@@ -165,6 +165,14 @@ export type ReceptionPayload = {
   mileage?: string
   issueDescription?: string
   promisedAt?: string
+  /** Fuel level noted during the walk-around at hand-in (e.g. "1/2", "Full"). */
+  fuelLevel?: string
+  /** Vehicle arrived on a tow rather than driven in — it can't be road-tested yet. */
+  isTowIn?: boolean
+  /** Walk-around photos documenting existing damage at intake, as data URLs. */
+  receptionPhotos?: string[]
+  /** Customer's authorising signature captured at intake, as a data URL. */
+  receptionSignature?: string
 }
 
 /** Surfaced when a comeback vehicle is still under a prior repair's warranty — see findActiveWarrantyOrder on the backend. */

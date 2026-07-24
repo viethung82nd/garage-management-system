@@ -639,3 +639,122 @@ export async function updateBookingStatus(id, user, { status, reason }) {
 
   return { booking: await populateBooking(booking) };
 }
+
+/**
+ * Staff marks a booking as a no-show — the customer never arrived for their
+ * slot. Only allowed from an active status (pending/confirmed/rescheduled),
+ * mirroring cancelBooking's guard. Saving the terminal "noShow" status is
+ * what frees the seat: it's not in ACTIVE_BOOKING_STATUSES, so the model's
+ * pre-save hook flips occupiesSlot false and the (date, slot, seat) triple
+ * drops out of the unique index, same mechanism as cancel/complete.
+ *
+ * NOTE on BookingHistory: BOOKING_HISTORY_ACTIONS (booking-history.model.js)
+ * is a closed enum that does not include "noShow", and that model is outside
+ * this change's scope, so a no-show is not mirrored into BookingHistory here.
+ * The Booking document's own `status` field remains the source of truth for
+ * no-shows; extend BOOKING_HISTORY_ACTIONS in a follow-up if an audit-trail
+ * entry is also needed.
+ */
+export async function markNoShow(id, actorId) {
+  const booking = await loadBooking(id);
+
+  if (!ACTIVE_BOOKING_STATUSES.includes(booking.status)) {
+    throw new ApiError(
+      409,
+      `Cannot mark a ${booking.status} booking as no-show`
+    );
+  }
+
+  booking.status = "noShow";
+  await booking.save();
+
+  await bookingHistoryRepository.create({
+    bookingId: booking._id,
+    changedBy: actorId,
+    action: "noShow",
+    changedAt: new Date(),
+  });
+
+  return { booking: await populateBooking(booking) };
+}
+
+/**
+ * Staff callback list: every no-show booking, most-recent appointment first.
+ * This is the queue staff work through to re-book customers who missed their
+ * slot, so it's sorted by the missed appointment's own date/slot rather than
+ * by record-creation time.
+ */
+export async function listNoShows() {
+  const bookings = await bookingRepository.model
+    .find({ status: "noShow" })
+    .populate("customerId", "fullName phone")
+    .populate("vehicleId", "licensePlate brand model")
+    .populate("serviceId", "name basePrice estimatedDuration")
+    .populate("advisorId", "fullName")
+    .sort({ bookingDate: -1, timeSlot: -1 });
+
+  return { bookings };
+}
+
+/** Zero-pads a UTC-midnight bookingDate into a Vietnamese-style dd/mm/yyyy string. */
+function formatVnDate(date) {
+  const d = String(date.getUTCDate()).padStart(2, "0");
+  const m = String(date.getUTCMonth() + 1).padStart(2, "0");
+  const y = date.getUTCFullYear();
+  return `${d}/${m}/${y}`;
+}
+
+/**
+ * Finds active bookings (pending/confirmed/rescheduled) whose appointment
+ * instant — bookingDate + timeSlot — falls within the next 24 hours, and
+ * fires an in-app "appointmentReminder" notification to each customer.
+ * Meant to be triggered periodically (e.g. by a daily cron hitting the
+ * route); no persistent dedupe is kept across runs — only the notification
+ * itself is the artifact, per this phase's scope — but a single run never
+ * double-notifies the same booking.
+ */
+export async function generateAppointmentReminders() {
+  const now = new Date();
+  const in24h = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+
+  // bookingDate is stored at UTC midnight, so the real appointment instant is
+  // bookingDate + timeSlot. Pre-filter by day (today..tomorrow covers any
+  // 24h window) with an indexed range query, then compute the exact instant
+  // in memory and keep only what truly falls inside (now, now + 24h].
+  const candidates = await bookingRepository.model
+    .find(
+      {
+        status: { $in: ACTIVE_BOOKING_STATUSES },
+        bookingDate: { $gte: todayUtc(), $lte: in24h },
+      },
+      { customerId: 1, bookingDate: 1, timeSlot: 1 }
+    )
+    .lean();
+
+  const seen = new Set(); // in-run dedupe guard, keyed by booking id
+  let count = 0;
+  for (const booking of candidates) {
+    const key = String(booking._id);
+    if (seen.has(key)) continue;
+
+    const slotStart = new Date(
+      `${booking.bookingDate.toISOString().slice(0, 10)}T${booking.timeSlot}:00.000Z`
+    );
+    if (slotStart <= now || slotStart > in24h) continue;
+
+    seen.add(key);
+    await createNotification({
+      userId: booking.customerId,
+      type: "appointmentReminder",
+      title: "Nhắc lịch hẹn sắp tới",
+      message: `Bạn có lịch hẹn dịch vụ vào lúc ${booking.timeSlot} ngày ${formatVnDate(
+        booking.bookingDate
+      )}. Vui lòng đến đúng giờ.`,
+      refId: booking._id,
+      refModel: "Booking",
+    });
+    count += 1;
+  }
+
+  return { count };
+}

@@ -140,6 +140,9 @@ async function applyProposalApproval(proposal, approvalRecord) {
         quantity: 1,
         kind: "service",
         source: "additionalService",
+        // Extra work on a comeback the garage owns is internal (not re-billed);
+        // otherwise the customer approved and pays.
+        jobType: order.isComeback ? "internal" : "customerPay",
       });
       order.totalCost = order.services.reduce(
         (sum, service) => sum + service.priceAtTime * (service.quantity || 1),

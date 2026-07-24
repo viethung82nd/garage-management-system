@@ -387,6 +387,10 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
           quantity,
           kind: line.kind || "service",
           source: "quote",
+          // Who pays. Carried from the quote line; a comeback (redo of the
+          // shop's own earlier work) defaults to internal — the garage eats it,
+          // it isn't billed to the customer again.
+          jobType: line.jobType || (order.isComeback ? "internal" : "customerPay"),
         });
         totalCost += priceAtTime * quantity;
 

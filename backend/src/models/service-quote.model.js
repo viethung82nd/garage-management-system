@@ -19,6 +19,9 @@ export const QUOTE_STATUSES = [
 ];
 export const QUOTE_LINE_KINDS = ["service", "part", "labor"];
 export const QUOTE_LINE_DECISIONS = ["pending", "approved", "declined"];
+// Who pays for a quoted line — carried onto the repair order at approval. See
+// JOB_TYPES on the repair-order model.
+export const QUOTE_LINE_JOB_TYPES = ["customerPay", "warranty", "internal", "insurance", "goodwill"];
 
 const quoteLineSchema = new Schema(
   {
@@ -33,6 +36,7 @@ const quoteLineSchema = new Schema(
     partId: { type: Schema.Types.ObjectId, ref: "Part" },
     description: { type: String, trim: true },
     kind: { type: String, enum: QUOTE_LINE_KINDS, default: "service" },
+    jobType: { type: String, enum: QUOTE_LINE_JOB_TYPES, default: "customerPay" },
     quantity: { type: Number, default: 1, min: 0 },
     unitPrice: { type: Number, default: 0, min: 0 },
     // Per-line customer decision. Only "approved" lines are pushed onto the

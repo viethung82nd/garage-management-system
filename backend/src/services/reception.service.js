@@ -38,6 +38,15 @@ export async function createReception(
     // repair's warranty), the id of that original order — see the comeback
     // detection returned from a previous reception.
     parentRoId,
+    // ===== Walk-around intake (Step 2 evidence capture) =====
+    // Fuel level at hand-in, whether the vehicle arrived on a tow (so it can't
+    // be road-tested yet), the walk-around photos documenting existing
+    // damage, and the customer's authorising signature. All optional — see
+    // normalization below.
+    fuelLevel,
+    isTowIn,
+    receptionPhotos,
+    receptionSignature,
   },
   advisorId,
 ) {
@@ -140,6 +149,33 @@ export async function createReception(
     }
   }
 
+  // ===== Walk-around intake normalization =====
+  // Fuel level, tow-in flag, photos and signature are the evidence that
+  // protects both sides in a later dispute (fuel drained, a scratch that was
+  // "already there", "I never authorised this"). None of it blocks intake —
+  // requiring it up front would just push advisors to skip reception under
+  // time pressure — so everything here is normalized, never thrown on.
+  const normalizedFuelLevel = fuelLevel?.trim() || undefined;
+  const normalizedIsTowIn = Boolean(isTowIn);
+  const normalizedReceptionPhotos = Array.isArray(receptionPhotos)
+    ? receptionPhotos
+        .filter((url) => typeof url === "string" && url.trim())
+        .map((url) => url.trim())
+    : [];
+  const normalizedReceptionSignature =
+    typeof receptionSignature === "string" && receptionSignature.trim()
+      ? receptionSignature.trim()
+      : undefined;
+
+  // Light rule, not a hard block: the signature is the customer's
+  // authorisation for the intake record, but existing callers/tests never
+  // send one and reception must keep working for them. Just note it.
+  if (!normalizedReceptionSignature) {
+    console.warn(
+      `[reception] Vehicle ${plate.trim()} received without a customer signature on file.`,
+    );
+  }
+
   // ===== Find/Create customer, vehicle, repair order — atomically =====
   //
   // Reception is a chain of coupled writes: find-or-create the customer, then
@@ -197,6 +233,10 @@ export async function createReception(
           promisedAt: parsedPromisedAt,
           isComeback,
           parentRoId: isComeback ? parentRoId : undefined,
+          fuelLevel: normalizedFuelLevel,
+          isTowIn: normalizedIsTowIn,
+          receptionPhotos: normalizedReceptionPhotos,
+          receptionSignature: normalizedReceptionSignature,
         },
       ],
       { session },

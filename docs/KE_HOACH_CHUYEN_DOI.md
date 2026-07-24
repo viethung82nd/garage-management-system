@@ -326,6 +326,35 @@
 
 ---
 
+## 7B. PHASE 6 — HOÀN THIỆN KHUNG 7 BƯỚC 🔵
+
+> **Bối cảnh:** rà soát lại [§2 Khung 7 bước](NGHIEP_VU_GARA_OTO.md) sau 5 phase. Xương sống (bước 3–7, các cổng chặn) đã đạt; bước 1–2 còn thiếu ở front-desk, và `jobType` (bước 3) là lỗ hổng lõi. Mức đáp ứng khung 7 bước hiện: B1 ~60%, B2 ~65%, B3 ~70%, B4 ~85%, B5 ~85%, B6 ~80%, B7 ~75%.
+
+**P1. `jobType` — ai trả tiền (Bước 3) 🔴**
+- [x] **[BẮT BUỘC]** `jobType` cấp dòng (quote + RO): `customerPay|warranty|internal|insurance|goodwill`. Đồng bộ quote→RO.
+- [x] **[BẮT BUỘC]** Hóa đơn **chỉ tính dòng `customerPay`**; comeback/additional trên đơn comeback → mặc định `internal`; nếu 0 dòng customerPay → hóa đơn total 0, status `paid` (không kẹt bàn giao).
+- [ ] **[NÊN]** FE: chọn jobType ở báo giá/RO; badge. *(còn lại)*
+
+**P2. Auto follow-up khi bàn giao (Bước 7) 🟢**
+- [x] **[BẮT BUỘC]** `deliverVehicle` tự gọi `createFollowUpForDelivery` (72h), best-effort.
+
+**P3. Hoàn thiện tiếp nhận (Bước 2)**
+- [x] **[BẮT BUỘC]** Reception + FE: mức nhiên liệu, cờ tow-in, ảnh walk-around (data URL), chữ ký ủy quyền. Lưu trên RO.
+
+**P4. Đặt lịch (Bước 1)**
+- [x] **[NÊN]** Booking `noShow` (giải phóng chỗ) + `GET /bookings/no-shows` (danh sách gọi lại) + `POST /bookings/appointment-reminders` (24h). History có `noShow`.
+- [ ] **[NÊN]** FE: nút no-show + gửi nhắc lịch trên BookingRequestsPage. *(còn lại)*
+- [-] **[BỎ]** Đặt trước phụ tùng — để sau.
+
+**P5. Chi tiết chất lượng (Bước 4/5/6)**
+- [x] **[NÊN]** 3C (`cause`/`correction`) trên dòng RO; QC lưu `qcChecklist` + `qcTestDriveKm`; bàn giao có `deliverySignature` + `oldPartsReturned`.
+- [ ] **[NÊN]** FE nhập QC checklist/km + chữ ký bàn giao; phiếu bảo hành in được. *(còn lại)*
+
+**P6. Vận hành (tùy chọn)**
+- [ ] **[STRETCH]** Bảng điều độ Kanban + cảnh báo latest-start-time; năng lực đặt lịch theo giờ công. *(còn lại)*
+
+---
+
 ## 8. CÁC QUYẾT ĐỊNH PHẠM VI — ĐÃ CHỐT (24/07/2026)
 
 | # | Quyết định | **Kết luận** | Áp dụng vào kế hoạch |

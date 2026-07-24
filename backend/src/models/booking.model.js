@@ -2,12 +2,17 @@ import mongoose, { Schema } from "mongoose";
 import { ACTIVE_BOOKING_STATUSES } from "../config/constants.js";
 
 export const BOOKING_SOURCES = ["online", "walkIn"];
+// "noShow" marks a booking whose customer never arrived for their slot.
+// Deliberately NOT in ACTIVE_BOOKING_STATUSES (config/constants.js): a
+// no-show frees its slot just like cancelled/completed, so the pre-save hook
+// below flips occupiesSlot false for it automatically.
 export const BOOKING_STATUSES = [
   "pending",
   "confirmed",
   "cancelled",
   "rescheduled",
   "completed",
+  "noShow",
 ];
 
 const bookingSchema = new Schema(

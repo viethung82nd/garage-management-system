@@ -18,6 +18,7 @@ import { recordStatusChange } from "../utils/orderStatus.js";
 import { logAudit } from "../utils/audit.js";
 import { runInTransaction } from "../utils/transaction.js";
 import { issueReservedStock, releaseReservations } from "../utils/stock.js";
+import { createFollowUpForDelivery } from "./follow-up.service.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 
@@ -308,7 +309,7 @@ export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorI
 }
 
 /** Update repair order progress (status + optional notes). */
-export async function updateRepairProgress(id, { status, notes, technicianId, stepIndex }) {
+export async function updateRepairProgress(id, { status, notes, technicianId, stepIndex, cause, correction }) {
   if (!id.match(OID_RE)) {
     throw new ApiError(400, "Invalid repair order ID format");
   }
@@ -361,6 +362,12 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
     }
 
     order.services[index].status = status;
+    // 3C record for this line (Cause / Correction) — the technician's account
+    // of why it failed and what they did, kept for warranty and disputes.
+    if (typeof cause === "string" && cause.trim()) order.services[index].cause = cause.trim();
+    if (typeof correction === "string" && correction.trim()) {
+      order.services[index].correction = correction.trim();
+    }
 
     // Only recompute the order's own status from its lines while the order
     // is still in one of its normal working states. Once it has moved past
@@ -637,7 +644,7 @@ export async function getRepairOrderSummary(id) {
  * already marked "completed" by a technician can be reviewed — matches the
  * frontend's own ?status=completed query for the review queue.
  */
-export async function submitQualityCheck(id, { passed, items, note, reworkReason }, reviewerId) {
+export async function submitQualityCheck(id, { passed, items, note, reworkReason, testDriveKm }, reviewerId) {
   if (!id.match(OID_RE)) {
     throw new ApiError(400, "Invalid repair order ID format");
   }
@@ -662,6 +669,21 @@ export async function submitQualityCheck(id, { passed, items, note, reworkReason
   }
 
   const failedItems = Array.isArray(items) ? items.filter((item) => item?.result === "fail") : [];
+
+  // Persist the checklist the inspector actually ran and, for a road-tested
+  // job, how far it was driven — so a QC record is auditable, not just a
+  // timestamp.
+  if (Array.isArray(items)) {
+    order.qcChecklist = items.map((item) => ({
+      label: item?.label,
+      result: item?.result === "fail" ? "fail" : item?.result === "na" ? "na" : "pass",
+      note: item?.note,
+    }));
+  }
+  if (testDriveKm !== undefined && testDriveKm !== null && testDriveKm !== "") {
+    const km = Number(testDriveKm);
+    if (!Number.isNaN(km) && km >= 0) order.qcTestDriveKm = km;
+  }
 
   const previousStatus = order.status;
   let summary;
@@ -784,7 +806,7 @@ export async function forwardToAccountant(id) {
  * "completed" by whoever did it), and the customer has actually paid for it —
  * an invoice that merely exists but is still unpaid is billed, not settled.
  */
-export async function deliverVehicle(id, { note }, actorId) {
+export async function deliverVehicle(id, { note, signature, oldPartsReturned }, actorId) {
   if (!id.match(OID_RE)) {
     throw new ApiError(400, "Invalid repair order ID format");
   }
@@ -819,7 +841,7 @@ export async function deliverVehicle(id, { note }, actorId) {
   warrantyUntilDate.setMonth(warrantyUntilDate.getMonth() + WARRANTY_MONTHS);
   const vehicleForWarranty = await vehicleRepository.model
     .findById(order.vehicleId)
-    .select("lastKnownMileage");
+    .select("lastKnownMileage customerId");
   const warrantyUntilKm =
     typeof vehicleForWarranty?.lastKnownMileage === "number"
       ? vehicleForWarranty.lastKnownMileage + WARRANTY_KM
@@ -831,6 +853,8 @@ export async function deliverVehicle(id, { note }, actorId) {
     order.status = "delivered";
     order.warrantyUntilDate = warrantyUntilDate;
     if (warrantyUntilKm !== undefined) order.warrantyUntilKm = warrantyUntilKm;
+    if (signature) order.deliverySignature = signature;
+    if (oldPartsReturned !== undefined) order.oldPartsReturned = Boolean(oldPartsReturned);
     await order.save({ session });
 
     // Safety net: normally the store issues parts explicitly (POST
@@ -848,6 +872,20 @@ export async function deliverVehicle(id, { note }, actorId) {
     changedBy: actorId,
     reason: note?.trim() || undefined,
   });
+
+  // Open the post-delivery follow-up (due in 72h) as a side effect of handover,
+  // so Step 7 happens automatically instead of only when someone runs the
+  // back-fill. Best-effort: a follow-up hiccup must not fail the handover.
+  try {
+    await createFollowUpForDelivery({
+      repairOrderId: order._id,
+      vehicleId: order.vehicleId,
+      customerId: vehicleForWarranty?.customerId,
+      deliveredAt,
+    });
+  } catch (err) {
+    console.warn("[deliverVehicle] failed to open follow-up:", err?.message ?? err);
+  }
 
   await order.populate([
     ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),

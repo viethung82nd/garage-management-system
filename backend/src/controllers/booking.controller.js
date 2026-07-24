@@ -90,3 +90,32 @@ export async function updateBookingStatus(req, res) {
   );
   res.json(result);
 }
+
+/**
+ * PATCH /api/bookings/:id/no-show — staff marks a booking as a no-show (the
+ * customer never arrived). Only pending/confirmed/rescheduled → noShow; frees
+ * the slot the same way cancel does.
+ */
+export async function markNoShow(req, res) {
+  const result = await bookingService.markNoShow(req.params.id, req.user.sub);
+  res.json(result);
+}
+
+/**
+ * GET /api/bookings/no-shows — staff callback list of no-show bookings to
+ * work through for re-booking, most-recent appointment first.
+ */
+export async function listNoShows(req, res) {
+  const result = await bookingService.listNoShows();
+  res.json(result);
+}
+
+/**
+ * POST /api/bookings/appointment-reminders — fires an in-app reminder
+ * notification for every active booking starting within the next 24 hours.
+ * Returns the count of reminders sent.
+ */
+export async function generateAppointmentReminders(req, res) {
+  const result = await bookingService.generateAppointmentReminders();
+  res.json(result);
+}

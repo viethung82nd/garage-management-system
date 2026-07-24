@@ -302,10 +302,19 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     throw new ApiError(409, "invoice already exists for this repair order");
   }
 
+  // Bill the CUSTOMER only for the lines they actually owe. Warranty, insurance
+  // and internal (garage-absorbed, e.g. a comeback redo) lines are the payer's
+  // or the shop's, not the customer's — putting them on the customer invoice
+  // was the old implicit behaviour and is exactly what jobType fixes. Legacy
+  // lines with no jobType are treated as customerPay.
+  const billableLines = order.services.filter(
+    (s) => (s.jobType || "customerPay") === "customerPay",
+  );
+
   // A customer is entitled to know whether they were charged for a new, OEM,
   // reconditioned or used part, so the invoice carries each part's condition
   // rather than just a description and a price. Looked up in one batch.
-  const partIds = order.services.map((s) => s.partId).filter(Boolean);
+  const partIds = billableLines.map((s) => s.partId).filter(Boolean);
   const partConditions = new Map();
   if (partIds.length > 0) {
     const parts = await PartModel.find({ _id: { $in: partIds } }).select("condition");
@@ -314,7 +323,7 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     }
   }
 
-  const lineItems = order.services.map((s) => ({
+  const lineItems = billableLines.map((s) => ({
     description: s.name,
     quantity: s.quantity,
     unitPrice: s.priceAtTime,
@@ -377,6 +386,11 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     odometer: vehicle?.lastKnownMileage,
   };
 
+  // A fully warranty/insurance/internal job leaves the customer owing nothing —
+  // the invoice records the work but is settled on issue, so the paid-before-
+  // handover gate doesn't stall a car the customer was never going to pay for.
+  const settledOnIssue = total <= 0;
+
   const invoice = await invoiceRepository.create({
     code: await generateCode("INV"),
     repairOrderId,
@@ -386,7 +400,8 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     discount: appliedDiscount,
     taxAmount,
     total,
-    status: "unpaid",
+    amountPaid: settledOnIssue ? 0 : undefined,
+    status: settledOnIssue ? "paid" : "unpaid",
     issuedAt,
     dueAt,
     billing,

@@ -35,6 +35,13 @@ export const TERMINAL_ORDER_STATUSES = ["closed", "cancelled"];
 // concepts a single line can't independently be in.
 export const ORDER_SERVICE_STATUSES = ["pending", "inProgress", "completed"];
 
+// Who pays for a given line of work. This is what makes an invoice honest: only
+// customerPay lines are billed to the customer; warranty/insurance go to the
+// respective payer, and internal is the garage eating a cost (e.g. redoing its
+// own faulty work on a comeback). Without it every line was implicitly
+// customer-billed, so a warranty job or a comeback couldn't be modelled.
+export const JOB_TYPES = ["customerPay", "warranty", "internal", "insurance", "goodwill"];
+
 const orderServiceSchema = new Schema(
   {
     // Optional, not required: a line synced in from an approved custom
@@ -81,6 +88,25 @@ const orderServiceSchema = new Schema(
       enum: ["quote", "additionalService"],
       default: "quote",
     },
+    // Who pays for this line — see JOB_TYPES. Only customerPay lines land on the
+    // customer's invoice.
+    jobType: {
+      type: String,
+      enum: JOB_TYPES,
+      default: "customerPay",
+    },
+    // The technician's 3C record for this line (the "Complaint" is the line
+    // itself). Standard warranty-documentation shape: why it failed and what
+    // was actually done — required by warranty claims and useful for any
+    // dispute.
+    cause: {
+      type: String,
+      trim: true,
+    },
+    correction: {
+      type: String,
+      trim: true,
+    },
     // Lets a technician work through a multi-line order one item at a time
     // (PATCH /:id/progress with a stepIndex) without every "complete this
     // line" action marking the whole order — and therefore the whole job —
@@ -90,6 +116,16 @@ const orderServiceSchema = new Schema(
       enum: ORDER_SERVICE_STATUSES,
       default: "pending",
     },
+  },
+  { _id: false },
+);
+
+// A single quality-control checklist entry recorded at QC sign-off.
+const qcChecklistItemSchema = new Schema(
+  {
+    label: { type: String, trim: true },
+    result: { type: String, enum: ["pass", "fail", "na"], default: "pass" },
+    note: { type: String, trim: true },
   },
   { _id: false },
 );
@@ -160,6 +196,28 @@ const repairOrderSchema = new Schema(
       type: String,
       trim: true,
     },
+    // ===== Reception intake record (walk-around) =====
+    // Fuel level noted at intake, the walk-around photos documenting existing
+    // damage, and the customer's authorising signature (data URL / uploaded
+    // URL). Together they are the evidence that protects both sides in a
+    // dispute — previously reception captured none of it.
+    fuelLevel: {
+      type: String,
+      trim: true,
+    },
+    receptionPhotos: {
+      type: [String],
+      default: [],
+    },
+    receptionSignature: {
+      type: String,
+    },
+    // The vehicle arrived on a tow — it can't be road-tested on intake and is
+    // flagged so QC knows to plan a test drive once it runs.
+    isTowIn: {
+      type: Boolean,
+      default: false,
+    },
     // The service category the customer chose when booking, copied from the
     // originating Booking at Reception (matches a ServiceCategory.name). Lets
     // the SA's inspection checklist show that category's services instead of a
@@ -228,6 +286,17 @@ const repairOrderSchema = new Schema(
       type: Schema.Types.ObjectId,
       ref: "User",
     },
+    // The checklist the inspector actually ran, and — for a road-tested job —
+    // the distance driven, so a QC sign-off is an auditable record, not just a
+    // timestamp.
+    qcChecklist: {
+      type: [qcChecklistItemSchema],
+      default: [],
+    },
+    qcTestDriveKm: {
+      type: Number,
+      min: 0,
+    },
 
     // ===== Handover =====
     deliveredAt: {
@@ -236,6 +305,16 @@ const repairOrderSchema = new Schema(
     deliveredBy: {
       type: Schema.Types.ObjectId,
       ref: "User",
+    },
+    // The customer's signature acknowledging they received the vehicle, and
+    // whether the replaced parts were handed back / shown to them (a standard
+    // handover courtesy and a trust signal).
+    deliverySignature: {
+      type: String,
+    },
+    oldPartsReturned: {
+      type: Boolean,
+      default: false,
     },
 
     // ===== Service warranty =====
