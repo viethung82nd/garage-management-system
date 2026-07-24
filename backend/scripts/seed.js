@@ -1020,6 +1020,116 @@ async function seedNotificationsReviews({ customers, advisors, technicians, orde
   console.log(`[seed] notifications: ${notifications.length}, reviews: ${reviews.length}`);
 }
 
+/**
+ * Populates the collections added across the transformation phases so the new
+ * screens (Purchasing, Customer care) and reports have real data on a fresh
+ * demo DB instead of empty states: suppliers + purchase orders (incl. payables),
+ * declined work, reminders, follow-ups, odometer history and technician time.
+ */
+async function seedTransformationData({ vehicles, parts, repairOrders, customers, walkIns, technicians }) {
+  const partBySku = Object.fromEntries(parts.map((p) => [p.sku, p]));
+  const ym = `${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}`;
+
+  // ----- Suppliers -----
+  const suppliers = await SupplierModel.insertMany([
+    { name: "AutoParts Vietnam Co.", code: "SUP-APV", contactName: "Trần Quốc Bảo", phone: "0281234501", email: "sales@autopartsvn.com", address: "12 Nguyễn Văn Linh, Q7, TP.HCM", taxCode: "0301234501", paymentTermDays: 30, leadTimeDays: 3 },
+    { name: "Bosch Distributor HCM", code: "SUP-BOSCH", contactName: "Lê Thị Hồng", phone: "0282345602", email: "order@bosch-hcm.vn", address: "88 Điện Biên Phủ, Q3, TP.HCM", taxCode: "0301234502", paymentTermDays: 45, leadTimeDays: 5 },
+    { name: "TirePro Wholesale", code: "SUP-TIRE", contactName: "Phạm Văn Cường", phone: "0283456703", email: "b2b@tirepro.vn", taxCode: "0301234503", paymentTermDays: 15, leadTimeDays: 2 },
+    { name: "QuickLube Supplies", code: "SUP-QL", contactName: "Đỗ Minh Anh", phone: "0284567804", email: "hello@quicklube.vn", paymentTermDays: 30, leadTimeDays: 1 },
+  ]);
+
+  // Preferred supplier on the low-stock parts, so reorder suggestions show one.
+  await PartModel.updateOne({ sku: "ELE-BAT-060" }, { supplierId: suppliers[0]._id });
+  await PartModel.updateOne({ sku: "EXT-WPR-002" }, { supplierId: suppliers[3]._id });
+  await PartModel.updateOne({ sku: "IGN-COIL-010" }, { supplierId: suppliers[1]._id });
+  await PartModel.updateOne({ sku: "TIR-215-55R17" }, { supplierId: suppliers[2]._id });
+
+  const poLine = (sku, quantity, unitCost, receivedQuantity = 0) => ({
+    partId: partBySku[sku]._id,
+    description: partBySku[sku].name,
+    quantity,
+    unitCost,
+    receivedQuantity,
+  });
+  const sum = (lines) => lines.reduce((s, l) => s + l.quantity * l.unitCost, 0);
+
+  // ----- Purchase orders across the lifecycle (drives the Purchasing tabs) -----
+  const po1Lines = [poLine("BRK-PAD-001", 20, 42000), poLine("OIL-SYN-5W30", 30, 36000)];
+  const po3Lines = [poLine("TIR-215-55R17", 20, 150000, 8)];
+  const po4Lines = [poLine("OIL-FLT-001", 50, 7000, 50)];
+  const po5Lines = [poLine("ELE-BAT-060", 10, 120000, 10)];
+  const po6Lines = [poLine("IGN-COIL-010", 15, 55000, 15)];
+
+  const purchaseOrders = await PurchaseOrderModel.insertMany([
+    // Draft — being assembled.
+    { code: `PO-${ym}-00001`, supplierId: suppliers[0]._id, status: "draft", lines: po1Lines, subtotal: sum(po1Lines), amountDue: sum(po1Lines), amountPaid: 0, paymentStatus: "unpaid", expectedAt: daysFromNow(5) },
+    // Sent — awaiting delivery.
+    { code: `PO-${ym}-00002`, supplierId: suppliers[1]._id, status: "sent", lines: [poLine("BRK-ROT-002", 10, 78000)], subtotal: 780000, amountDue: 780000, amountPaid: 0, paymentStatus: "unpaid", expectedAt: daysFromNow(3) },
+    // Partially received.
+    { code: `PO-${ym}-00003`, supplierId: suppliers[2]._id, status: "partiallyReceived", lines: po3Lines, subtotal: sum(po3Lines), amountDue: sum(po3Lines), amountPaid: 0, paymentStatus: "unpaid", expectedAt: daysAgo(1) },
+    // Received and paid in full.
+    { code: `PO-${ym}-00004`, supplierId: suppliers[3]._id, status: "received", lines: po4Lines, subtotal: sum(po4Lines), amountDue: sum(po4Lines), amountPaid: sum(po4Lines), paymentStatus: "paid", expectedAt: daysAgo(12), dueAt: daysAgo(10) },
+    // Received, unpaid and now overdue — shows in payables ageing.
+    { code: `PO-${ym}-00005`, supplierId: suppliers[0]._id, status: "received", lines: po5Lines, subtotal: sum(po5Lines), amountDue: sum(po5Lines), amountPaid: 0, paymentStatus: "unpaid", expectedAt: daysAgo(45), dueAt: daysAgo(40) },
+    // Received, partially paid.
+    { code: `PO-${ym}-00006`, supplierId: suppliers[1]._id, status: "received", lines: po6Lines, subtotal: sum(po6Lines), amountDue: sum(po6Lines), amountPaid: 400000, paymentStatus: "partiallyPaid", expectedAt: daysAgo(8), dueAt: daysAgo(5) },
+  ]);
+
+  // ----- Declined work (Customer care › Deferred work) -----
+  const deferred = await DeferredWorkModel.insertMany([
+    { vehicleId: vehicles[0]._id, customerId: customers[0]._id, description: "New Tire Set Installation", estimatedPrice: 480000, declineReason: "Too expensive right now", priority: "high", status: "open", remindAt: daysFromNow(30) },
+    { vehicleId: vehicles[2]._id, customerId: customers[1]._id, description: "Brake Rotor Resurfacing", estimatedPrice: 140000, declineReason: "Doing it next service", priority: "medium", status: "open", remindAt: daysFromNow(15) },
+    { vehicleId: vehicles[8]._id, customerId: walkIns[1]._id, description: "Cabin Air Filter Replacement", estimatedPrice: 35000, declineReason: "Will do later", priority: "low", status: "open", remindAt: daysFromNow(20) },
+    { vehicleId: vehicles[5]._id, customerId: customers[5]._id, description: "Transmission Fluid Service", estimatedPrice: 150000, declineReason: "Checking with the family", priority: "medium", status: "open", remindAt: daysFromNow(45) },
+  ]);
+
+  // ----- Renewal dates on a few vehicles (so reminders can be generated too) -----
+  await VehicleModel.updateOne({ _id: vehicles[0]._id }, { registrationExpiry: daysFromNow(20), insuranceExpiry: daysFromNow(55) });
+  await VehicleModel.updateOne({ _id: vehicles[1]._id }, { insuranceExpiry: daysFromNow(12) });
+  await VehicleModel.updateOne({ _id: vehicles[2]._id }, { registrationExpiry: daysFromNow(40), insuranceExpiry: daysFromNow(8) });
+  await VehicleModel.updateOne({ _id: vehicles[3]._id }, { registrationExpiry: daysFromNow(5) });
+
+  // ----- Reminders (Customer care › Reminders), pending -----
+  const reminders = await ReminderModel.insertMany([
+    { vehicleId: vehicles[0]._id, customerId: customers[0]._id, type: "registrationExpiry", dueAt: daysFromNow(20), title: "Đăng kiểm sắp hết hạn", message: "Đăng kiểm xe sắp hết hạn trong ~20 ngày.", status: "pending" },
+    { vehicleId: vehicles[1]._id, customerId: customers[0]._id, type: "insuranceExpiry", dueAt: daysFromNow(12), title: "Bảo hiểm sắp hết hạn", message: "Bảo hiểm xe sắp hết hạn trong ~12 ngày.", status: "pending" },
+    { vehicleId: vehicles[2]._id, customerId: customers[1]._id, type: "insuranceExpiry", dueAt: daysFromNow(8), title: "Bảo hiểm sắp hết hạn", message: "Bảo hiểm xe sắp hết hạn trong ~8 ngày.", status: "pending" },
+    { vehicleId: vehicles[0]._id, customerId: customers[0]._id, type: "deferredWork", dueAt: daysFromNow(30), title: "Nhắc hạng mục đã hoãn", message: "Khách đã hoãn: New Tire Set Installation.", status: "pending", sourceRef: deferred[0]._id },
+    { vehicleId: vehicles[3]._id, customerId: customers[3]._id, type: "maintenanceDue", dueAt: daysFromNow(5), title: "Đến kỳ bảo dưỡng", message: "Xe đã quá 6 tháng kể từ lần bảo dưỡng gần nhất.", status: "pending" },
+    { vehicleId: vehicles[7]._id, customerId: walkIns[0]._id, type: "warrantyExpiry", dueAt: daysFromNow(7), title: "Bảo hành dịch vụ sắp hết", message: "Bảo hành lần sửa phanh gần nhất sắp hết hạn.", status: "pending" },
+  ]);
+
+  // ----- Follow-ups (Customer care › Follow-ups) -----
+  const followUps = await FollowUpModel.insertMany([
+    { repairOrderId: repairOrders[0]._id, vehicleId: vehicles[7]._id, customerId: walkIns[0]._id, dueAt: daysAgo(1), status: "pending" },
+    { repairOrderId: repairOrders[1]._id, vehicleId: vehicles[8]._id, customerId: walkIns[1]._id, dueAt: daysAgo(4), status: "contacted", contactedAt: daysAgo(4), csatScore: 4, npsScore: 8, complaintCategory: "timeliness", note: "Hài lòng, chỉ góp ý giao xe hơi trễ hẹn." },
+    { repairOrderId: repairOrders[3]._id, vehicleId: vehicles[2]._id, customerId: customers[1]._id, dueAt: daysAgo(17), status: "contacted", contactedAt: daysAgo(17), csatScore: 5, npsScore: 10, complaintCategory: "none", note: "Rất hài lòng." },
+    { repairOrderId: repairOrders[7]._id, vehicleId: vehicles[3]._id, customerId: customers[3]._id, dueAt: daysFromNow(2), status: "pending" },
+  ]);
+
+  // ----- Odometer history on a couple of vehicles -----
+  await OdometerLogModel.insertMany([
+    { vehicleId: vehicles[0]._id, mileage: 20000, source: "reception", recordedAt: daysAgo(200) },
+    { vehicleId: vehicles[0]._id, mileage: 24000, source: "reception", recordedAt: daysAgo(90) },
+    { vehicleId: vehicles[0]._id, mileage: 24680, source: "inspection", recordedAt: daysAgo(1) },
+    { vehicleId: vehicles[7]._id, mileage: 51000, source: "reception", recordedAt: daysAgo(120) },
+    { vehicleId: vehicles[7]._id, mileage: 58500, source: "reception", recordedAt: daysAgo(4) },
+  ]);
+
+  // ----- Technician labour cost + logged time (feeds gross-profit + KPIs) -----
+  await UserModel.updateOne({ _id: technicians[0]._id }, { hourlyCost: 55000 });
+  await UserModel.updateOne({ _id: technicians[1]._id }, { hourlyCost: 50000 });
+  await TimeLogModel.insertMany([
+    { repairOrderId: repairOrders[0]._id, technicianId: technicians[0]._id, startedAt: daysAgo(5), endedAt: daysAgo(5), durationMinutes: 90 },
+    { repairOrderId: repairOrders[1]._id, technicianId: technicians[1]._id, startedAt: daysAgo(8), endedAt: daysAgo(8), durationMinutes: 120 },
+    { repairOrderId: repairOrders[7]._id, technicianId: technicians[0]._id, startedAt: hoursAgo(4), endedAt: hoursAgo(3), durationMinutes: 55 },
+  ]);
+
+  console.log(
+    `[seed] suppliers: ${suppliers.length}, purchase orders: ${purchaseOrders.length}, deferred work: ${deferred.length}, reminders: ${reminders.length}, follow-ups: ${followUps.length}`
+  );
+}
+
 async function main() {
   await mongoose.connect(env.mongoUri);
   console.log("[seed] connected to MongoDB");
@@ -1041,7 +1151,8 @@ async function main() {
   });
   await seedSchedules({ technicians, repairOrders });
   await seedInvoicesPayments({ order1, order2, order4, accountants, customers, walkIns });
-  await seedParts();
+  const parts = await seedParts();
+  await seedTransformationData({ vehicles, parts, repairOrders, customers, walkIns, technicians });
   await seedNotificationsReviews({ customers, advisors, technicians, order1, order2, bookings });
 
   console.log("\n[seed] done. Login with any seeded account, password: Password123!");
