@@ -2,10 +2,19 @@ import { repairOrderRepository } from "../repositories/repair-order.repository.j
 import { serviceRepository } from "../repositories/service.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
-import { REPAIR_ORDER_STATUSES, ORDER_SERVICE_STATUSES } from "../models/repair-order.model.js";
+import { invoiceRepository } from "../repositories/invoice.repository.js";
+import {
+  REPAIR_ORDER_STATUSES,
+  ORDER_SERVICE_STATUSES,
+  WAITING_STATUSES,
+  TERMINAL_ORDER_STATUSES,
+} from "../models/repair-order.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification, notifyRole } from "../utils/notify.js";
 import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
+import { generateCode } from "../utils/sequence.js";
+import { recordStatusChange } from "../utils/orderStatus.js";
+import { logAudit } from "../utils/audit.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 
@@ -130,6 +139,7 @@ export async function createRepairOrder({ vehicleId, serviceAdvisorId, advisorId
   }
 
   const newOrder = new repairOrderRepository.model({
+    code: await generateCode("RO"),
     vehicleId,
     advisorId: normalizedServiceAdvisorId || null,
     inspectionId: inspectionId || null,
@@ -140,6 +150,14 @@ export async function createRepairOrder({ vehicleId, serviceAdvisorId, advisorId
 
   await newOrder.save();
 
+  await recordStatusChange({
+    repairOrderId: newOrder._id,
+    from: null,
+    to: "pending",
+    changedBy: normalizedServiceAdvisorId || undefined,
+    reason: "Repair order created",
+  });
+
   await newOrder.populate([
     ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),
   ]);
@@ -148,7 +166,7 @@ export async function createRepairOrder({ vehicleId, serviceAdvisorId, advisorId
 }
 
 /** Update a repair order. */
-export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorId, technicianId, services }) {
+export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorId, technicianId, services, reason }) {
   const normalizedServiceAdvisorId =
     serviceAdvisorId !== undefined ? serviceAdvisorId : advisorId;
 
@@ -161,10 +179,26 @@ export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorI
     throw new ApiError(404, "Repair order not found");
   }
 
+  const previousStatus = order.status;
+
   if (status) {
     if (!REPAIR_ORDER_STATUSES.includes(status)) {
       throw new ApiError(400, `Invalid status. Must be one of: ${REPAIR_ORDER_STATUSES.join(", ")}`);
     }
+
+    // A terminal order (closed/cancelled) is finished business — it must not
+    // be casually re-statused through a routine update, same as the
+    // progress-update endpoint below.
+    if (TERMINAL_ORDER_STATUSES.includes(previousStatus) && status !== previousStatus) {
+      throw new ApiError(400, `Cannot change status of a ${previousStatus} repair order`);
+    }
+
+    // Exception states exist specifically so a wait has to be explainable —
+    // an unexplained "waitingParts" is exactly the blind spot they replace.
+    if (WAITING_STATUSES.includes(status) && !reason?.trim()) {
+      throw new ApiError(400, "A reason is required when moving a repair order into a waiting/on-hold status");
+    }
+
     order.status = status;
 
     if (status === "inProgress" && !order.startedAt) {
@@ -216,6 +250,16 @@ export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorI
 
   await order.save();
 
+  if (status) {
+    await recordStatusChange({
+      repairOrderId: order._id,
+      from: previousStatus,
+      to: order.status,
+      changedBy: normalizedServiceAdvisorId || technicianId || undefined,
+      reason: reason?.trim() || undefined,
+    });
+  }
+
   await order.populate([
     ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),
   ]);
@@ -256,8 +300,10 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
     throw new ApiError(400, "Cannot change status of a completed repair order");
   }
 
-  if (order.status === "cancelled" && status !== "cancelled") {
-    throw new ApiError(400, "Cannot change status of a cancelled repair order");
+  // A terminal order (closed/cancelled) is finished business — it must not be
+  // casually re-statused via a routine progress update.
+  if (TERMINAL_ORDER_STATUSES.includes(order.status) && status !== order.status) {
+    throw new ApiError(400, `Cannot change status of a ${order.status} repair order`);
   }
 
   if (technicianId) {
@@ -290,18 +336,35 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
 
     order.services[index].status = status;
 
-    const serviceStatuses = order.services.map((service) => service.status || "pending");
-    if (serviceStatuses.every((value) => value === "completed")) {
-      order.status = "completed";
-    } else if (serviceStatuses.some((value) => value === "inProgress" || value === "completed")) {
-      order.status = "inProgress";
-    } else {
-      order.status = "pending";
+    // Only recompute the order's own status from its lines while the order
+    // is still in one of its normal working states. Once it has moved past
+    // that — QC passed (readyForDelivery/delivered/closed) or parked in a
+    // waiting/on-hold state — a technician touching a single line must not
+    // silently drag the whole order back into "inProgress" or forward into
+    // "completed"; those transitions now go through their own gated actions
+    // (QC, delivery, the waiting-status reason requirement below).
+    const DERIVABLE_ORDER_STATUSES = ["pending", "inProgress", "completed", "reworkRequired"];
+    if (DERIVABLE_ORDER_STATUSES.includes(previousStatus)) {
+      const serviceStatuses = order.services.map((service) => service.status || "pending");
+      if (serviceStatuses.every((value) => value === "completed")) {
+        order.status = "completed";
+      } else if (serviceStatuses.some((value) => value === "inProgress" || value === "completed")) {
+        order.status = "inProgress";
+      } else {
+        order.status = "pending";
+      }
     }
   } else {
     if (!REPAIR_ORDER_STATUSES.includes(status)) {
       throw new ApiError(400, `Invalid status. Must be one of: ${REPAIR_ORDER_STATUSES.join(", ")}`);
     }
+
+    // Exception states exist specifically so a wait has to be explainable —
+    // an unexplained "waitingParts" is exactly the blind spot they replace.
+    if (WAITING_STATUSES.includes(status) && !notes?.trim()) {
+      throw new ApiError(400, "A reason is required when moving a repair order into a waiting/on-hold status");
+    }
+
     order.status = status;
   }
 
@@ -331,6 +394,14 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
   }
 
   await order.save();
+
+  await recordStatusChange({
+    repairOrderId: order._id,
+    from: previousStatus,
+    to: order.status,
+    changedBy: technicianId || order.technicianId || undefined,
+    reason: notes?.trim() || undefined,
+  });
 
   await order.populate([
     ...repairOrderPopulate.filter((item) => item.path !== "inspectionId"),
@@ -527,11 +598,13 @@ export async function getRepairOrderSummary(id) {
 }
 
 /**
- * Service Advisor reviews a technician-completed order. Pass leaves it
- * "completed" (ready to forward to accounting); fail sends it back to the
- * technician as "reworkRequired". Only orders already marked "completed" by
- * a technician can be reviewed — matches the frontend's own ?status=completed
- * query for the review queue.
+ * Service Advisor (or QC inspector) reviews a technician-completed order.
+ * Pass moves it to "readyForDelivery" — this, not a technician's own
+ * "completed", is what actually authorizes invoicing (see
+ * invoice.service.js#generateInvoiceFromRepairOrder) and eventual handover.
+ * Fail sends it back to the technician as "reworkRequired". Only orders
+ * already marked "completed" by a technician can be reviewed — matches the
+ * frontend's own ?status=completed query for the review queue.
  */
 export async function submitQualityCheck(id, { passed, items, note, reworkReason }, reviewerId) {
   if (!id.match(OID_RE)) {
@@ -549,14 +622,33 @@ export async function submitQualityCheck(id, { passed, items, note, reworkReason
     throw new ApiError(400, "Only a repair order marked completed by the technician can be quality-checked");
   }
 
+  // Separation of duties: the person who did the work cannot also be the one
+  // who passes it — otherwise QC is a rubber stamp instead of an independent
+  // check. (No such conflict is possible when the order has no technician
+  // assigned, so that case is left alone.)
+  if (order.technicianId && String(order.technicianId) === String(reviewerId)) {
+    throw new ApiError(403, "The technician who performed this work cannot also pass its quality check");
+  }
+
   const failedItems = Array.isArray(items) ? items.filter((item) => item?.result === "fail") : [];
 
+  const previousStatus = order.status;
   let summary;
   if (passed) {
     order.completedAt = order.completedAt || new Date();
+    // This — not status === "completed" — is what authorises invoicing and
+    // handover from here on.
+    order.qcPassedAt = new Date();
+    order.qcBy = reviewerId;
+    order.status = "readyForDelivery";
     summary = note?.trim() ? `[QC pass] ${note.trim()}` : "[QC pass] Quality check passed.";
   } else {
     order.status = "reworkRequired";
+    // A failed check must never leave a stale pass behind: if this order was
+    // somehow re-checked after an earlier pass, a fail here must not let it
+    // still look QC-approved.
+    order.qcPassedAt = undefined;
+    order.qcBy = undefined;
     const reason =
       reworkReason?.trim() ||
       failedItems.map((item) => item.label).filter(Boolean).join(", ") ||
@@ -571,6 +663,24 @@ export async function submitQualityCheck(id, { passed, items, note, reworkReason
   });
 
   await order.save();
+
+  // QC is a controlled, auditable event regardless of outcome.
+  await logAudit({
+    action: "qcSubmitted",
+    actorId: reviewerId,
+    repairOrderId: order._id,
+    details: summary,
+  });
+
+  // Every QC outcome moves the order's status now (pass -> readyForDelivery,
+  // fail -> reworkRequired) — record both transitions, not just the fail one.
+  await recordStatusChange({
+    repairOrderId: order._id,
+    from: previousStatus,
+    to: order.status,
+    changedBy: reviewerId,
+    reason: summary.replace(/^\[QC (?:pass|fail)\]\s*/, ""),
+  });
 
   if (order.technicianId) {
     await createNotification({
@@ -593,10 +703,12 @@ export async function submitQualityCheck(id, { passed, items, note, reworkReason
 
 /**
  * The real "end of the SA's part of the job" action: only available once QC
- * has passed (status "completed"). Notifies every accountant that an order is
- * ready to invoice. Idempotent-ish: forwardedToAccountantAt is set once and
- * the endpoint refuses to re-forward, so the frontend can hide the button
- * afterward instead of risking duplicate accountant notifications.
+ * has actually passed (order.qcPassedAt set — the order's status by this
+ * point is "readyForDelivery", not "completed"; see submitQualityCheck).
+ * Notifies every accountant that an order is ready to invoice. Idempotent-ish:
+ * forwardedToAccountantAt is set once and the endpoint refuses to re-forward,
+ * so the frontend can hide the button afterward instead of risking duplicate
+ * accountant notifications.
  */
 export async function forwardToAccountant(id) {
   if (!id.match(OID_RE)) {
@@ -609,8 +721,8 @@ export async function forwardToAccountant(id) {
   if (!order) {
     throw new ApiError(404, "Repair order not found");
   }
-  if (order.status !== "completed") {
-    throw new ApiError(400, "Only a repair order that passed quality check (status completed) can be forwarded");
+  if (!order.qcPassedAt) {
+    throw new ApiError(400, "Only a repair order that passed quality check can be forwarded");
   }
   if (order.forwardedToAccountantAt) {
     throw new ApiError(409, "This repair order has already been forwarded to accounting");
@@ -632,4 +744,57 @@ export async function forwardToAccountant(id) {
   });
 
   return { message: "Repair order forwarded to accounting", order };
+}
+
+/**
+ * Hands the vehicle back to the customer — the last step in the order's
+ * lifecycle. Gated on two independent things that both must be true before a
+ * car leaves the garage: the work actually passed QC (not just got marked
+ * "completed" by whoever did it), and the customer has actually paid for it —
+ * an invoice that merely exists but is still unpaid is billed, not settled.
+ */
+export async function deliverVehicle(id, { note }, actorId) {
+  if (!id.match(OID_RE)) {
+    throw new ApiError(400, "Invalid repair order ID format");
+  }
+
+  const order = await repairOrderRepository.findById(id);
+  if (!order) {
+    throw new ApiError(404, "Repair order not found");
+  }
+
+  if (!order.qcPassedAt) {
+    throw new ApiError(409, "This repair order has not passed quality check and cannot be delivered");
+  }
+
+  // The vehicle must be billed — and paid for — before it leaves. No invoice
+  // at all is refused for the same reason as an unpaid one: either way the
+  // customer hasn't settled up yet.
+  const invoice = await invoiceRepository.findOne({ repairOrderId: order._id });
+  if (!invoice) {
+    throw new ApiError(409, "This repair order has not been invoiced yet; bill the customer before handover");
+  }
+  if (invoice.status !== "paid") {
+    throw new ApiError(409, "This repair order's invoice has not been paid in full; settle payment before handover");
+  }
+
+  const previousStatus = order.status;
+  order.deliveredAt = new Date();
+  order.deliveredBy = actorId;
+  order.status = "delivered";
+  await order.save();
+
+  await recordStatusChange({
+    repairOrderId: order._id,
+    from: previousStatus,
+    to: order.status,
+    changedBy: actorId,
+    reason: note?.trim() || undefined,
+  });
+
+  await order.populate([
+    ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),
+  ]);
+
+  return order;
 }

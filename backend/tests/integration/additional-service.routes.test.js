@@ -33,10 +33,17 @@ describe("Additional Service Proposal API", () => {
     // Pricing is the SA's call, not the technician's — the create payload's
     // laborCost/partsCost above are ignored server-side, so the SA supplies
     // the real price here when approving.
+    // Approving also requires evidence of the customer's authorisation — an
+    // advisor's own click is not consent to charge beyond the estimate.
     const approved = await request(app)
       .patch(`/api/additional-service-proposals/${created.body._id}`)
       .set(authHeader(advisor))
-      .send({ status: "approved", laborCost: 10000, partsCost: 20000 });
+      .send({
+        status: "approved",
+        laborCost: 10000,
+        partsCost: 20000,
+        approval: { channel: "phone", decidedByName: "Nguyen Van A", contactValue: "0901234567" },
+      });
     expect(approved.status).toBe(200);
 
     const updatedOrder = await request(app).get(`/api/repair-orders/${order._id}`).set(authHeader(advisor));

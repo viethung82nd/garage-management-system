@@ -21,12 +21,21 @@ export const LOGIN_ROLES = [
   "onlineCustomer",
   "serviceAdvisor",
   "technician",
+  "qcInspector",
+  "partsStaff",
   "accountant",
   "admin",
 ];
 
 /** Staff roles an admin is allowed to create via POST /api/auth/staff. */
-const STAFF_ROLES = ["serviceAdvisor", "technician", "accountant", "admin"];
+const STAFF_ROLES = [
+  "serviceAdvisor",
+  "technician",
+  "qcInspector",
+  "partsStaff",
+  "accountant",
+  "admin",
+];
 
 const EMAIL_RE = /^\S+@\S+\.\S+$/;
 

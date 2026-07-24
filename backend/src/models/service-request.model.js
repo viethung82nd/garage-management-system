@@ -1,4 +1,5 @@
 import mongoose, { Schema } from "mongoose";
+import { createApprovalSchema } from "./approval.schema.js";
 
 // "pending/sent/approved/rejected" is the vocabulary the frontend's SA review
 // screen actually uses today (send quote to customer / approve directly into
@@ -86,6 +87,19 @@ const serviceRequestSchema = new Schema(
     reviewNote: {
       type: String,
       trim: true,
+    },
+    // Customer authorisation for this change order. Extra work must not be
+    // billed on an advisor's say-so alone: charging beyond the approved
+    // estimate requires the customer's own consent, captured with who/when/how.
+    // No approval record ⇒ the line never reaches the repair order.
+    approval: {
+      type: createApprovalSchema(),
+    },
+    // The revised order total the customer was quoted at approval time. A
+    // change order must state the NEW overall figure, not just the delta —
+    // otherwise "it's only 500k more" hides where the total actually landed.
+    revisedOrderTotal: {
+      type: Number,
     },
     resolvedAt: {
       type: Date,

@@ -126,3 +126,13 @@ export async function forwardToAccountant(req, res) {
   const result = await repairOrderService.forwardToAccountant(req.params.id);
   res.json(result);
 }
+
+/**
+ * POST /api/repair-orders/:id/deliver
+ * Hand the vehicle back to the customer once QC has passed and the invoice
+ * has been paid in full.
+ */
+export async function deliverVehicle(req, res) {
+  const order = await repairOrderService.deliverVehicle(req.params.id, req.body ?? {}, req.user.sub);
+  res.json(order);
+}

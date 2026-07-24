@@ -7,6 +7,7 @@ import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
 import { logAudit } from "../utils/audit.js";
+import { generateCode } from "../utils/sequence.js";
 
 const INVOICE_TERM_DAYS = 15;
 
@@ -242,8 +243,11 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     throw new ApiError(404, "repair order not found");
   }
 
-  if (order.status !== "completed") {
-    throw new ApiError(409, "repair order is not completed");
+  // qcPassedAt, not status === "completed", is what actually authorizes
+  // invoicing — a technician marking their own work "completed" is not a
+  // quality check. See repair-order.service.js#submitQualityCheck.
+  if (!order.qcPassedAt) {
+    throw new ApiError(409, "repair order has not passed quality check");
   }
 
   const existing = await invoiceRepository.findOne({ repairOrderId });
@@ -281,6 +285,7 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
   const dueAt = new Date(issuedAt.getTime() + INVOICE_TERM_DAYS * 24 * 60 * 60 * 1000);
 
   const invoice = await invoiceRepository.create({
+    code: await generateCode("INV"),
     repairOrderId,
     accountantId,
     lineItems,
@@ -305,7 +310,7 @@ export async function generateInvoiceFromRepairOrder({ repairOrderId, discount }
     actorId: accountantId,
     invoiceId: invoice._id,
     repairOrderId,
-    details: `${formatDisplayId("INV", invoice._id)} generated for ${total.toLocaleString("vi-VN")} ₫`,
+    details: `${invoice.code || formatDisplayId("INV", invoice._id)} generated for ${total.toLocaleString("vi-VN")} ₫`,
   });
 
   return { invoice: serializeInvoice(invoice, null) };

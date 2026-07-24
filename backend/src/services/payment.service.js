@@ -6,6 +6,23 @@ import { ApiError } from "../utils/apiError.js";
 import { charge } from "../utils/paymentGateway.js";
 import { logAudit } from "../utils/audit.js";
 
+/**
+ * The mock gateway's outcome can be forced via `simulate` ("succeeded"/"fail"),
+ * which exists purely so automated tests and manual QA can exercise the
+ * failure path deterministically. That is NOT something an API request body
+ * may control — a client sending `{"simulate":"succeeded"}` must never be
+ * able to mark an invoice paid without a real charge. The only sanctioned
+ * source is the `PAYMENT_SIMULATE` server env var, and even that is ignored
+ * outright in production so a misconfigured env can't silently fake charges
+ * on a live deployment.
+ */
+function resolveSimulateOverride() {
+  if (process.env.NODE_ENV === "production") {
+    return undefined;
+  }
+  return process.env.PAYMENT_SIMULATE || undefined;
+}
+
 /** Throws a 400 unless `id` is a well-formed Mongo ObjectId. */
 function assertObjectId(id, label) {
   if (!mongoose.isValidObjectId(id)) {
@@ -31,8 +48,14 @@ async function resolveInvoiceCustomer(invoiceId) {
  * remaining balance (a partial payment, e.g. a deposit); omitting it pays the
  * full remaining balance in one shot, same as before. It can never exceed the
  * remaining balance — the client can under-pay, never over-pay.
+ *
+ * Note there is no `simulate` param here even though `charge()` accepts one:
+ * that flag must never be attacker/caller-controlled (it can force the mock
+ * gateway to fabricate a "succeeded" charge, settling an invoice with no real
+ * payment), so it is deliberately NOT part of this function's request-shaped
+ * params. See `resolveSimulateOverride` below for the only sanctioned source.
  */
-export async function recordPayment({ invoiceId, method, amount, reference, simulate }, actorId) {
+export async function recordPayment({ invoiceId, method, amount, reference }, actorId) {
   assertObjectId(invoiceId, "invoiceId");
   if (!PAYMENT_METHODS.includes(method)) {
     throw new ApiError(400, `method must be one of: ${PAYMENT_METHODS.join(", ")}`);
@@ -72,7 +95,7 @@ export async function recordPayment({ invoiceId, method, amount, reference, simu
     status: "pending",
   });
 
-  const result = await charge({ amount: chargeAmount, method, simulate });
+  const result = await charge({ amount: chargeAmount, method, simulate: resolveSimulateOverride() });
 
   payment.status = result.status;
   payment.gatewayRef = result.gatewayRef;

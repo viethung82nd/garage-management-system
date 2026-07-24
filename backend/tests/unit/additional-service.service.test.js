@@ -46,12 +46,65 @@ describe("additional-service.service", () => {
     expect(proposal.laborCost).toBeUndefined();
 
     await additionalServiceService.updateAdditionalServiceProposal(
-      proposal._id.toString(), "approved", advisor._id.toString(), { laborCost: 20000, partsCost: 30000 },
+      proposal._id.toString(), "approved", advisor._id.toString(),
+      {
+        laborCost: 20000,
+        partsCost: 30000,
+        // Extra work may only be billed with the customer's authorisation;
+        // an advisor relaying it must evidence how it was obtained.
+        approval: { channel: "phone", decidedByName: "Nguyen Van A", contactValue: "0901234567" },
+      },
     );
 
     const updatedOrder = await RepairOrderModel.findById(order._id);
     expect(updatedOrder.services).toHaveLength(1);
     expect(updatedOrder.totalCost).toBe(50000);
+  });
+
+  it("refuses to approve extra work without the customer's authorisation", async () => {
+    const { user: advisor } = await createUser({ role: "serviceAdvisor" });
+    const { user: tech } = await createUser({ role: "technician" });
+    const order = await orderFor(advisor);
+    const proposal = await additionalServiceService.createAdditionalServiceProposal(
+      { repairOrderId: order._id.toString(), serviceName: "Wiper blades" },
+      tech._id.toString(),
+    );
+
+    await expect(
+      additionalServiceService.updateAdditionalServiceProposal(
+        proposal._id.toString(), "approved", advisor._id.toString(), { laborCost: 20000 },
+      ),
+    ).rejects.toMatchObject({ status: 400 });
+
+    // And nothing was billed to the order as a side effect.
+    const untouched = await RepairOrderModel.findById(order._id);
+    expect(untouched.services).toHaveLength(0);
+  });
+
+  it("records who authorised the extra work, when and through which channel", async () => {
+    const { user: advisor } = await createUser({ role: "serviceAdvisor" });
+    const { user: tech } = await createUser({ role: "technician" });
+    const order = await orderFor(advisor);
+    const proposal = await additionalServiceService.createAdditionalServiceProposal(
+      { repairOrderId: order._id.toString(), serviceName: "Brake fluid" },
+      tech._id.toString(),
+    );
+
+    const approved = await additionalServiceService.updateAdditionalServiceProposal(
+      proposal._id.toString(), "approved", advisor._id.toString(),
+      {
+        laborCost: 15000,
+        approval: { channel: "zalo", decidedByName: "Tran Thi B", contactValue: "0912345678" },
+      },
+    );
+
+    expect(approved.approval.channel).toBe("zalo");
+    expect(approved.approval.decidedByName).toBe("Tran Thi B");
+    expect(approved.approval.contactValue).toBe("0912345678");
+    expect(approved.approval.recordedBy.toString()).toBe(advisor._id.toString());
+    expect(approved.approval.decidedAt).toBeInstanceOf(Date);
+    // A change order must state the new overall figure, not just the delta.
+    expect(approved.revisedOrderTotal).toBe(15000);
   });
 
   it("rejects a second decision on an already-resolved proposal", async () => {
@@ -62,7 +115,10 @@ describe("additional-service.service", () => {
       { repairOrderId: order._id.toString(), serviceName: "X" },
       tech._id.toString(),
     );
-    await additionalServiceService.updateAdditionalServiceProposal(proposal._id.toString(), "approved", advisor._id.toString());
+    await additionalServiceService.updateAdditionalServiceProposal(
+      proposal._id.toString(), "approved", advisor._id.toString(),
+      { approval: { channel: "inPerson", decidedByName: "Walk-in customer" } },
+    );
     await expect(
       additionalServiceService.updateAdditionalServiceProposal(proposal._id.toString(), "rejected", advisor._id.toString()),
     ).rejects.toMatchObject({ status: 409 });

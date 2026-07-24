@@ -1,6 +1,6 @@
 import { beforeAll, afterAll, beforeEach } from "vitest";
 import mongoose from "mongoose";
-import { MongoMemoryServer } from "mongodb-memory-server";
+import { MongoMemoryReplSet } from "mongodb-memory-server";
 
 // Must be set before any src module (config/env.js) is imported by a test file.
 process.env.NODE_ENV = "test";
@@ -12,9 +12,13 @@ process.env.CORS_ORIGIN = process.env.CORS_ORIGIN || "http://localhost:5173";
 let mongod;
 
 beforeAll(async () => {
-  mongod = await MongoMemoryServer.create();
+  // A single-node replica set (not a bare standalone) so MongoDB transactions
+  // work under test — the app uses them for the multi-document flows
+  // (reception, quote confirm, additional-service approve). Production's
+  // MONGODB_URI already points at a replica set.
+  mongod = await MongoMemoryReplSet.create({ replSet: { count: 1 } });
   await mongoose.connect(mongod.getUri());
-}, 60000);
+}, 120000);
 
 afterAll(async () => {
   await mongoose.disconnect();

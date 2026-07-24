@@ -272,9 +272,23 @@ export function fetchAdditionalServiceProposals(token: string) {
   return apiRequest<{ proposals?: ApiAdditionalServiceProposal[] } | ApiAdditionalServiceProposal[]>('/api/additional-service-proposals', { token })
 }
 
+export const APPROVAL_CHANNELS = ['app', 'inPerson', 'phone', 'zalo', 'email', 'sms'] as const
+export type ApprovalChannel = (typeof APPROVAL_CHANNELS)[number]
+
+/** Evidence that the CUSTOMER authorised extra work. Required by the backend
+ * when approving a proposal: charging beyond the agreed estimate can't rest on
+ * an advisor's click alone, so we record who authorised it and how. */
+export type ApprovalEvidence = {
+  channel: ApprovalChannel
+  decidedByName: string
+  contactValue?: string
+  note?: string
+}
+
 export type UpdateAdditionalServiceProposalOverrides = {
   laborCost?: number
   partsCost?: number
+  approval?: ApprovalEvidence
 }
 
 /** `overrides` lets the SA adjust the price before sending/approving — the

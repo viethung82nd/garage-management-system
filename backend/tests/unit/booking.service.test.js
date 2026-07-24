@@ -1,10 +1,10 @@
 import { describe, it, expect } from "vitest";
 import * as bookingService from "../../src/services/booking.service.js";
 import { BookingModel } from "../../src/models/index.js";
-import { createUser } from "../factories.js";
+import { createUser, futureDateStr } from "../factories.js";
 import { SLOT_CAPACITY } from "../../src/config/constants.js";
 
-const FUTURE_DATE = "2027-01-15";
+const FUTURE_DATE = futureDateStr(365);
 const SLOT = "09:00";
 
 function bookingPayload(overrides = {}) {
@@ -110,7 +110,7 @@ describe("booking.service", () => {
       const result = await bookingService.rescheduleBooking(
         booking._id.toString(),
         { sub: customerId, role: "onlineCustomer" },
-        { bookingDate: "2027-01-16", timeSlot: "10:00" },
+        { bookingDate: futureDateStr(366), timeSlot: "10:00" },
       );
       expect(result.booking.status).toBe("rescheduled");
       expect(result.booking.timeSlot).toBe("10:00");

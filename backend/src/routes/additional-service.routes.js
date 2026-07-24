@@ -5,6 +5,7 @@ import {
   listAdditionalServiceProposals,
   createAdditionalServiceProposal,
   updateAdditionalServiceProposal,
+  customerDecideProposal,
 } from "../controllers/additional-service.controller.js";
 
 export const additionalServiceRouter = Router();
@@ -28,4 +29,13 @@ additionalServiceRouter.patch(
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
   catchAsync(updateAdditionalServiceProposal),
+);
+
+// The customer authorising extra work on their own vehicle — the path that
+// makes a change order legally sound rather than staff-asserted.
+additionalServiceRouter.patch(
+  "/:id/customer-decision",
+  requireAuth,
+  requireRole("onlineCustomer"),
+  catchAsync(customerDecideProposal),
 );

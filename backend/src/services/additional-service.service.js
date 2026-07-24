@@ -6,6 +6,8 @@ import { SERVICE_REQUEST_STATUSES } from "../models/service-request.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
+import { runInTransaction } from "../utils/transaction.js";
+import { APPROVAL_CHANNELS } from "../models/index.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const FE_STATUSES = ["pending", "sent", "approved", "rejected"];
@@ -110,6 +112,100 @@ export async function createAdditionalServiceProposal(
 }
 
 /**
+ * Commits an authorised change order: stamps the approval evidence onto the
+ * proposal, pushes the extra work onto the repair order, and records the
+ * revised order total the customer was told.
+ *
+ * The two writes are one logical act — a partial commit would leave the
+ * proposal terminally "approved" while the work stayed invisible on the
+ * invoice (which is derived purely from RepairOrder.services).
+ *
+ * `revisedOrderTotal` is captured deliberately: a change order has to state
+ * the NEW overall figure, not merely the increment, or "it's only 500k more"
+ * quietly hides where the total actually landed.
+ */
+async function applyProposalApproval(proposal, approvalRecord) {
+  const lineTotal = (proposal.laborCost || 0) + (proposal.partsCost || 0);
+
+  await runInTransaction(async (session) => {
+    const order = await repairOrderRepository.model
+      .findById(proposal.repairOrderId)
+      .session(session);
+
+    if (order) {
+      order.services.push({
+        serviceId: proposal.serviceId || undefined,
+        name: proposal.serviceName,
+        priceAtTime: lineTotal,
+        quantity: 1,
+        kind: "service",
+        source: "additionalService",
+      });
+      order.totalCost = order.services.reduce(
+        (sum, service) => sum + service.priceAtTime * (service.quantity || 1),
+        0,
+      );
+      await order.save({ session });
+      proposal.revisedOrderTotal = order.totalCost;
+    }
+
+    proposal.approval = { ...approvalRecord, decidedAt: new Date(), approvedTotal: lineTotal };
+    await proposal.save({ session });
+  });
+}
+
+/**
+ * The customer decides on a change order themselves.
+ *
+ * This is the authorisation path the standard actually asks for: the person
+ * paying agrees, in their own name, before the work is billed. Ownership is
+ * verified through the proposal's repair order → vehicle → customer chain so
+ * one customer can never act on another's proposal.
+ */
+export async function customerDecideProposal(id, { approved, note }, customerId) {
+  if (!OID_RE.test(id)) {
+    throw new ApiError(400, "Invalid proposal ID format");
+  }
+  if (typeof approved !== "boolean") {
+    throw new ApiError(400, "approved (boolean) is required");
+  }
+
+  const proposal = await serviceRequestRepository.findById(id);
+  if (!proposal) {
+    throw new ApiError(404, "Proposal not found");
+  }
+  if (TERMINAL_STATUSES.includes(proposal.status) || proposal.status === "approvedByCustomer") {
+    throw new ApiError(409, `This proposal was already ${proposal.status} and can no longer be changed`);
+  }
+
+  const order = await repairOrderRepository.model
+    .findById(proposal.repairOrderId)
+    .populate({ path: "vehicleId", select: "customerId" });
+  const ownerId = order?.vehicleId?.customerId;
+  if (!ownerId || ownerId.toString() !== String(customerId)) {
+    // 404 rather than 403 — don't reveal other customers' proposals to
+    // someone guessing ids.
+    throw new ApiError(404, "Proposal not found");
+  }
+
+  proposal.status = approved ? "approvedByCustomer" : "rejectedByCustomer";
+  proposal.resolvedAt = new Date();
+
+  if (approved) {
+    await applyProposalApproval(proposal, {
+      decidedBy: customerId,
+      channel: "app",
+      note: note?.trim(),
+    });
+  } else {
+    await proposal.save();
+  }
+
+  await proposal.populate("technicianId", "fullName email phone role");
+  return proposal;
+}
+
+/**
  * SA sends/approves/rejects a proposal. `overrides` lets the SA set the
  * final price before it goes anywhere — the technician's labor/parts cost is
  * only ever an estimate; pricing what the customer actually gets billed is
@@ -155,29 +251,39 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
   if (status === "approved" || status === "rejected") {
     proposal.resolvedAt = new Date();
   }
-  await proposal.save();
-  await proposal.populate("technicianId", "fullName email phone role");
 
-  // Approved extra work must actually land on the order, or it's invisible
-  // on the eventual invoice (which is derived purely from RepairOrder.services).
+  // Approving extra work means charging the customer beyond the estimate they
+  // already agreed to. That requires the CUSTOMER's authorisation — an
+  // advisor's own click is not consent. Account holders approve through
+  // /customer-decision; this staff-facing path exists for walk-ins with no
+  // account, and therefore demands the evidence of that conversation: how it
+  // was obtained, who authorised it, and on what contact.
   if (status === "approved") {
-    const order = await repairOrderRepository.findById(proposal.repairOrderId);
-    if (order) {
-      order.services.push({
-        serviceId: proposal.serviceId || undefined,
-        name: proposal.serviceName,
-        priceAtTime: (proposal.laborCost || 0) + (proposal.partsCost || 0),
-        quantity: 1,
-        kind: "service",
-        source: "additionalService",
-      });
-      order.totalCost = order.services.reduce(
-        (sum, service) => sum + service.priceAtTime * (service.quantity || 1),
-        0,
+    const { approval } = overrides;
+    if (!approval?.channel) {
+      throw new ApiError(
+        400,
+        `Approving extra work requires the customer's authorisation: supply approval.channel (one of: ${APPROVAL_CHANNELS.join(", ")}), approval.decidedByName and approval.contactValue. Customers with an account should approve via PATCH /api/additional-service-proposals/:id/customer-decision instead.`,
       );
-      await order.save();
     }
+    if (!APPROVAL_CHANNELS.includes(approval.channel)) {
+      throw new ApiError(400, `approval.channel must be one of: ${APPROVAL_CHANNELS.join(", ")}`);
+    }
+    if (!approval.decidedByName?.trim()) {
+      throw new ApiError(400, "approval.decidedByName is required — name the person who authorised the extra work");
+    }
+
+    await applyProposalApproval(proposal, {
+      decidedByName: approval.decidedByName.trim(),
+      channel: approval.channel,
+      contactValue: approval.contactValue?.trim(),
+      recordedBy: reviewedBy,
+      note: approval.note?.trim(),
+    });
+  } else {
+    await proposal.save();
   }
+  await proposal.populate("technicianId", "fullName email phone role");
 
   // Only meaningful when status === "sent" — undefined otherwise, so the
   // frontend can tell "not applicable" apart from "no email on file".

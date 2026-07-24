@@ -3,6 +3,9 @@ import { repairOrderRepository } from "../repositories/repair-order.repository.j
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { resolveCustomer, resolveVehicle } from "./booking.service.js";
 import { ApiError } from "../utils/apiError.js";
+import { runInTransaction } from "../utils/transaction.js";
+import { generateCode } from "../utils/sequence.js";
+import { recordStatusChange } from "../utils/orderStatus.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -131,59 +134,81 @@ export async function createReception(
     }
   }
 
-  // ===== Find/Create customer & vehicle =====
+  // ===== Find/Create customer, vehicle, repair order — atomically =====
+  //
+  // Reception is a chain of coupled writes: find-or-create the customer, then
+  // the vehicle, update the vehicle's VIN/mileage, open the repair-order shell,
+  // and mark the booking as received (repairOrderId set). A partial run is
+  // exactly the failure class this transaction exists to prevent — e.g. a
+  // repair order created but the booking left unlinked (so a retry opens a
+  // second order), or a booking flagged received with no order behind it. All
+  // of it commits together or not at all.
+  const repairOrderCode = await generateCode("RO");
 
-  const customer = await resolveCustomer({
-    fullName: customerName.trim(),
-    phone: phone.trim(),
-    email: customerEmail,
-  });
+  const result = await runInTransaction(async (session) => {
+    const customer = await resolveCustomer(
+      {
+        fullName: customerName.trim(),
+        phone: phone.trim(),
+        email: customerEmail,
+      },
+      session,
+    );
 
-  const vehicle = await resolveVehicle(
-    {
-      licensePlate: plate.trim(),
-      model: model.trim(),
-    },
-    customer._id,
-  );
+    const vehicle = await resolveVehicle(
+      {
+        licensePlate: plate.trim(),
+        model: model.trim(),
+      },
+      customer._id,
+      session,
+    );
 
-  vehicle.chassisNumber = normalizedVin;
-  vehicle.engineNumber = engineNo.trim();
-  vehicle.lastKnownMileage = parsedMileage;
+    vehicle.chassisNumber = normalizedVin;
+    vehicle.engineNumber = engineNo.trim();
+    vehicle.lastKnownMileage = parsedMileage;
 
-  await vehicle.save();
+    await vehicle.save({ session });
 
-  // ===== Create Repair Order =====
+    const [repairOrder] = await repairOrderRepository.model.create(
+      [
+        {
+          code: repairOrderCode,
+          vehicleId: vehicle._id,
+          advisorId,
+          services: [],
+          status: "pending",
+          issueDescription: issueDescription?.trim() || undefined,
+          serviceCategory: booking?.serviceCategory || undefined,
+          promisedAt: parsedPromisedAt,
+        },
+      ],
+      { session },
+    );
 
-  const repairOrder = await repairOrderRepository.create({
-    vehicleId: vehicle._id,
-    advisorId,
-    services: [],
-    status: "pending",
-    issueDescription: issueDescription?.trim() || undefined,
-    serviceCategory: booking?.serviceCategory || undefined,
-    promisedAt: parsedPromisedAt,
-  });
+    if (booking) {
+      booking.repairOrderId = repairOrder._id;
 
-  // ===== Link booking =====
+      if (booking.status === "pending") {
+        booking.status = "confirmed";
+        booking.advisorId = advisorId;
+      }
 
-  if (booking) {
-    booking.repairOrderId = repairOrder._id;
-
-    if (booking.status === "pending") {
-      booking.status = "confirmed";
-      booking.advisorId = advisorId;
+      await booking.save({ session });
     }
 
-    await booking.save();
-  }
+    return { customer, vehicle, repairOrder, booking };
+  });
 
-  return {
-    customer,
-    vehicle,
-    repairOrder,
-    booking,
-  };
+  await recordStatusChange({
+    repairOrderId: result.repairOrder._id,
+    from: null,
+    to: "pending",
+    changedBy: advisorId,
+    reason: "Vehicle received at front desk",
+  });
+
+  return result;
 }
 
 /**

@@ -116,15 +116,17 @@ export async function getSlots(dateParam) {
 }
 
 /** Finds a user by phone, or creates a walk-in customer record for them. */
-export async function resolveCustomer({ fullName, phone, email }) {
+export async function resolveCustomer({ fullName, phone, email }, session) {
   const normalizedName = fullName?.trim();
   const normalizedPhone = phone?.trim();
   const normalizedEmail = email?.trim().toLowerCase();
 
-  const existing = await userRepository.findOne({
-    phone: normalizedPhone,
-    role: { $in: ["onlineCustomer", "walkInCustomer"] },
-  });
+  const existing = await userRepository.model
+    .findOne({
+      phone: normalizedPhone,
+      role: { $in: ["onlineCustomer", "walkInCustomer"] },
+    })
+    .session(session ?? null);
 
   if (existing) {
     // Phone đã tồn tại nhưng tên khác -> báo lỗi
@@ -141,29 +143,40 @@ export async function resolveCustomer({ fullName, phone, email }) {
     // Chỉ bổ sung email nếu trước đó chưa có
     if (!existing.email && normalizedEmail) {
       existing.email = normalizedEmail;
-      await existing.save();
+      await existing.save({ session });
     }
 
     return existing;
   }
 
-  // Chưa có khách hàng -> tạo mới
-  return userRepository.create({
-    fullName: normalizedName,
-    phone: normalizedPhone,
-    email: normalizedEmail || undefined,
-    role: "walkInCustomer",
-    accountType: "walkIn",
-  });
+  // Chưa có khách hàng -> tạo mới. Model.create([doc], {session}) is the
+  // session-aware create form and returns an array even for a single doc.
+  const [created] = await userRepository.model.create(
+    [
+      {
+        fullName: normalizedName,
+        phone: normalizedPhone,
+        email: normalizedEmail || undefined,
+        role: "walkInCustomer",
+        accountType: "walkIn",
+      },
+    ],
+    { session },
+  );
+  return created;
 }
 
-/** Finds a vehicle by licence plate, or registers a new one for the customer. */
+/** Finds a vehicle by licence plate, or registers a new one for the customer.
+ *  Pass `session` to enrol every read/write in an outer transaction. */
 export async function resolveVehicle(
   { licensePlate, brand, model },
   customerId,
+  session,
 ) {
   const plate = licensePlate.toUpperCase().trim();
-  const existing = await vehicleRepository.findOne({ licensePlate: plate });
+  const existing = await vehicleRepository.model
+    .findOne({ licensePlate: plate })
+    .session(session ?? null);
   if (existing) {
     // A vehicle record from an earlier visit shouldn't freeze its
     // brand/model forever — apply whatever the front desk just typed
@@ -179,16 +192,15 @@ export async function resolveVehicle(
       changed = true;
     }
     if (changed) {
-      await existing.save();
+      await existing.save({ session });
     }
     return existing;
   }
-  return vehicleRepository.create({
-    licensePlate: plate,
-    brand,
-    model,
-    customerId,
-  });
+  const [created] = await vehicleRepository.model.create(
+    [{ licensePlate: plate, brand, model, customerId }],
+    { session },
+  );
+  return created;
 }
 
 /** Populates a booking with the fields clients need for display. */

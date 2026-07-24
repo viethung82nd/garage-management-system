@@ -1,7 +1,7 @@
 import { CheckOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Empty, InputNumber, Tag } from 'antd'
+import { Avatar, Button, Card, Empty, Input, InputNumber, Modal, Select, Tag } from 'antd'
 import { useEffect, useMemo, useState } from 'react'
-import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal } from '../../shared/api/workshop'
+import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal, type ApprovalChannel, type ApprovalEvidence } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
 import { InlineBanner, StatCard, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
@@ -136,6 +136,7 @@ export function AdditionalServiceSuggestionPage() {
   const [editedPartsCost, setEditedPartsCost] = useState(0)
   const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
+  const [approvalOpen, setApprovalOpen] = useState(false)
 
   useEffect(() => {
     if (!token) return
@@ -183,7 +184,7 @@ export function AdditionalServiceSuggestionPage() {
   )
   const isResolved = selectedProposal?.status === 'approved' || selectedProposal?.status === 'rejected'
 
-  async function updateStatus(status: ProposalStatus) {
+  async function updateStatus(status: ProposalStatus, approval?: ApprovalEvidence) {
     if (!selectedProposal || !token) return
     if (isResolved) {
       showError(`This proposal was already ${selectedProposal.status} and can no longer be changed.`)
@@ -200,6 +201,7 @@ export function AdditionalServiceSuggestionPage() {
       const updated = await updateAdditionalServiceProposal(token, selectedProposal.id, status, {
         laborCost: editedLaborCost,
         partsCost: editedPartsCost,
+        approval,
       })
       const mapped = mapProposal(updated)
       setProposals((current) => current.map((proposal) => (proposal.id === selectedProposal.id ? { ...proposal, ...mapped, status } : proposal)))
@@ -311,7 +313,7 @@ export function AdditionalServiceSuggestionPage() {
                   <Button block disabled={saving} icon={<FileTextOutlined />} onClick={() => updateStatus('sent')} size="large" type="primary">
                     Send quote to customer
                   </Button>
-                  <Button block disabled={saving} icon={<CheckOutlined />} onClick={() => updateStatus('approved')}>
+                  <Button block disabled={saving} icon={<CheckOutlined />} onClick={() => setApprovalOpen(true)}>
                     Approve into work order
                   </Button>
                   <Button block danger disabled={saving} onClick={() => updateStatus('rejected')} type="text">
@@ -327,6 +329,148 @@ export function AdditionalServiceSuggestionPage() {
           </Card>
         )}
       </div>
+
+      <CustomerAuthorisationModal
+        amount={editedLaborCost + editedPartsCost}
+        onCancel={() => setApprovalOpen(false)}
+        onConfirm={async (evidence) => {
+          await updateStatus('approved', evidence)
+          setApprovalOpen(false)
+        }}
+        open={approvalOpen}
+        saving={saving}
+        serviceName={selectedProposal?.serviceName ?? ''}
+      />
     </ServiceAdvisorShell>
+  )
+}
+
+const CHANNEL_OPTIONS: { label: string; value: ApprovalChannel }[] = [
+  { label: 'In person (at the desk)', value: 'inPerson' },
+  { label: 'Phone call', value: 'phone' },
+  { label: 'Zalo', value: 'zalo' },
+  { label: 'SMS', value: 'sms' },
+  { label: 'Email', value: 'email' },
+]
+
+/**
+ * Captures proof that the CUSTOMER authorised extra work before it is billed.
+ *
+ * Approving a proposal charges the customer beyond the estimate they already
+ * agreed to, so the backend refuses to do it on an advisor's click alone — it
+ * requires who authorised it and through which channel. This dialog is where
+ * the advisor records that conversation. Customers with an account approve it
+ * themselves in the customer portal and never reach this screen.
+ */
+function CustomerAuthorisationModal({
+  amount,
+  onCancel,
+  onConfirm,
+  open,
+  saving,
+  serviceName,
+}: {
+  amount: number
+  onCancel: () => void
+  onConfirm: (evidence: ApprovalEvidence) => void | Promise<void>
+  open: boolean
+  saving: boolean
+  serviceName: string
+}) {
+  const [channel, setChannel] = useState<ApprovalChannel>('phone')
+  const [name, setName] = useState('')
+  const [contact, setContact] = useState('')
+  const [note, setNote] = useState('')
+  const [touched, setTouched] = useState(false)
+
+  // Reset each time the dialog opens so one approval's details can't bleed
+  // into the next.
+  useEffect(() => {
+    if (open) {
+      setChannel('phone')
+      setName('')
+      setContact('')
+      setNote('')
+      setTouched(false)
+    }
+  }, [open])
+
+  const nameError = touched && !name.trim() ? 'Enter the name of the person who authorised this.' : ''
+
+  return (
+    <Modal
+      cancelText="Cancel"
+      confirmLoading={saving}
+      okText="Record authorisation & approve"
+      onCancel={onCancel}
+      onOk={() => {
+        setTouched(true)
+        if (!name.trim()) return
+        void onConfirm({
+          channel,
+          decidedByName: name.trim(),
+          contactValue: contact.trim() || undefined,
+          note: note.trim() || undefined,
+        })
+      }}
+      open={open}
+      title="Record the customer's authorisation"
+    >
+      <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginBottom: 16 }}>
+        You are about to add <strong style={{ color: advisorPalette.ink }}>{serviceName}</strong> ({formatMoney(amount)}) to
+        this work order. Extra work may only be billed once the customer has agreed, so record how you obtained that
+        agreement.
+      </p>
+
+      <div className="flex flex-col gap-3">
+        <label>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
+            How was it obtained? <span aria-hidden="true">*</span>
+          </div>
+          <Select onChange={setChannel} options={CHANNEL_OPTIONS} style={{ width: '100%' }} value={channel} />
+        </label>
+
+        <label>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
+            Who authorised it? <span aria-hidden="true">*</span>
+          </div>
+          <Input
+            onBlur={() => setTouched(true)}
+            onChange={(event) => setName(event.target.value)}
+            placeholder="Customer's full name"
+            status={nameError ? 'error' : undefined}
+            value={name}
+          />
+          {nameError ? (
+            <div role="alert" style={{ color: '#d4380d', fontSize: 12, marginTop: 4 }}>
+              {nameError}
+            </div>
+          ) : null}
+        </label>
+
+        <label>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
+            Phone or email contacted
+          </div>
+          <Input
+            onChange={(event) => setContact(event.target.value)}
+            placeholder="e.g. 0901234567"
+            value={contact}
+          />
+        </label>
+
+        <label>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
+            Note (optional)
+          </div>
+          <Input.TextArea
+            autoSize={{ maxRows: 4, minRows: 2 }}
+            onChange={(event) => setNote(event.target.value)}
+            placeholder="Anything the customer said worth recording"
+            value={note}
+          />
+        </label>
+      </div>
+    </Modal>
   )
 }

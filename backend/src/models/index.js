@@ -19,3 +19,8 @@ export * from "./otp.model.js";
 export * from "./schedule.model.js";
 export * from "./revenue-report.model.js";
 export * from "./lookup-session.model.js";
+export * from "./counter.model.js";
+export * from "./repair-order-status-history.model.js";
+export * from "./approval.schema.js";
+export * from "./quote-version.model.js";
+export * from "./deferred-work.model.js";

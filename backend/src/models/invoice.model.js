@@ -34,6 +34,15 @@ const lineItemSchema = new Schema(
 
 const invoiceSchema = new Schema(
   {
+    // Human-readable invoice number, e.g. "INV-202607-00001". Assigned at
+    // generation via utils/sequence.js. Sparse+unique so pre-existing invoices
+    // without a code (backfilled by a migration) don't collide on null.
+    code: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
     repairOrderId: {
       type: Schema.Types.ObjectId,
       ref: "RepairOrder",

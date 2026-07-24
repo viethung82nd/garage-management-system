@@ -5,6 +5,15 @@ export const USER_ROLES = [
   "walkInCustomer",
   "serviceAdvisor",
   "technician",
+  // Quality-control inspector / foreman: signs off completed work before it can
+  // be invoiced. A distinct role from serviceAdvisor so the "QC'er must not be
+  // the person who did (or sold) the work" separation-of-duties rule is
+  // enforceable, not just conventional.
+  "qcInspector",
+  // Parts/stores staff: the person who actually issues parts to a repair order
+  // and manages stock movements — previously only "admin" could touch the parts
+  // catalog, which doesn't match how a real garage is staffed.
+  "partsStaff",
   "accountant",
   "admin",
 ];

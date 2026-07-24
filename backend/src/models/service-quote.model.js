@@ -1,11 +1,24 @@
 import mongoose, { Schema } from "mongoose";
+import { createApprovalSchema } from "./approval.schema.js";
 
 // Matches the states the frontend's quotation editor actually uses (draft
 // while being edited, sent once handed to the customer) plus the FE's
 // ApiQuotation.status contract ("approved"/"rejected") for the
 // customer-response step this doesn't have UI for yet.
-export const QUOTE_STATUSES = ["draft", "sent", "approved", "rejected"];
+// "partiallyApproved" is the case that actually happens most often in a real
+// shop — the customer says yes to the brakes and no to the tyres. Modelling
+// only all-or-nothing forced the advisor to silently edit the quote and
+// re-approve it, destroying the record of what was turned down.
+export const QUOTE_STATUSES = [
+  "draft",
+  "sent",
+  "approved",
+  "partiallyApproved",
+  "rejected",
+  "expired",
+];
 export const QUOTE_LINE_KINDS = ["service", "part", "labor"];
+export const QUOTE_LINE_DECISIONS = ["pending", "approved", "declined"];
 
 const quoteLineSchema = new Schema(
   {
@@ -17,6 +30,14 @@ const quoteLineSchema = new Schema(
     kind: { type: String, enum: QUOTE_LINE_KINDS, default: "service" },
     quantity: { type: Number, default: 1, min: 0 },
     unitPrice: { type: Number, default: 0, min: 0 },
+    // Per-line customer decision. Only "approved" lines are pushed onto the
+    // repair order; "declined" ones become DeferredWork against the vehicle.
+    decision: {
+      type: String,
+      enum: QUOTE_LINE_DECISIONS,
+      default: "pending",
+    },
+    declineReason: { type: String, trim: true },
   },
   { _id: false }
 );
@@ -78,6 +99,19 @@ const serviceQuoteSchema = new Schema(
       type: String,
       enum: QUOTE_STATUSES,
       default: "draft",
+    },
+    // Bumped every time the quote is edited after having been sent. The
+    // previous state is archived to QuoteVersion first, so an approved figure
+    // can never be silently overwritten.
+    version: {
+      type: Number,
+      default: 1,
+      min: 1,
+    },
+    // The customer-authorisation evidence trail. Empty until a decision is
+    // recorded; see approval.schema.js for why each field exists.
+    approval: {
+      type: createApprovalSchema(),
     },
     note: {
       type: String,

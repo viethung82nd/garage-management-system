@@ -83,12 +83,22 @@ describe("service.service (catalog)", () => {
       expect(results[0].name).toBe("Wax");
     });
 
-    it("updates and deletes a service", async () => {
+    it("updates a service, and soft-deletes (deactivates) it", async () => {
       const svc = await serviceService.createService({ name: "Tire Rotation", basePrice: 20000 });
       const updated = await serviceService.updateService(svc._id.toString(), { basePrice: 25000 });
       expect(updated.basePrice).toBe(25000);
+
+      // deleteService is a soft delete: the record survives (referenced by live
+      // bookings/orders/quotes) but is flagged inactive and drops out of the
+      // active catalog listing.
       const deleted = await serviceService.deleteService(svc._id.toString());
-      expect(deleted.message).toMatch(/deleted/i);
+      expect(deleted.message).toMatch(/deactivat/i);
+
+      const stillThere = await serviceService.getServiceById(svc._id.toString());
+      expect(stillThere.isActive).toBe(false);
+
+      const activeOnly = await serviceService.getAllServices({ isActive: "true" });
+      expect(activeOnly.find((s) => s._id.toString() === svc._id.toString())).toBeUndefined();
     });
 
     it("rejects updating basePrice to a negative number", async () => {

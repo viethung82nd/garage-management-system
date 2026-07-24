@@ -13,7 +13,11 @@ export async function createQuotation(req, res) {
  * PATCH /api/quotations/:id — update a draft's line items/terms in place.
  */
 export async function updateQuotation(req, res) {
-  const quote = await quotationService.updateQuotation(req.params.id, req.body ?? {});
+  const quote = await quotationService.updateQuotation(
+    req.params.id,
+    req.body ?? {},
+    req.user.sub,
+  );
   res.json(quote);
 }
 
@@ -24,12 +28,46 @@ export async function sendQuotation(req, res) {
 }
 
 /**
- * PATCH /api/quotations/:id/confirm — record confirmation of customer.
- * Body: { approved: boolean }
+ * PATCH /api/quotations/:id/confirm — an advisor records the decision a
+ * customer gave in person or by phone.
+ * Body: { approved?: boolean, lineDecisions?: [{index, approved, declineReason}],
+ *         channel, contactValue?, decidedByName?, note? }
+ * `channel` is mandatory here: staff relaying someone else's decision must say
+ * how they obtained it.
  */
 export async function confirmQuotation(req, res) {
-  const quote = await quotationService.confirmQuotation(req.params.id, (req.body ?? {}).approved);
+  const quote = await quotationService.confirmQuotation(
+    req.params.id,
+    req.body ?? {},
+    req.user.sub,
+    req.user.role,
+  );
   res.json(quote);
+}
+
+/**
+ * PATCH /api/quotations/:id/customer-decision — the customer decides on their
+ * own quotation, in the app. Body: same as confirm, minus channel.
+ */
+export async function customerDecideQuotation(req, res) {
+  const quote = await quotationService.customerDecideQuotation(
+    req.params.id,
+    req.body ?? {},
+    req.user.sub,
+  );
+  res.json(quote);
+}
+
+/** GET /api/quotations/mine — the signed-in customer's own quotations. */
+export async function listMyQuotations(req, res) {
+  const result = await quotationService.listMyQuotations(req.user.sub);
+  res.json(result);
+}
+
+/** GET /api/quotations/:id/versions — immutable history of a quotation. */
+export async function getQuotationVersions(req, res) {
+  const result = await quotationService.getQuotationVersions(req.params.id);
+  res.json(result);
 }
 
 /** GET /api/quotations?repairOrderId= — list quotations, optionally scoped. */

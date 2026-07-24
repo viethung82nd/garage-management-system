@@ -31,3 +31,17 @@ export function tokenFor(user) {
 export function authHeader(user) {
   return { Authorization: `Bearer ${tokenFor(user)}` };
 }
+
+/**
+ * Returns a "YYYY-MM-DD" date string `daysFromNow` days ahead of today
+ * (defaults to ~1 year out). Booking/reception tests need a date that is
+ * always in the future relative to whenever the suite runs; a hardcoded
+ * literal (e.g. "2027-01-15") eventually lapses into the past and the
+ * "rejects a past date" validation starts failing the test for the wrong
+ * reason. Computing it relative to `Date.now()` keeps the suite green.
+ */
+export function futureDateStr(daysFromNow = 365) {
+  const d = new Date();
+  d.setUTCDate(d.getUTCDate() + daysFromNow);
+  return d.toISOString().slice(0, 10);
+}

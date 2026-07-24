@@ -14,6 +14,9 @@ async function completedOrder(customer, basePrice = 100000) {
     services: [{ serviceId: svc._id, name: svc.name, priceAtTime: basePrice, quantity: 1 }],
     totalCost: basePrice,
     status: "completed",
+    // Invoicing is now gated on qcPassedAt, not status === "completed" — this
+    // fixture models an order that has already cleared QC.
+    qcPassedAt: new Date(),
   });
 }
 

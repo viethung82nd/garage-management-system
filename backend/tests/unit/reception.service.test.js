@@ -2,7 +2,7 @@ import { describe, it, expect } from "vitest";
 import * as receptionService from "../../src/services/reception.service.js";
 import * as bookingService from "../../src/services/booking.service.js";
 import { RepairOrderModel } from "../../src/models/index.js";
-import { createUser } from "../factories.js";
+import { createUser, futureDateStr } from "../factories.js";
 
 const VEHICLE_DETAILS = {
   model: "Honda Wave",
@@ -39,7 +39,7 @@ describe("reception.service", () => {
     const { booking } = await bookingService.createBooking({
       customer: { fullName: "Booked Customer", phone: "0944444444" },
       vehicle: { licensePlate: "51K-33333" },
-      bookingDate: "2027-02-01",
+      bookingDate: futureDateStr(365),
       timeSlot: "09:00",
     });
     const result = await receptionService.createReception(
@@ -60,7 +60,7 @@ describe("reception.service", () => {
     const { booking } = await bookingService.createBooking({
       customer: { fullName: "A", phone: "0955555555" },
       vehicle: { licensePlate: "51K-44444" },
-      bookingDate: "2027-02-02",
+      bookingDate: futureDateStr(366),
       timeSlot: "09:00",
     });
     await receptionService.createReception(

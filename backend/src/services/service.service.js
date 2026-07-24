@@ -244,10 +244,19 @@ export async function deleteService(id) {
     throw new ApiError(400, "Invalid service ID format");
   }
 
-  const service = await serviceRepository.deleteById(id);
+  // Soft delete: a Service is referenced by live Bookings, RepairOrder lines
+  // and ServiceQuote lines. Hard-deleting it orphans those references, so we
+  // deactivate instead — the catalog stops offering it (getAllServices already
+  // filters by isActive) while historical documents keep resolving.
+  const service = await serviceRepository.findById(id);
   if (!service) {
     throw new ApiError(404, "Service not found");
   }
+  if (!service.isActive) {
+    return { message: "Service already inactive" };
+  }
+  service.isActive = false;
+  await service.save();
 
-  return { message: "Service deleted successfully" };
+  return { message: "Service deactivated successfully" };
 }

@@ -17,6 +17,7 @@ import {
   getRepairOrderSummary,
   submitQualityCheck,
   forwardToAccountant,
+  deliverVehicle,
 } from "../controllers/repair-order.controller.js";
 
 export const repairOrderRouter = Router();
@@ -122,11 +123,12 @@ repairOrderRouter.get(
   catchAsync(getRepairOrderSummary),
 );
 
-// Quality check: service advisor reviews a technician-completed order.
+// Quality check: a QC inspector (or advisor/admin) reviews a
+// technician-completed order before it can be invoiced.
 repairOrderRouter.post(
   "/:id/quality-check",
   requireAuth,
-  requireRole("serviceAdvisor", "admin"),
+  requireRole("qcInspector", "serviceAdvisor", "admin"),
   catchAsync(submitQualityCheck),
 );
 
@@ -136,4 +138,13 @@ repairOrderRouter.post(
   requireAuth,
   requireRole("serviceAdvisor", "admin"),
   catchAsync(forwardToAccountant),
+);
+
+// Deliver the vehicle to the customer — the final handover, gated on QC
+// having passed and the invoice being paid in full.
+repairOrderRouter.post(
+  "/:id/deliver",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  catchAsync(deliverVehicle),
 );

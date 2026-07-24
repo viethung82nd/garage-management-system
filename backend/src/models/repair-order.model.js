@@ -3,10 +3,32 @@ import mongoose, { Schema } from "mongoose";
 export const REPAIR_ORDER_STATUSES = [
   "pending",
   "inProgress",
+  // Exception states. Previously a vehicle sitting three days waiting on a part
+  // and one sitting three days because nobody picked it up were both just
+  // "inProgress" — indistinguishable, so the cause of a delay could never be
+  // measured. Time spent in waiting* is also excluded from technician
+  // productivity, since it isn't the technician's to control.
+  "waitingParts",
+  "waitingCustomer",
+  "onHold",
   "completed",
   "reworkRequired",
+  // Post-QC handover states. "completed" means the work is done; it does NOT
+  // mean the car left the garage. Without these the system genuinely could not
+  // tell an invoiced-but-still-parked vehicle from one already handed over.
+  "readyForDelivery",
+  "delivered",
+  "closed",
   "cancelled",
 ];
+
+/** Statuses in which a repair order is waiting on someone outside the workshop.
+ *  Time accrued here is excluded from technician time-on-job (Phase 4 KPIs). */
+export const WAITING_STATUSES = ["waitingParts", "waitingCustomer", "onHold"];
+
+/** Terminal statuses — an order here is finished and must not be mutated
+ *  without an explicit, audited reopen. */
+export const TERMINAL_ORDER_STATUSES = ["closed", "cancelled"];
 
 // Per-line progress on a repair order's service list. Deliberately a subset
 // of REPAIR_ORDER_STATUSES — "cancelled"/"reworkRequired" are whole-order
@@ -99,6 +121,15 @@ const stepNoteSchema = new Schema(
 
 const repairOrderSchema = new Schema(
   {
+    // Human-readable business number, e.g. "RO-202607-00001". Assigned at
+    // creation via utils/sequence.js. Sparse+unique so the many pre-existing
+    // orders without a code (backfilled by a migration) don't collide on null.
+    code: {
+      type: String,
+      unique: true,
+      sparse: true,
+      trim: true,
+    },
     inspectionId: {
       type: Schema.Types.ObjectId,
       ref: "InspectionReport",
@@ -174,6 +205,32 @@ const repairOrderSchema = new Schema(
     completedAt: {
       type: Date,
     },
+    // ===== Quality-control gate =====
+    // Set only when a QC inspection actually PASSES. This — not status ===
+    // "completed" — is what authorises invoicing. Before this existed, a
+    // technician marking their own work "completed" was enough to bill the
+    // customer, so QC was effectively optional at the data layer and enforced
+    // only by the UI (which an API call bypasses entirely).
+    qcPassedAt: {
+      type: Date,
+    },
+    // Who signed off. Recorded so "the person who did the work must not be the
+    // person who passes it" is verifiable after the fact, not just at the
+    // moment of the check.
+    qcBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+
+    // ===== Handover =====
+    deliveredAt: {
+      type: Date,
+    },
+    deliveredBy: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+    },
+
     // Set by POST /:id/forward-to-accountant once QC has passed — the SA's
     // signal that this order is ready to be invoiced. Also doubles as the
     // "already forwarded" flag so the action isn't offered twice.

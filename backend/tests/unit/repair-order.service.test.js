@@ -1,6 +1,11 @@
 import { describe, it, expect } from "vitest";
 import * as repairOrderService from "../../src/services/repair-order.service.js";
-import { VehicleModel, ServiceModel, RepairOrderModel } from "../../src/models/index.js";
+import {
+  VehicleModel,
+  ServiceModel,
+  InvoiceModel,
+  RepairOrderStatusHistoryModel,
+} from "../../src/models/index.js";
 import { createUser } from "../factories.js";
 
 async function vehicleFor(customer) {
@@ -205,7 +210,7 @@ describe("repair-order.service", () => {
   });
 
   describe("submitQualityCheck / forwardToAccountant", () => {
-    it("passing QC keeps the order completed", async () => {
+    it("passing QC moves the order to readyForDelivery and stamps qcPassedAt/qcBy", async () => {
       const { user: customer } = await createUser({ role: "onlineCustomer" });
       const { user: advisor } = await createUser({ role: "serviceAdvisor" });
       const vehicle = await vehicleFor(customer);
@@ -215,7 +220,45 @@ describe("repair-order.service", () => {
       });
       await repairOrderService.updateRepairOrder(order._id.toString(), { status: "completed" });
       const result = await repairOrderService.submitQualityCheck(order._id.toString(), { passed: true }, advisor._id.toString());
-      expect(result.order.status).toBe("completed");
+      expect(result.order.status).toBe("readyForDelivery");
+      expect(result.order.qcPassedAt).toBeTruthy();
+      expect(result.order.qcBy.toString()).toBe(advisor._id.toString());
+    });
+
+    it("rejects a technician passing their own work (separation of duties)", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const { user: tech } = await createUser({ role: "technician" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
+      });
+      await repairOrderService.updateRepairOrder(order._id.toString(), { technicianId: tech._id.toString() });
+      await repairOrderService.updateRepairOrder(order._id.toString(), { status: "completed" });
+      await expect(
+        repairOrderService.submitQualityCheck(order._id.toString(), { passed: true }, tech._id.toString()),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
+    it("a failed re-check clears any stale qcPassedAt/qcBy", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const { user: advisor } = await createUser({ role: "serviceAdvisor" });
+      const vehicle = await vehicleFor(customer);
+      const svc1 = await serviceDoc();
+      const svc2 = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(),
+        services: [{ serviceId: svc1._id.toString() }, { serviceId: svc2._id.toString() }],
+      });
+      await repairOrderService.updateRepairOrder(order._id.toString(), { status: "completed" });
+      const failed = await repairOrderService.submitQualityCheck(
+        order._id.toString(),
+        { passed: false, reworkReason: "Leak" },
+        advisor._id.toString(),
+      );
+      expect(failed.order.status).toBe("reworkRequired");
+      expect(failed.order.qcPassedAt).toBeFalsy();
+      expect(failed.order.qcBy).toBeFalsy();
     });
 
     it("failing QC sends the order to reworkRequired", async () => {
@@ -246,16 +289,197 @@ describe("repair-order.service", () => {
 
     it("forwardToAccountant refuses to re-forward", async () => {
       const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const { user: advisor } = await createUser({ role: "serviceAdvisor" });
       const vehicle = await vehicleFor(customer);
       const svc = await serviceDoc();
       const order = await repairOrderService.createRepairOrder({
         vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
       });
       await repairOrderService.updateRepairOrder(order._id.toString(), { status: "completed" });
+      await repairOrderService.submitQualityCheck(order._id.toString(), { passed: true }, advisor._id.toString());
       await repairOrderService.forwardToAccountant(order._id.toString());
       await expect(repairOrderService.forwardToAccountant(order._id.toString())).rejects.toMatchObject({
         status: 409,
       });
+    });
+
+    it("forwardToAccountant rejects an order that has not passed QC", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
+      });
+      await repairOrderService.updateRepairOrder(order._id.toString(), { status: "completed" });
+      await expect(repairOrderService.forwardToAccountant(order._id.toString())).rejects.toMatchObject({
+        status: 400,
+      });
+    });
+  });
+
+  describe("deliverVehicle", () => {
+    async function qcPassedOrder() {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const { user: advisor } = await createUser({ role: "serviceAdvisor" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
+      });
+      await repairOrderService.updateRepairOrder(order._id.toString(), { status: "completed" });
+      const qc = await repairOrderService.submitQualityCheck(order._id.toString(), { passed: true }, advisor._id.toString());
+      return { order: qc.order, advisor };
+    }
+
+    it("rejects delivery when QC has not passed", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const { user: advisor } = await createUser({ role: "serviceAdvisor" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
+      });
+      await expect(
+        repairOrderService.deliverVehicle(order._id.toString(), {}, advisor._id.toString()),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it("rejects delivery when the order has not been invoiced yet", async () => {
+      const { order, advisor } = await qcPassedOrder();
+      await expect(
+        repairOrderService.deliverVehicle(order._id.toString(), {}, advisor._id.toString()),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it("rejects delivery while the invoice is still unpaid", async () => {
+      const { order, advisor } = await qcPassedOrder();
+      await InvoiceModel.create({
+        repairOrderId: order._id,
+        lineItems: [{ description: "Service", quantity: 1, unitPrice: 100000 }],
+        subtotal: 100000,
+        total: 100000,
+        status: "unpaid",
+      });
+      await expect(
+        repairOrderService.deliverVehicle(order._id.toString(), {}, advisor._id.toString()),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it("delivers the vehicle once the invoice is paid in full", async () => {
+      const { order, advisor } = await qcPassedOrder();
+      await InvoiceModel.create({
+        repairOrderId: order._id,
+        lineItems: [{ description: "Service", quantity: 1, unitPrice: 100000 }],
+        subtotal: 100000,
+        total: 100000,
+        amountPaid: 100000,
+        status: "paid",
+      });
+      const delivered = await repairOrderService.deliverVehicle(
+        order._id.toString(),
+        { note: "Handed keys to owner" },
+        advisor._id.toString(),
+      );
+      expect(delivered.status).toBe("delivered");
+      expect(delivered.deliveredAt).toBeTruthy();
+      expect(delivered.deliveredBy.toString()).toBe(advisor._id.toString());
+    });
+  });
+
+  describe("waiting statuses require a reason", () => {
+    it("updateRepairProgress rejects moving to waitingParts without a reason", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const { user: tech } = await createUser({ role: "technician" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
+      });
+      await expect(
+        repairOrderService.updateRepairProgress(order._id.toString(), {
+          status: "waitingParts",
+          technicianId: tech._id.toString(),
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it("updateRepairProgress with a reason moves to waitingParts and records the transition", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const { user: tech } = await createUser({ role: "technician" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
+      });
+      const result = await repairOrderService.updateRepairProgress(order._id.toString(), {
+        status: "waitingParts",
+        technicianId: tech._id.toString(),
+        notes: "Waiting on brake pads from supplier",
+      });
+      expect(result.order.status).toBe("waitingParts");
+
+      const history = await RepairOrderStatusHistoryModel.find({ repairOrderId: order._id }).sort({ changedAt: 1 });
+      const waitingEntry = history.find((entry) => entry.to === "waitingParts");
+      expect(waitingEntry).toBeTruthy();
+      expect(waitingEntry.reason).toMatch(/brake pads/);
+    });
+
+    it("updateRepairOrder rejects moving to onHold without a reason", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
+      });
+      await expect(
+        repairOrderService.updateRepairOrder(order._id.toString(), { status: "onHold" }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it("updateRepairOrder with a reason moves to onHold and records the transition", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(), services: [{ serviceId: svc._id.toString() }],
+      });
+      const updated = await repairOrderService.updateRepairOrder(order._id.toString(), {
+        status: "onHold",
+        reason: "Customer asked us to pause work",
+      });
+      expect(updated.status).toBe("onHold");
+
+      const history = await RepairOrderStatusHistoryModel.find({ repairOrderId: order._id }).sort({ changedAt: 1 });
+      const onHoldEntry = history.find((entry) => entry.to === "onHold");
+      expect(onHoldEntry).toBeTruthy();
+      expect(onHoldEntry.reason).toMatch(/pause work/);
+    });
+  });
+
+  describe("per-line status derivation does not clobber post-QC states", () => {
+    it("touching a line after QC has passed leaves the order in readyForDelivery", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const { user: advisor } = await createUser({ role: "serviceAdvisor" });
+      const vehicle = await vehicleFor(customer);
+      const svc1 = await serviceDoc();
+      const svc2 = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(),
+        services: [{ serviceId: svc1._id.toString() }, { serviceId: svc2._id.toString() }],
+      });
+      await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 0 });
+      await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 1 });
+      const qc = await repairOrderService.submitQualityCheck(order._id.toString(), { passed: true }, advisor._id.toString());
+      expect(qc.order.status).toBe("readyForDelivery");
+
+      // A stray per-line update after QC has passed must not drag the order
+      // back into "inProgress" — that recompute only applies to the normal
+      // working states.
+      const result = await repairOrderService.updateRepairProgress(order._id.toString(), {
+        status: "inProgress",
+        stepIndex: 0,
+      });
+      expect(result.order.status).toBe("readyForDelivery");
     });
   });
 

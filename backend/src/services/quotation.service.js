@@ -5,8 +5,22 @@ import { userRepository } from "../repositories/user.repository.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
+import { runInTransaction } from "../utils/transaction.js";
+import { logAudit } from "../utils/audit.js";
+import {
+  APPROVAL_CHANNELS,
+  DeferredWorkModel,
+  QuoteVersionModel,
+} from "../models/index.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
+
+/** Roles that represent the customer acting for themselves, as opposed to a
+ *  staff member relaying a decision the customer gave elsewhere. */
+const CUSTOMER_ROLES = ["onlineCustomer", "walkInCustomer"];
+
+/** How far out to schedule the follow-up on work the customer declined. */
+const DEFERRED_REMINDER_DAYS = 30;
 
 function calculateTotal({ lines, discountPercent, taxPercent }) {
   const subtotal = (lines || []).reduce(
@@ -71,7 +85,11 @@ export async function createQuotation(
  * once sent, the customer is looking at a fixed quote and it shouldn't
  * change out from under them.
  */
-export async function updateQuotation(id, { lines, discountPercent, taxPercent, note, validUntil }) {
+export async function updateQuotation(
+  id,
+  { lines, discountPercent, taxPercent, note, validUntil },
+  actorId,
+) {
   if (!OID_RE.test(id)) {
     throw new ApiError(400, "Invalid quotation ID format");
   }
@@ -87,6 +105,11 @@ export async function updateQuotation(id, { lines, discountPercent, taxPercent, 
     throw new ApiError(400, "At least one line item is required");
   }
 
+  // Archive the pre-edit state before touching anything. Even drafts are
+  // versioned: the point is that no figure this system ever showed a customer
+  // can later be overwritten without a trace.
+  await archiveQuoteVersion(quote, { reason: "edited", snapshotBy: actorId });
+
   if (lines !== undefined) quote.lines = lines;
   if (discountPercent !== undefined) quote.discountPercent = discountPercent;
   if (taxPercent !== undefined) quote.taxPercent = taxPercent;
@@ -97,9 +120,48 @@ export async function updateQuotation(id, { lines, discountPercent, taxPercent, 
     discountPercent: quote.discountPercent,
     taxPercent: quote.taxPercent,
   });
+  quote.version = (quote.version || 1) + 1;
 
   await quote.save();
   return quote;
+}
+
+/**
+ * Writes an immutable snapshot of a quote's current state to QuoteVersion.
+ * Best-effort in the same spirit as the audit log: failing to archive must not
+ * block the edit, but it is loud in the logs when it happens.
+ */
+async function archiveQuoteVersion(quote, { reason, snapshotBy, session } = {}) {
+  try {
+    await QuoteVersionModel.create(
+      [
+        {
+          quoteId: quote._id,
+          version: quote.version || 1,
+          lines: quote.lines?.map((line) => (line.toObject ? line.toObject() : line)) ?? [],
+          discountPercent: quote.discountPercent,
+          taxPercent: quote.taxPercent,
+          totalEstimate: quote.totalEstimate,
+          status: quote.status,
+          reason,
+          snapshotBy,
+        },
+      ],
+      { session },
+    );
+  } catch (err) {
+    console.warn("[quotation] failed to archive version:", err?.message ?? err);
+  }
+}
+
+/** Full version history of a quote, oldest first — "what were they shown, and
+ *  when". */
+export async function getQuotationVersions(id) {
+  if (!OID_RE.test(id)) {
+    throw new ApiError(400, "Invalid quotation ID format");
+  }
+  const versions = await QuoteVersionModel.find({ quoteId: id }).sort({ version: 1 });
+  return { versions };
 }
 
 /** Mark a quotation sent, notify the customer. */
@@ -161,12 +223,65 @@ export async function sendQuotation(id) {
  * the Repair Order's line items, instead of the SA retyping them a second
  * time on the assignment page.
  */
-export async function confirmQuotation(id, approved) {
+/**
+ * Normalises the several shapes a confirmation can arrive in into one
+ * per-line decision list.
+ *
+ * Legacy callers pass a bare boolean (approve/decline everything). The richer
+ * form carries `lineDecisions` so a customer can accept the brakes and decline
+ * the tyres — the case that actually dominates in practice, and which used to
+ * force the advisor to quietly rewrite the quote, erasing what was turned down.
+ */
+function normaliseDecision(payload, lineCount) {
+  const raw = typeof payload === "boolean" ? { approved: payload } : (payload ?? {});
+
+  let decisions;
+  if (Array.isArray(raw.lineDecisions) && raw.lineDecisions.length > 0) {
+    decisions = Array.from({ length: lineCount }, (_, index) => {
+      const entry = raw.lineDecisions.find((d) => Number(d?.index) === index);
+      // A line nobody ruled on is treated as declined rather than silently
+      // billed — never charge for something the customer didn't say yes to.
+      if (!entry) return { approved: false, declineReason: "Not selected by customer" };
+      return {
+        approved: Boolean(entry.approved),
+        declineReason: entry.declineReason?.trim() || undefined,
+      };
+    });
+  } else if (typeof raw.approved === "boolean") {
+    decisions = Array.from({ length: lineCount }, () => ({
+      approved: raw.approved,
+      declineReason: raw.approved ? undefined : raw.declineReason?.trim() || undefined,
+    }));
+  } else {
+    throw new ApiError(400, "Provide either approved (boolean) or lineDecisions[]");
+  }
+
+  return {
+    decisions,
+    channel: raw.channel,
+    contactValue: raw.contactValue?.trim(),
+    decidedByName: raw.decidedByName?.trim(),
+    note: raw.note?.trim(),
+  };
+}
+
+/**
+ * Records the customer's decision on a quotation, line by line.
+ *
+ * Two callers reach this: the customer themselves (self-service, `actorRole`
+ * is a customer role) and an advisor relaying a decision given in person or by
+ * phone. The distinction matters legally, so it is captured in the approval
+ * record rather than flattened — a relayed approval must name the person who
+ * authorised it and the number/address actually contacted, otherwise the trail
+ * proves only that an employee clicked a button.
+ *
+ * Approved lines become the repair order's work list. Declined lines are NOT
+ * discarded — they become DeferredWork against the vehicle so the shop can
+ * follow up instead of forgetting them.
+ */
+export async function confirmQuotation(id, payload, actorId, actorRole) {
   if (!OID_RE.test(id)) {
     throw new ApiError(400, "Invalid quotation ID format");
-  }
-  if (typeof approved !== "boolean") {
-    throw new ApiError(400, "approved (boolean) is required");
   }
 
   const quote = await serviceQuoteRepository.findById(id);
@@ -175,26 +290,84 @@ export async function confirmQuotation(id, approved) {
   }
   // The SA now records the customer's decision on the spot (walk-in), so a
   // draft can be confirmed directly without first "sending" it. Already
-  // approved/rejected quotes are terminal and can't be re-confirmed.
+  // decided quotes are terminal and can't be re-confirmed.
   if (quote.status !== "draft" && quote.status !== "sent") {
     throw new ApiError(409, `Only a draft or sent quotation can be confirmed (this one is ${quote.status})`);
   }
+  if (quote.validUntil && quote.validUntil.getTime() < Date.now()) {
+    throw new ApiError(
+      409,
+      "This quotation has expired — issue a revised quote before taking a decision",
+    );
+  }
 
-  quote.status = approved ? "approved" : "rejected";
-  await quote.save();
+  const { decisions, channel, contactValue, decidedByName, note } = normaliseDecision(
+    payload,
+    quote.lines.length,
+  );
 
-  if (approved) {
-    const order = await repairOrderRepository.findById(quote.repairOrderId);
-    if (order) {
+  const isSelfService = CUSTOMER_ROLES.includes(actorRole);
+  // An advisor confirming the initial estimate is, in the overwhelming
+  // majority of cases, standing at the desk with the customer — so "inPerson"
+  // is an honest default rather than a fiction, and the rest of the trail
+  // (who recorded it, when, against which contact, for what total) is captured
+  // regardless. Change orders are stricter: see additional-service.service.js,
+  // where charging beyond an approved estimate demands the channel be stated
+  // explicitly.
+  const resolvedChannel = channel || (isSelfService ? "app" : "inPerson");
+  if (!APPROVAL_CHANNELS.includes(resolvedChannel)) {
+    throw new ApiError(400, `channel must be one of: ${APPROVAL_CHANNELS.join(", ")}`);
+  }
+
+  const approvedCount = decisions.filter((d) => d.approved).length;
+  const nextStatus =
+    approvedCount === 0
+      ? "rejected"
+      : approvedCount === decisions.length
+        ? "approved"
+        : "partiallyApproved";
+
+  // Quote decision, repair-order population and deferred-work capture are one
+  // logical act. A partial commit would leave a terminally-decided quote whose
+  // work never reached the order (or declined lines lost entirely).
+  await runInTransaction(async (session) => {
+    quote.lines.forEach((line, index) => {
+      line.decision = decisions[index].approved ? "approved" : "declined";
+      line.declineReason = decisions[index].approved
+        ? undefined
+        : decisions[index].declineReason;
+    });
+    quote.status = nextStatus;
+    quote.approval = {
+      decidedBy: isSelfService ? actorId : undefined,
+      decidedByName: decidedByName || quote.customerName,
+      decidedAt: new Date(),
+      channel: resolvedChannel,
+      contactValue: contactValue || quote.customerPhone,
+      recordedBy: isSelfService ? undefined : actorId,
+      note,
+      approvedTotal: quote.totalEstimate,
+    };
+    await quote.save({ session });
+
+    const order = await repairOrderRepository.model
+      .findById(quote.repairOrderId)
+      .session(session);
+
+    if (order && approvedCount > 0) {
       const processedServices = [];
       let totalCost = 0;
 
-      for (const line of quote.lines) {
+      for (const [index, line] of quote.lines.entries()) {
+        if (!decisions[index].approved) continue;
+
         let name = line.description;
         const priceAtTime = Number(line.unitPrice) || 0;
 
         if (line.serviceId) {
-          const serviceDoc = await serviceRepository.findById(line.serviceId);
+          const serviceDoc = await serviceRepository.model
+            .findById(line.serviceId)
+            .session(session);
           if (serviceDoc) name = serviceDoc.name;
         }
 
@@ -219,11 +392,92 @@ export async function confirmQuotation(id, approved) {
       order.quotedDiscountPercent = quote.discountPercent;
       order.quotedTaxPercent = quote.taxPercent;
       order.quotedTotal = quote.totalEstimate;
-      await order.save();
+      await order.save({ session });
     }
-  }
+
+    // Declined work is a follow-up obligation, not a dead end.
+    const declined = quote.lines
+      .map((line, index) => ({ line, decision: decisions[index] }))
+      .filter(({ decision }) => !decision.approved);
+
+    if (declined.length > 0) {
+      await DeferredWorkModel.create(
+        declined.map(({ line, decision }) => ({
+          vehicleId: quote.vehicleId,
+          customerId: quote.customerId,
+          sourceQuoteId: quote._id,
+          sourceRepairOrderId: quote.repairOrderId,
+          serviceId: line.serviceId || undefined,
+          description: line.description || "Recommended work",
+          estimatedPrice: (Number(line.unitPrice) || 0) * (Number(line.quantity) || 1),
+          declineReason: decision.declineReason,
+          status: "open",
+          // Chase it up at the next service interval rather than immediately.
+          remindAt: new Date(Date.now() + DEFERRED_REMINDER_DAYS * 24 * 60 * 60 * 1000),
+        })),
+        { session },
+      );
+    }
+  });
+
+  await logAudit({
+    action: nextStatus === "rejected" ? "quoteRejected" : "quoteApproved",
+    actorId,
+    repairOrderId: quote.repairOrderId,
+    targetModel: "ServiceQuote",
+    targetId: quote._id,
+    details:
+      `Quote ${quote.code || quote._id} → ${nextStatus} ` +
+      `(${approvedCount}/${decisions.length} lines approved) ` +
+      `via ${resolvedChannel}${isSelfService ? " by customer" : " recorded by staff"}`,
+  });
 
   return quote;
+}
+
+/**
+ * The customer's own quotations. Drafts are excluded — an unsent draft is the
+ * advisor's working copy, not something the customer should be reacting to.
+ */
+export async function listMyQuotations(customerId) {
+  const quotes = await serviceQuoteRepository.model
+    .find({ customerId, status: { $ne: "draft" } })
+    .sort({ createdAt: -1 });
+  return { quotations: quotes };
+}
+
+/**
+ * Self-service approval: the customer decides on their own quotation.
+ *
+ * This is the path that makes the authorisation trail meaningful — the
+ * customer acts directly, so the record needs no "an advisor says they agreed"
+ * caveat. Ownership is checked server-side: a customer may only decide on a
+ * quote that is actually theirs.
+ */
+export async function customerDecideQuotation(id, payload, customerId) {
+  if (!OID_RE.test(id)) {
+    throw new ApiError(400, "Invalid quotation ID format");
+  }
+
+  const quote = await serviceQuoteRepository.findById(id);
+  if (!quote) {
+    throw new ApiError(404, "Quotation not found");
+  }
+  if (!quote.customerId || quote.customerId.toString() !== String(customerId)) {
+    // 404 rather than 403 — don't confirm the existence of other people's
+    // quotes to someone probing ids.
+    throw new ApiError(404, "Quotation not found");
+  }
+  if (quote.status === "draft") {
+    throw new ApiError(409, "This quotation has not been sent to you yet");
+  }
+
+  return confirmQuotation(
+    id,
+    { ...(typeof payload === "boolean" ? { approved: payload } : (payload ?? {})), channel: "app" },
+    customerId,
+    "onlineCustomer",
+  );
 }
 
 /** Fetch a single quotation — read access extended to the accountant role so

@@ -1,4 +1,5 @@
 import crypto from "crypto";
+import { sendEmail } from "./mailer.js";
 
 /** How long a freshly issued OTP stays valid. */
 export const OTP_TTL_MS = 10 * 60 * 1000;
@@ -17,11 +18,33 @@ export function hashOtpCode(code) {
   return crypto.createHash("sha256").update(String(code)).digest("hex");
 }
 
+/** Vietnamese, human-facing label for each OTP purpose — used in the email subject/body. */
+const PURPOSE_LABELS = {
+  passwordReset: "đặt lại mật khẩu",
+  emailVerification: "xác thực email",
+};
+
 /**
- * Delivers an OTP to the user. No mail/SMS transport is configured yet, so this
- * logs the code for local development. Swap the body for a real provider
- * (nodemailer, Twilio, …) without touching any caller.
+ * Delivers an OTP to the user's inbox via `sendEmail`. Previously this only
+ * `console.log`-ged the code, which is fine for local dev but leaks live,
+ * usable codes into server logs (and log aggregators, CI output, etc.) once
+ * deployed — anyone with log access could reset a password or verify an
+ * email they don't own. Sending the code by email instead means it only ever
+ * reaches the address it was issued for.
+ *
+ * `sendEmail` is async, best-effort, and swallows its own errors (it no-ops
+ * with a console warning when SMTP isn't configured), so this function is
+ * safe to call without the caller awaiting it — same fire-and-forget shape
+ * as before, just with real delivery instead of a log line.
  */
-export function deliverOtp({ email, code, purpose }) {
-  console.log(`[otp] ${purpose} code for ${email}: ${code}`);
+export async function deliverOtp({ email, code, purpose }) {
+  const label = PURPOSE_LABELS[purpose] ?? purpose;
+  const html = `
+    <p>Xin chào,</p>
+    <p>Mã xác thực (OTP) của bạn cho yêu cầu <strong>${label}</strong> là:</p>
+    <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px;">${code}</p>
+    <p>Mã này có hiệu lực trong ${Math.round(OTP_TTL_MS / 60000)} phút. Vui lòng không chia sẻ mã này với bất kỳ ai.</p>
+    <p>Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này.</p>
+  `;
+  await sendEmail({ to: email, subject: `Mã OTP ${label} của bạn`, html });
 }
