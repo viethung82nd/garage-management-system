@@ -1,6 +1,6 @@
 import { CheckOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons'
 import { Avatar, Button, Card, Empty, Input, InputNumber, Modal, Select, Tag } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal, type ApprovalChannel, type ApprovalEvidence } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
 import { InlineBanner, StatCard, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
@@ -416,28 +416,25 @@ function CustomerAuthorisationModal({
       open={open}
       title="Record the customer's authorisation"
     >
-      <p style={{ color: advisorPalette.textMuted, fontSize: 13, marginBottom: 16 }}>
-        You are about to add <strong style={{ color: advisorPalette.ink }}>{serviceName}</strong> ({formatMoney(amount)}) to
-        this work order. Extra work may only be billed once the customer has agreed, so record how you obtained that
-        agreement.
-      </p>
+      <div
+        className="flex items-center justify-between"
+        style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}
+      >
+        <span style={{ color: advisorPalette.ink, fontWeight: 600 }}>{serviceName}</span>
+        <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>{formatMoney(amount)}</span>
+      </div>
 
       <div className="flex flex-col gap-3">
         <label>
-          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
-            How was it obtained? <span aria-hidden="true">*</span>
-          </div>
+          <FieldLabel>Channel *</FieldLabel>
           <Select onChange={setChannel} options={CHANNEL_OPTIONS} style={{ width: '100%' }} value={channel} />
         </label>
 
         <label>
-          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
-            Who authorised it? <span aria-hidden="true">*</span>
-          </div>
+          <FieldLabel>Authorised by *</FieldLabel>
           <Input
             onBlur={() => setTouched(true)}
             onChange={(event) => setName(event.target.value)}
-            placeholder="Customer's full name"
             status={nameError ? 'error' : undefined}
             value={name}
           />
@@ -449,28 +446,23 @@ function CustomerAuthorisationModal({
         </label>
 
         <label>
-          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
-            Phone or email contacted
-          </div>
-          <Input
-            onChange={(event) => setContact(event.target.value)}
-            placeholder="e.g. 0901234567"
-            value={contact}
-          />
+          <FieldLabel>Contact</FieldLabel>
+          <Input onChange={(event) => setContact(event.target.value)} value={contact} />
         </label>
 
         <label>
-          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
-            Note (optional)
-          </div>
-          <Input.TextArea
-            autoSize={{ maxRows: 4, minRows: 2 }}
-            onChange={(event) => setNote(event.target.value)}
-            placeholder="Anything the customer said worth recording"
-            value={note}
-          />
+          <FieldLabel>Note</FieldLabel>
+          <Input.TextArea autoSize={{ maxRows: 4, minRows: 2 }} onChange={(event) => setNote(event.target.value)} value={note} />
         </label>
       </div>
     </Modal>
+  )
+}
+
+function FieldLabel({ children }: { children: ReactNode }) {
+  return (
+    <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
+      {children}
+    </div>
   )
 }

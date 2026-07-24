@@ -46,7 +46,14 @@ const repairOrderPopulate = [
 ];
 
 /** Fetch all repair orders with optional filters. */
-export async function getAllRepairOrders({ status, vehicleId, serviceAdvisorId, advisorId, technicianId }) {
+export async function getAllRepairOrders({
+  status,
+  vehicleId,
+  serviceAdvisorId,
+  advisorId,
+  technicianId,
+  readyToInvoice,
+}) {
   const normalizedServiceAdvisorId = serviceAdvisorId || advisorId;
 
   const filter = {};
@@ -54,6 +61,16 @@ export async function getAllRepairOrders({ status, vehicleId, serviceAdvisorId, 
   if (vehicleId) filter.vehicleId = vehicleId;
   if (normalizedServiceAdvisorId) filter.advisorId = normalizedServiceAdvisorId;
   if (technicianId) filter.technicianId = technicianId;
+
+  // The accountant's billing queue. "Ready to invoice" is not a status — since
+  // QC now moves a passed order to readyForDelivery, keying the queue off a
+  // status string silently missed every QC-passed order. The real condition is:
+  // it passed quality control and hasn't been invoiced yet.
+  if (readyToInvoice === "true" || readyToInvoice === true) {
+    filter.qcPassedAt = { $ne: null };
+    filter.invoicedAt = null;
+    filter.status = { $nin: ["cancelled", "delivered", "closed"] };
+  }
 
   return repairOrderRepository.model
     .find(filter)

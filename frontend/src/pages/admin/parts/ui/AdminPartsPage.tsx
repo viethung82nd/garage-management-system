@@ -243,33 +243,22 @@ export default function AdminPartsPage() {
           <Form.Item name="sku" label="SKU" rules={[{ required: true, message: 'SKU is required' }]}>
             <Input />
           </Form.Item>
-          <Form.Item name="unitPrice" label="Selling price (VND)" rules={[{ required: true, message: 'Unit price is required' }]}>
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item
-            name="costPrice"
-            label="Cost price (VND)"
-            extra="What the part costs us. Needed to report margin, and updated automatically as stock is received."
-          >
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item>
-          <Form.Item name="reorderPoint" label="Reorder point" extra="Flag the part for reordering once free stock falls to this level.">
-            <InputNumber min={0} style={{ width: '100%' }} />
-          </Form.Item>
-          {editingPart ? (
-            <p style={{ color: adminPalette.textMuted, fontSize: 12, marginBottom: 0 }}>
-              On-hand stock isn&apos;t editable here — it&apos;s the balance of the stock ledger. Use{' '}
-              <strong>Adjust stock</strong> to correct it, which records a reason.
-            </p>
-          ) : (
-            <Form.Item
-              name="stockQuantity"
-              label="Opening stock"
-              rules={[{ required: true, message: 'Stock quantity is required' }]}
-            >
+          <div className="grid grid-cols-2 gap-3">
+            <Form.Item name="unitPrice" label="Selling price (VND)" rules={[{ required: true, message: 'Required' }]}>
               <InputNumber min={0} style={{ width: '100%' }} />
             </Form.Item>
-          )}
+            <Form.Item name="costPrice" label="Cost price (VND)">
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+            <Form.Item name="reorderPoint" label="Reorder point">
+              <InputNumber min={0} style={{ width: '100%' }} />
+            </Form.Item>
+            {editingPart ? null : (
+              <Form.Item name="stockQuantity" label="Opening stock" rules={[{ required: true, message: 'Required' }]}>
+                <InputNumber min={0} style={{ width: '100%' }} />
+              </Form.Item>
+            )}
+          </div>
         </Form>
       </Modal>
 
@@ -281,24 +270,16 @@ export default function AdminPartsPage() {
         confirmLoading={adjusting}
         okText="Record adjustment"
       >
-        <p style={{ color: adminPalette.textMuted, fontSize: 13, marginBottom: 16 }}>
-          Use this after a physical count, or to write off damaged stock. The change is written to the part&apos;s
-          ledger and the audit log, so an unexplained quantity can never appear.
-        </p>
         <Form form={adjustForm} layout="vertical" onFinish={handleAdjust}>
           <Form.Item
             name="newQuantity"
             label="Counted quantity"
-            rules={[{ required: true, message: 'Enter the quantity actually on the shelf' }]}
+            rules={[{ required: true, message: 'Required' }]}
           >
             <InputNumber min={0} style={{ width: '100%' }} />
           </Form.Item>
-          <Form.Item
-            name="reason"
-            label="Reason"
-            rules={[{ required: true, message: 'A reason is required' }]}
-          >
-            <Input.TextArea autoSize={{ maxRows: 4, minRows: 2 }} placeholder="e.g. Stock count — 2 units damaged" />
+          <Form.Item name="reason" label="Reason" rules={[{ required: true, message: 'Required' }]}>
+            <Input.TextArea autoSize={{ maxRows: 4, minRows: 2 }} />
           </Form.Item>
         </Form>
       </Modal>

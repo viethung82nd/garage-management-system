@@ -156,8 +156,11 @@ export function fetchAccountantInvoices(token: string) {
   })
 }
 
+/** Orders ready to bill: they passed quality control and haven't been invoiced
+ *  yet. Keyed off qcPassedAt, not a status string — QC now moves a passed order
+ *  to readyForDelivery, so `status=completed` silently missed them. */
 export function fetchCompletedRepairOrders(token: string) {
-  return apiRequest<RepairOrderListResponse>('/api/repair-orders?status=completed', {
+  return apiRequest<RepairOrderListResponse>('/api/repair-orders?readyToInvoice=true', {
     method: 'GET',
     token,
   })

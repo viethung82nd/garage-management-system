@@ -30,11 +30,26 @@ import {
   ReviewModel,
   AuditLogModel,
   PartModel,
+  // Collections added across the transformation phases — cleared on re-seed so
+  // stale documents from a prior schema don't linger.
+  CounterModel,
+  RepairOrderStatusHistoryModel,
+  QuoteVersionModel,
+  DeferredWorkModel,
+  InventoryTransactionModel,
+  StockReservationModel,
+  SupplierModel,
+  PurchaseOrderModel,
+  TimeLogModel,
+  OdometerLogModel,
+  ReminderModel,
+  FollowUpModel,
 } from "../src/models/index.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const daysFromNow = (n) => new Date(Date.now() + n * DAY_MS);
 const daysAgo = (n) => new Date(Date.now() - n * DAY_MS);
+const hoursAgo = (n) => new Date(Date.now() - n * 60 * 60 * 1000);
 
 // Real, freely-licensed (Unsplash License) photos — sourced and verified
 // individually, not randomized placeholders.
@@ -57,11 +72,10 @@ async function clearCollections() {
   await Promise.all([
     UserModel.deleteMany({ email: { $nin: PRESERVED_EMAILS } }),
     VehicleModel.deleteMany({}),
-    // ServiceCategoryModel is deliberately NOT cleared — the 8 real
-    // categories (renamed via the admin UI to their bilingual VN/EN names)
-    // are the ones actually in use and must survive a re-seed. Only the
-    // orphaned Service catalog under them gets rebuilt.
-    ServiceModel.deleteMany({}),
+    // ServiceCategoryModel AND ServiceModel are deliberately NOT cleared — the
+    // categories and the service catalog under them were curated by hand and
+    // must survive a re-seed (per the team's request). seedCatalog reuses
+    // whatever is already there and only inserts defaults on an empty DB.
     BookingModel.deleteMany({}),
     BookingHistoryModel.deleteMany({}),
     InspectionReportModel.deleteMany({}),
@@ -76,6 +90,19 @@ async function clearCollections() {
     ReviewModel.deleteMany({}),
     AuditLogModel.deleteMany({}),
     PartModel.deleteMany({}),
+    // Transformation-era collections.
+    CounterModel.deleteMany({}),
+    RepairOrderStatusHistoryModel.deleteMany({}),
+    QuoteVersionModel.deleteMany({}),
+    DeferredWorkModel.deleteMany({}),
+    InventoryTransactionModel.deleteMany({}),
+    StockReservationModel.deleteMany({}),
+    SupplierModel.deleteMany({}),
+    PurchaseOrderModel.deleteMany({}),
+    TimeLogModel.deleteMany({}),
+    OdometerLogModel.deleteMany({}),
+    ReminderModel.deleteMany({}),
+    FollowUpModel.deleteMany({}),
   ]);
   console.log("[seed] cleared existing collections");
 }
@@ -169,6 +196,18 @@ async function seedCatalog() {
       "[seed] No ServiceCategory documents found — this script expects the 8 real categories to already exist (it does not create them). Create them first via the admin UI, or restore clearing ServiceCategoryModel in clearCollections() if you actually want fresh demo categories."
     );
   }
+  // Services are preserved across re-seeds (see clearCollections). If any
+  // already exist, reuse them as-is — the downstream lookups are by name, and
+  // these are the same names this catalog originally created. Only a truly
+  // empty catalog gets the default menu inserted.
+  const existingServices = await ServiceModel.find({});
+  if (existingServices.length > 0) {
+    console.log(
+      `[seed] categories: ${categories.length} (preserved), services: ${existingServices.length} (preserved, not reseeded)`
+    );
+    return { categories, services: existingServices };
+  }
+
   const byName = Object.fromEntries(categories.map((c) => [c.name, c.name]));
 
   const EXPRESS = "Bảo Dưỡng Nhanh/Express Service";
@@ -317,7 +356,10 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     return { serviceId: s._id, name: s.name, priceAtTime: s.basePrice, quantity };
   };
 
-  // 1) Completed, invoiced repair order (walk-in brake job)
+  // 1) Completed, invoiced repair order (walk-in brake job). qcPassedAt /
+  // invoicedAt / forwardedToAccountantAt are stamped so it reflects the real
+  // post-Phase-2 flow (QC gate → forward → invoice) rather than a bare
+  // "completed" status the accountant's billing queue would misread.
   const order1 = await RepairOrderModel.create({
     vehicleId: vehicles[7]._id,
     advisorId: advisors[0]._id,
@@ -327,6 +369,10 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     totalCost: findService("Front Brake Pad Replacement").basePrice + findService("Full Brake System Inspection").basePrice,
     startedAt: daysAgo(5),
     completedAt: daysAgo(4),
+    qcPassedAt: daysAgo(4),
+    qcBy: advisors[0]._id,
+    forwardedToAccountantAt: daysAgo(4),
+    invoicedAt: daysAgo(4),
     stepNotes: [
       { content: "Inspected front brake pads — 2mm remaining, replacement needed.", technicianId: technicians[0]._id, createdAt: daysAgo(5) },
       { content: "Installed new pads, resurfaced rotors, test-driven — no noise or vibration.", technicianId: technicians[0]._id, createdAt: daysAgo(4) },
@@ -344,6 +390,10 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     totalCost: findService("Scheduled Maintenance Package").basePrice + findService("Synthetic Oil Change").basePrice,
     startedAt: daysAgo(8),
     completedAt: daysAgo(7),
+    qcPassedAt: daysAgo(7),
+    qcBy: advisors[1]._id,
+    forwardedToAccountantAt: daysAgo(7),
+    invoicedAt: daysAgo(7),
     stepNotes: [
       { content: "Multi-point inspection complete — air filter due for replacement soon.", technicianId: technicians[1]._id, createdAt: daysAgo(8) },
       { content: "[QC pass] All fluids topped off, reset maintenance reminder.", technicianId: advisors[1]._id, createdAt: daysAgo(7) },
@@ -375,6 +425,10 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     totalCost: findService("Wheel Alignment").basePrice + findService("Tire Rotation & Balancing").basePrice,
     startedAt: daysAgo(21),
     completedAt: daysAgo(20),
+    qcPassedAt: daysAgo(20),
+    qcBy: advisors[1]._id,
+    forwardedToAccountantAt: daysAgo(20),
+    invoicedAt: daysAgo(20),
     stepNotes: [
       { content: "Alignment adjusted to spec, all four tires rotated and balanced.", technicianId: technicians[2]._id, createdAt: daysAgo(20) },
       { content: "[QC pass] Test drive confirms straight tracking, no pull.", technicianId: advisors[1]._id, createdAt: daysAgo(20) },
@@ -418,7 +472,29 @@ async function seedRepairOrdersAndFollowOns({ vehicles, services, advisors, tech
     totalCost: findService("AC Recharge Service").basePrice,
   });
 
-  const repairOrders = [order1, order2, order3, order4, order5, order6, order7];
+  // 8) Completed, QC-passed and forwarded to accounting but NOT yet invoiced —
+  // this is what the accountant actually bills. Without one, the "ready to
+  // invoice" queue is empty on a fresh demo DB and the accountant screen looks
+  // broken even though it isn't.
+  const order8 = await RepairOrderModel.create({
+    vehicleId: vehicles[3]._id,
+    advisorId: advisors[2]._id,
+    technicianId: technicians[0]._id,
+    services: [svcLine("Synthetic Oil Change"), svcLine("Full Multi-Point Inspection")],
+    status: "readyForDelivery",
+    totalCost: findService("Synthetic Oil Change").basePrice + findService("Full Multi-Point Inspection").basePrice,
+    startedAt: daysAgo(1),
+    completedAt: hoursAgo(3),
+    qcPassedAt: hoursAgo(2),
+    qcBy: advisors[2]._id,
+    forwardedToAccountantAt: hoursAgo(1),
+    stepNotes: [
+      { content: "Oil and filter changed, multi-point inspection completed.", technicianId: technicians[0]._id, createdAt: hoursAgo(3) },
+      { content: "[QC pass] All checks green, ready to invoice.", technicianId: advisors[2]._id, createdAt: hoursAgo(2) },
+    ],
+  });
+
+  const repairOrders = [order1, order2, order3, order4, order5, order6, order7, order8];
   console.log(`[seed] repair orders: ${repairOrders.length}`);
 
   // Inspection reports
@@ -903,19 +979,22 @@ async function seedInvoicesPayments({ order1, order2, order4, accountants, custo
 }
 
 async function seedParts() {
+  // costPrice (~60-70% of sell price) drives the gross-profit report; a couple
+  // of items are stocked at or below their reorderPoint so the low-stock and
+  // reorder-suggestion views have something to show.
   const parts = await PartModel.insertMany([
-    { name: "Front Brake Pad Set", sku: "BRK-PAD-001", unitPrice: 65000, stockQuantity: 42 },
-    { name: "Brake Rotor (Front, Vented)", sku: "BRK-ROT-002", unitPrice: 120000, stockQuantity: 18 },
-    { name: "Ignition Coil", sku: "IGN-COIL-010", unitPrice: 85000, stockQuantity: 25 },
-    { name: "NGK Spark Plug (4-pack)", sku: "ENG-SPK-004", unitPrice: 32000, stockQuantity: 60 },
-    { name: "Synthetic Engine Oil 5W-30 (4L)", sku: "OIL-SYN-5W30", unitPrice: 55000, stockQuantity: 80 },
-    { name: "Oil Filter", sku: "OIL-FLT-001", unitPrice: 12000, stockQuantity: 95 },
-    { name: "Cabin Air Filter", sku: "AC-FLT-003", unitPrice: 18000, stockQuantity: 50 },
-    { name: "12V Car Battery (60Ah)", sku: "ELE-BAT-060", unitPrice: 175000, stockQuantity: 12 },
-    { name: "Wheel Bearing Kit (Front)", sku: "SUS-BRG-007", unitPrice: 95000, stockQuantity: 16 },
-    { name: "All-Season Tire 215/55R17", sku: "TIR-215-55R17", unitPrice: 210000, stockQuantity: 28 },
-    { name: "Wiper Blade Set", sku: "EXT-WPR-002", unitPrice: 15000, stockQuantity: 70 },
-    { name: "Coolant / Antifreeze (4L)", sku: "FLU-CLT-004", unitPrice: 28000, stockQuantity: 40 },
+    { name: "Front Brake Pad Set", sku: "BRK-PAD-001", unitPrice: 65000, costPrice: 42000, stockQuantity: 42, reorderPoint: 10, maxStock: 60 },
+    { name: "Brake Rotor (Front, Vented)", sku: "BRK-ROT-002", unitPrice: 120000, costPrice: 78000, stockQuantity: 18, reorderPoint: 6, maxStock: 30 },
+    { name: "Ignition Coil", sku: "IGN-COIL-010", unitPrice: 85000, costPrice: 55000, stockQuantity: 25, reorderPoint: 8, maxStock: 40 },
+    { name: "NGK Spark Plug (4-pack)", sku: "ENG-SPK-004", unitPrice: 32000, costPrice: 20000, stockQuantity: 60, reorderPoint: 15, maxStock: 100 },
+    { name: "Synthetic Engine Oil 5W-30 (4L)", sku: "OIL-SYN-5W30", unitPrice: 55000, costPrice: 36000, stockQuantity: 80, reorderPoint: 20, maxStock: 120 },
+    { name: "Oil Filter", sku: "OIL-FLT-001", unitPrice: 12000, costPrice: 7000, stockQuantity: 95, reorderPoint: 25, maxStock: 150 },
+    { name: "Cabin Air Filter", sku: "AC-FLT-003", unitPrice: 18000, costPrice: 11000, stockQuantity: 50, reorderPoint: 15, maxStock: 80 },
+    { name: "12V Car Battery (60Ah)", sku: "ELE-BAT-060", unitPrice: 175000, costPrice: 120000, stockQuantity: 5, reorderPoint: 6, maxStock: 20 },
+    { name: "Wheel Bearing Kit (Front)", sku: "SUS-BRG-007", unitPrice: 95000, costPrice: 62000, stockQuantity: 16, reorderPoint: 5, maxStock: 25 },
+    { name: "All-Season Tire 215/55R17", sku: "TIR-215-55R17", unitPrice: 210000, costPrice: 150000, stockQuantity: 28, reorderPoint: 8, maxStock: 40 },
+    { name: "Wiper Blade Set", sku: "EXT-WPR-002", unitPrice: 15000, costPrice: 8000, stockQuantity: 4, reorderPoint: 10, maxStock: 80 },
+    { name: "Coolant / Antifreeze (4L)", sku: "FLU-CLT-004", unitPrice: 28000, costPrice: 17000, stockQuantity: 40, reorderPoint: 12, maxStock: 60 },
   ]);
   console.log(`[seed] parts: ${parts.length}`);
   return parts;
