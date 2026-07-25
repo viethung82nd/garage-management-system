@@ -141,42 +141,69 @@ export function useClonedKapaPage({
     let cancelled = false
 
     // Every cloned Kapa page ships ~40 external scripts (jQuery, its
-    // plugins, GSAP/ScrollMagic, etc.). Appending them one at a time and
-    // awaiting each onload before even starting the next request turns that
-    // into a fully serial waterfall — the dominant cause of the page
-    // looking stuck (hero content stays hidden until AOS/ScrollMagic init,
-    // which waits for every script). Appending them all up front instead
-    // lets the browser fetch them in parallel; `async = false` on each
-    // still guarantees they execute in original document order once
-    // downloaded, so plugin-before-jQuery ordering is preserved exactly as
-    // before — only the network waterfall is gone.
+    // plugins, GSAP/ScrollMagic, etc.) interleaved with inline ones (theme
+    // init snippets that assume jQuery/wp already exist as globals).
+    // `async = false` on a dynamically-inserted <script src> genuinely does
+    // guarantee execution order *relative to other async=false scripts* —
+    // but an inline script (no src) has no fetch step, so it runs
+    // synchronously the instant it's appended, without waiting for any
+    // still-downloading external script ahead of it. Appending everything
+    // in one synchronous loop (the previous approach here) let inline
+    // scripts jump the queue, intermittently throwing "jQuery is not
+    // defined" depending on how fast jquery.js happened to download —
+    // exactly the "works sometimes" bug this caused.
+    //
+    // Fix: preload every external script's bytes in parallel up front (pure
+    // network fetch, no execution — keeps the original perf win of not
+    // serializing the waterfall), but only ever *append* one script element
+    // at a time, awaiting each external one's onload before appending the
+    // next. That restores real document-order execution semantics — by the
+    // time each <script src> tag actually gets appended, the browser has
+    // usually already fetched it via the preload hint, so the wait is
+    // near-instant instead of a fresh round trip.
     const loadScripts = () => {
-      const pending: Promise<void>[] = []
-
+      const preloadLinks: HTMLLinkElement[] = []
       for (const spec of pageSpec.scripts) {
-        const scriptEl = document.createElement('script')
-        scriptEl.dataset.kapaTemplateScript = 'true'
-        scriptEl.async = false
-        if (spec.type) scriptEl.type = spec.type
-        if (spec.defer) scriptEl.defer = true
-
-        if (spec.src) {
-          scriptEl.src = new URL(spec.src, originBase).href
-          pending.push(
-            new Promise<void>((resolve) => {
-              scriptEl.onload = () => resolve()
-              scriptEl.onerror = () => resolve()
-            }),
-          )
-        } else if (spec.text) {
-          scriptEl.textContent = spec.text
-        }
-
-        document.head.appendChild(scriptEl)
-        scriptNodes.push(scriptEl)
+        if (!spec.src) continue
+        const link = document.createElement('link')
+        link.rel = 'preload'
+        link.as = 'script'
+        link.href = new URL(spec.src, originBase).href
+        link.dataset.kapaTemplatePreload = 'true'
+        document.head.appendChild(link)
+        preloadLinks.push(link)
       }
 
-      return Promise.all(pending).then(() => undefined)
+      const appendInOrder = pageSpec.scripts.reduce<Promise<void>>(
+        (chain, spec) =>
+          chain.then(
+            () =>
+              new Promise<void>((resolve) => {
+                const scriptEl = document.createElement('script')
+                scriptEl.dataset.kapaTemplateScript = 'true'
+                if (spec.type) scriptEl.type = spec.type
+                if (spec.defer) scriptEl.defer = true
+
+                if (spec.src) {
+                  scriptEl.src = new URL(spec.src, originBase).href
+                  scriptEl.onload = () => resolve()
+                  scriptEl.onerror = () => resolve()
+                  document.head.appendChild(scriptEl)
+                  scriptNodes.push(scriptEl)
+                } else {
+                  if (spec.text) scriptEl.textContent = spec.text
+                  document.head.appendChild(scriptEl)
+                  scriptNodes.push(scriptEl)
+                  resolve()
+                }
+              }),
+          ),
+        Promise.resolve(),
+      )
+
+      return appendInOrder.then(() => {
+        for (const link of preloadLinks) link.remove()
+      })
     }
 
     const initAnimations = () => {
