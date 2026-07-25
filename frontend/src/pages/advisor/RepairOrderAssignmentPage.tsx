@@ -11,7 +11,7 @@ import {
   ToolOutlined,
 } from '@ant-design/icons'
 import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Tag } from 'antd'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   deliverVehicleApi,
@@ -26,7 +26,9 @@ import {
   updateWorkshopRepairOrder,
   vehicleName,
   vehiclePlate,
+  JOB_TYPE_LABELS,
   type ApiQuotation,
+  type ApiQuotationLine,
   type ApiRepairOrder,
   type ApiTechnician,
 } from '../../shared/api/workshop'
@@ -37,6 +39,287 @@ import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))} ₫`
+}
+
+// ============= "View quotation" print-style preview — mirrors the printed
+// sheet on the Quotation page (same garage letterhead, info grid, sectioned
+// line-item table) instead of a generic summary, so an advisor sees the
+// exact document the customer was shown. =============
+
+const GARAGE_NAME = 'KAPA AUTO CARE CENTER'
+const GARAGE_ADDRESS = '757 Huỳnh Tấn Phát, Phường Phú Thuận, Quận 7, TP.HCM'
+const GARAGE_CONTACT = 'Tel: 0909 579 579  ·  Email: service@kapa.vn  ·  www.kapa.vn'
+
+// Ordered sections of the printed quote, one per line kind — same grouping
+// and titles as the Quotation page's own printable sheet.
+const QUOTE_PRINT_SECTIONS: Array<{ kind: ApiQuotationLine['kind']; title: string }> = [
+  { kind: 'part', title: 'PARTS & SUPPLIES' },
+  { kind: 'labor', title: 'LABOR' },
+  { kind: 'service', title: 'SERVICES & INSPECTIONS' },
+]
+
+function plainMoney(value: number) {
+  return new Intl.NumberFormat('vi-VN').format(Math.round(value || 0))
+}
+
+function printDateTime(value?: string) {
+  if (!value) return '—'
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) return '—'
+  return new Intl.DateTimeFormat('vi-VN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date)
+}
+
+function PrintInfoRow({ label, value }: { label: string; value?: string | number | null }) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        gap: 8,
+        padding: '4px 0',
+        borderBottom: `1px dashed ${advisorPalette.border}`,
+      }}
+    >
+      <span style={{ color: advisorPalette.textMuted, fontSize: 13, minWidth: 130 }}>{label}</span>
+      <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 600 }}>
+        {value === undefined || value === null || value === '' ? '—' : value}
+      </span>
+    </div>
+  )
+}
+
+function QuotationPrintPreview({ order, quotation }: { order: ApiRepairOrder; quotation: ApiQuotation }) {
+  const vehicle = order.vehicleId || order.vehicle
+  const customer = order.customer || vehicle?.customerId || vehicle?.customer
+  const lines = quotation.lines ?? []
+
+  const cellStyle: CSSProperties = {
+    border: `1px solid ${advisorPalette.border}`,
+    padding: '6px 8px',
+    fontSize: 13,
+    verticalAlign: 'top',
+  }
+  const headStyle: CSSProperties = {
+    ...cellStyle,
+    background: '#f8fafc',
+    color: advisorPalette.textMuted,
+    fontWeight: 700,
+    textAlign: 'center',
+    textTransform: 'uppercase',
+    fontSize: 11,
+  }
+
+  const subtotal = lines.reduce((sum, line) => sum + (line.quantity || 0) * (line.unitPrice || 0), 0)
+  const discountAmount = (subtotal * (quotation.discountPercent || 0)) / 100
+  const taxAmount = ((subtotal - discountAmount) * (quotation.taxPercent || 0)) / 100
+  const total = quotation.totalEstimate ?? subtotal - discountAmount + taxAmount
+
+  const statusMeta = QUOTATION_STATUS_META[quotation.status ?? 'draft']
+
+  return (
+    <div>
+      <div style={{ borderBottom: `2px solid ${advisorPalette.ink}`, paddingBottom: 12, marginBottom: 16 }}>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <div style={{ color: advisorPalette.ink, fontSize: 18, fontWeight: 800 }}>{GARAGE_NAME}</div>
+            <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>{GARAGE_ADDRESS}</div>
+            <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>{GARAGE_CONTACT}</div>
+          </div>
+          <Tag color={statusMeta.color} style={{ marginInlineEnd: 0 }}>
+            {statusMeta.label}
+          </Tag>
+        </div>
+        <div style={{ textAlign: 'center', marginTop: 12 }}>
+          <div style={{ color: advisorPalette.ink, fontSize: 24, fontWeight: 800, letterSpacing: 1 }}>
+            REPAIR QUOTATION
+          </div>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 2 }}>
+            Quote no.: {quotation.code || formatOrderId(order)}
+          </div>
+        </div>
+      </div>
+
+      <div
+        style={{
+          color: advisorPalette.ink,
+          fontWeight: 700,
+          fontSize: 13,
+          marginBottom: 8,
+          textTransform: 'uppercase',
+        }}
+      >
+        Quotation info
+      </div>
+      <div className="grid gap-x-8 md:grid-cols-2">
+        <div>
+          <PrintInfoRow label="Customer" value={personName(customer, 'Walk-in')} />
+          <PrintInfoRow label="Phone" value={customer?.phone} />
+          <PrintInfoRow label="Contact person" value={personName(customer, '—')} />
+          <PrintInfoRow label="Service type" value={order.serviceCategory || 'Repair'} />
+          <PrintInfoRow label="Check-in date" value={printDateTime(order.createdAt)} />
+          <PrintInfoRow label="Promised completion" value={printDateTime(order.promisedAt)} />
+        </div>
+        <div>
+          <PrintInfoRow label="License plate" value={vehiclePlate(vehicle)} />
+          <PrintInfoRow label="Model / Type" value={vehicle?.model} />
+          <PrintInfoRow label="Chassis no." value={vehicle?.chassisNumber || vehicle?.vin} />
+          <PrintInfoRow label="Engine no." value={vehicle?.engineNumber} />
+          <PrintInfoRow
+            label="Mileage"
+            value={vehicle?.lastKnownMileage != null ? `${plainMoney(vehicle.lastKnownMileage)} km` : undefined}
+          />
+        </div>
+      </div>
+
+      <div style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 13, margin: '16px 0 6px', textTransform: 'uppercase' }}>
+        Customer request
+      </div>
+      <div
+        style={{
+          border: `1px solid ${advisorPalette.border}`,
+          borderRadius: 8,
+          padding: 10,
+          color: advisorPalette.ink,
+          fontSize: 13,
+          minHeight: 40,
+        }}
+      >
+        {order.issueDescription || 'Repairs / servicing per inspection results.'}
+      </div>
+
+      <div style={{ color: advisorPalette.textMuted, fontSize: 12, margin: '16px 0 8px' }}>
+        Following your request and our inspection, we are pleased to submit the following estimated repair quotation:
+      </div>
+      <div style={{ overflowX: 'auto' }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 760 }}>
+          <thead>
+            <tr>
+              <th style={{ ...headStyle, width: 44 }}>#</th>
+              <th style={{ ...headStyle, textAlign: 'left' }}>Job / Part description</th>
+              <th style={{ ...headStyle, width: 120 }}>Job type</th>
+              <th style={{ ...headStyle, width: 64 }}>Unit</th>
+              <th style={{ ...headStyle, width: 70 }}>Qty</th>
+              <th style={{ ...headStyle, width: 110 }}>Unit price</th>
+              <th style={{ ...headStyle, width: 120 }}>Total</th>
+            </tr>
+          </thead>
+          <tbody>
+            {lines.length === 0 ? (
+              <tr>
+                <td style={{ ...cellStyle, textAlign: 'center', color: advisorPalette.textMuted }} colSpan={7}>
+                  No line items on this quotation.
+                </td>
+              </tr>
+            ) : (
+              QUOTE_PRINT_SECTIONS.filter((section) => lines.some((line) => line.kind === section.kind)).flatMap(
+                (section) => {
+                  const sectionLines = lines.filter((line) => line.kind === section.kind)
+                  const sectionTotal = sectionLines.reduce(
+                    (sum, line) => sum + (line.quantity || 0) * (line.unitPrice || 0),
+                    0,
+                  )
+                  return [
+                    <tr key={`${section.kind}-head`}>
+                      <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 800, color: advisorPalette.ink }} colSpan={6}>
+                        {section.title}
+                      </td>
+                      <td style={{ ...cellStyle, background: '#f1f5f9', fontWeight: 800, color: advisorPalette.ink, textAlign: 'right' }}>
+                        {plainMoney(sectionTotal)}
+                      </td>
+                    </tr>,
+                    ...sectionLines.map((line, index) => (
+                      <tr key={line.id || `${section.kind}-${index}`}>
+                        <td style={{ ...cellStyle, textAlign: 'center' }}>{index + 1}</td>
+                        <td style={cellStyle}>
+                          <span style={{ fontWeight: 600, color: advisorPalette.ink }}>
+                            {line.description}
+                            {line.kind === 'part' && line.partId ? (
+                              <Tag color={advisorPalette.teal} style={{ marginLeft: 6, fontSize: 10, lineHeight: '16px', padding: '0 4px' }}>
+                                In stock
+                              </Tag>
+                            ) : null}
+                          </span>
+                        </td>
+                        <td style={cellStyle}>
+                          {line.jobType && line.jobType !== 'customerPay' ? (
+                            <Tag color={advisorPalette.amber}>{JOB_TYPE_LABELS[line.jobType]}</Tag>
+                          ) : null}
+                        </td>
+                        <td style={{ ...cellStyle, textAlign: 'center' }}>Unit</td>
+                        <td style={{ ...cellStyle, textAlign: 'center' }}>{(line.quantity || 0).toFixed(2)}</td>
+                        <td style={{ ...cellStyle, textAlign: 'right' }}>{plainMoney(line.unitPrice || 0)}</td>
+                        <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 700 }}>
+                          {plainMoney((line.quantity || 0) * (line.unitPrice || 0))}
+                        </td>
+                      </tr>
+                    )),
+                  ]
+                },
+              )
+            )}
+          </tbody>
+          <tfoot>
+            {quotation.discountPercent ? (
+              <tr>
+                <td style={{ ...cellStyle, textAlign: 'right', color: advisorPalette.textMuted }} colSpan={6}>
+                  Discount ({quotation.discountPercent}%)
+                </td>
+                <td style={{ ...cellStyle, textAlign: 'right', color: advisorPalette.textMuted }}>
+                  -{plainMoney(discountAmount)}
+                </td>
+              </tr>
+            ) : null}
+            {quotation.taxPercent ? (
+              <tr>
+                <td style={{ ...cellStyle, textAlign: 'right', color: advisorPalette.textMuted }} colSpan={6}>
+                  Tax ({quotation.taxPercent}%)
+                </td>
+                <td style={{ ...cellStyle, textAlign: 'right', color: advisorPalette.textMuted }}>
+                  {plainMoney(taxAmount)}
+                </td>
+              </tr>
+            ) : null}
+            <tr>
+              <td
+                style={{ ...cellStyle, textAlign: 'right', fontWeight: 800, color: advisorPalette.ink, textTransform: 'uppercase' }}
+                colSpan={6}
+              >
+                Repair total
+              </td>
+              <td style={{ ...cellStyle, textAlign: 'right', fontWeight: 800, color: advisorPalette.red, fontSize: 15 }}>
+                {plainMoney(total)}
+              </td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+
+      {quotation.approval?.customerSignature || quotation.approval?.advisorSignature ? (
+        <div className="grid gap-6 sm:grid-cols-2" style={{ marginTop: 20 }}>
+          {(
+            [
+              { label: 'Customer', src: quotation.approval?.customerSignature },
+              { label: 'Advisor', src: quotation.approval?.advisorSignature },
+            ] as const
+          ).map((block) =>
+            block.src ? (
+              <div key={block.label} style={{ textAlign: 'center' }}>
+                <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
+                  {block.label} signature
+                </div>
+                <img alt={`${block.label} signature`} src={block.src} style={{ maxHeight: 70, margin: '0 auto', display: 'block' }} />
+              </div>
+            ) : null,
+          )}
+        </div>
+      ) : null}
+    </div>
+  )
 }
 
 type OrderStatusKey =
@@ -1123,85 +1406,17 @@ export function RepairOrderAssignmentPage() {
         footer={null}
         onCancel={() => setQuotationModalOpen(false)}
         open={quotationModalOpen}
-        title="Quotation"
-        width={640}
+        title={null}
+        width={820}
       >
         {quotationLoading ? (
           <Empty description="Loading quotation..." image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : quotationError ? (
           <InlineBanner tone="error">{quotationError}</InlineBanner>
-        ) : !quotationDetail ? (
+        ) : !quotationDetail || !order ? (
           <Empty description="No quotation on file for this order." image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
-          <div className="flex flex-col gap-4">
-            <div className="flex items-center justify-between gap-3 flex-wrap">
-              <span style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 15 }}>
-                {quotationDetail.code}
-              </span>
-              <Tag color={QUOTATION_STATUS_META[quotationDetail.status ?? 'draft'].color}>
-                {QUOTATION_STATUS_META[quotationDetail.status ?? 'draft'].label}
-              </Tag>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              {(quotationDetail.lines ?? []).map((line, index) => (
-                <div
-                  key={line.id || index}
-                  className="flex items-center justify-between gap-3 rounded-xl px-3 py-2"
-                  style={{ background: advisorPalette.panelAlt, border: `1px solid ${advisorPalette.border}` }}
-                >
-                  <span style={{ color: advisorPalette.ink, fontWeight: 600 }}>
-                    {line.description}
-                    {line.quantity && line.quantity > 1 ? ` × ${line.quantity}` : ''}
-                  </span>
-                  <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>
-                    {formatMoney((line.unitPrice || 0) * (line.quantity || 1))}
-                  </span>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex flex-col gap-1" style={{ borderTop: `1px solid ${advisorPalette.border}`, paddingTop: 12 }}>
-              {quotationDetail.discountPercent ? (
-                <div className="flex items-center justify-between" style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
-                  <span>Discount ({quotationDetail.discountPercent}%)</span>
-                </div>
-              ) : null}
-              {quotationDetail.taxPercent ? (
-                <div className="flex items-center justify-between" style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
-                  <span>Tax ({quotationDetail.taxPercent}%)</span>
-                </div>
-              ) : null}
-              <div className="flex items-center justify-between">
-                <span style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>
-                  Total
-                </span>
-                <span style={{ color: advisorPalette.red, fontSize: 18, fontWeight: 700 }}>
-                  {formatMoney(quotationDetail.totalEstimate || 0)}
-                </span>
-              </div>
-            </div>
-
-            {quotationDetail.approval?.customerSignature || quotationDetail.approval?.advisorSignature ? (
-              <div className="grid gap-4 sm:grid-cols-2" style={{ borderTop: `1px solid ${advisorPalette.border}`, paddingTop: 12 }}>
-                {(
-                  [
-                    { label: 'Customer', src: quotationDetail.approval?.customerSignature },
-                    { label: 'Advisor', src: quotationDetail.approval?.advisorSignature },
-                  ] as const
-                ).map((block) =>
-                  block.src ? (
-                    <div key={block.label} style={{ textAlign: 'center' }}>
-                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
-                        {block.label}
-                      </div>
-                      <img alt={`${block.label} signature`} src={block.src} style={{ maxHeight: 60, margin: '0 auto' }} />
-                    </div>
-                  ) : null,
-                )}
-              </div>
-            ) : null}
-          </div>
+          <QuotationPrintPreview order={order} quotation={quotationDetail} />
         )}
       </Modal>
     </ServiceAdvisorShell>
