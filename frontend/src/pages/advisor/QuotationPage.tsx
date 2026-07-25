@@ -12,6 +12,7 @@ import {
   Card,
   Divider,
   Empty,
+  Image,
   Input,
   InputNumber,
   Modal,
@@ -285,6 +286,8 @@ type QuotationHistoryRow = {
   status: NonNullable<ApiQuotation["status"]>;
   total: number;
   createdAt: string;
+  customerSignature?: string;
+  advisorSignature?: string;
 };
 
 function mapQuotationHistoryRow(quote: ApiQuotation): QuotationHistoryRow {
@@ -297,6 +300,8 @@ function mapQuotationHistoryRow(quote: ApiQuotation): QuotationHistoryRow {
     status: quote.status || "draft",
     total: quote.totalEstimate || 0,
     createdAt: quote.createdAt || "",
+    customerSignature: quote.approval?.customerSignature,
+    advisorSignature: quote.approval?.advisorSignature,
   };
 }
 
@@ -371,6 +376,37 @@ function QuotationHistoryPanel({
           {QUOTE_STATUS_META[status].label}
         </Tag>
       ),
+    },
+    {
+      title: "Signatures",
+      key: "signatures",
+      render: (_, row) =>
+        row.customerSignature || row.advisorSignature ? (
+          <div style={{ display: "flex", gap: 6 }}>
+            {row.customerSignature ? (
+              <Image
+                src={row.customerSignature}
+                alt="Customer signature"
+                title="Customer"
+                width={40}
+                height={24}
+                style={{ objectFit: "contain", border: `1px solid ${advisorPalette.border}`, borderRadius: 4, background: "#fff" }}
+              />
+            ) : null}
+            {row.advisorSignature ? (
+              <Image
+                src={row.advisorSignature}
+                alt="Advisor signature"
+                title="Advisor"
+                width={40}
+                height={24}
+                style={{ objectFit: "contain", border: `1px solid ${advisorPalette.border}`, borderRadius: 4, background: "#fff" }}
+              />
+            ) : null}
+          </div>
+        ) : (
+          <span style={{ color: advisorPalette.textMuted }}>—</span>
+        ),
     },
     {
       title: "Total",
@@ -475,7 +511,7 @@ export function QuotationPage() {
   } = useApiMessage();
   const [quotationId, setQuotationId] = useState<string>();
   const [status, setStatus] = useState<
-    "draft" | "sent" | "approved" | "rejected"
+    "draft" | "sent" | "approved" | "partiallyApproved" | "rejected"
   >("draft");
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -514,14 +550,50 @@ export function QuotationPage() {
 
     async function loadPending() {
       try {
-        const response = await fetchWorkshopRepairOrders(
-          authToken,
-          "?status=pending",
+        const [ordersResponse, quotesResponse] = await Promise.all([
+          fetchWorkshopRepairOrders(authToken, "?status=pending"),
+          fetchQuotations(authToken, ""),
+        ]);
+        if (cancelled) return;
+
+        const orders = unwrapArray<ApiRepairOrder>(ordersResponse, [
+          "repairOrders",
+          "orders",
+        ]);
+
+        // A repair order's own status stays "pending" until a technician
+        // clocks on — it does NOT flip once its quote is approved. Without
+        // this filter, an already-approved quote's order stayed listed here
+        // forever, and picking it again started a brand-new blank quote
+        // instead of the existing one, silently piling up duplicates.
+        const quotes = unwrapArray<ApiQuotation>(quotesResponse, [
+          "quotations",
+        ]);
+        // Sorted newest-first by the backend — keep only each order's live
+        // (most recent) quote status, since an older superseded quote (e.g.
+        // one replaced via "Create new quotation" after a decline) must not
+        // override it.
+        const latestStatusByOrderId = new Map<string, string | undefined>();
+        for (const quote of quotes) {
+          if (!quote.repairOrderId) continue;
+          if (latestStatusByOrderId.has(quote.repairOrderId)) continue;
+          latestStatusByOrderId.set(quote.repairOrderId, quote.status);
+        }
+        const resolvedOrderIds = new Set(
+          Array.from(latestStatusByOrderId.entries())
+            .filter(
+              ([, status]) =>
+                status === "approved" || status === "partiallyApproved",
+            )
+            .map(([id]) => id),
         );
-        if (!cancelled)
-          setPendingOrders(
-            unwrapArray<ApiRepairOrder>(response, ["repairOrders", "orders"]),
-          );
+
+        setPendingOrders(
+          orders.filter((candidate) => {
+            const id = candidate._id || candidate.id;
+            return !id || !resolvedOrderIds.has(id);
+          }),
+        );
       } catch (err) {
         if (!cancelled)
           showError(
@@ -580,6 +652,66 @@ export function QuotationPage() {
     }
 
     void loadOrder();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, orderIdParam]);
+
+  // If this order already has a quotation, load it instead of starting a
+  // fresh blank one. Without this, saving/approving here always called
+  // createQuotation (quotationId only ever got set as a side effect of that
+  // save) — silently piling up a new duplicate quote every single visit to
+  // an already-quoted order, even an already-approved one.
+  useEffect(() => {
+    if (!token || !orderIdParam) return;
+    const authToken = token;
+    let cancelled = false;
+
+    async function loadExistingQuotation() {
+      try {
+        const response = await fetchQuotations(
+          authToken,
+          `?repairOrderId=${orderIdParam}`,
+        );
+        if (cancelled) return;
+        // Sorted newest-first by the backend — the most recent one is the
+        // live quote (an older one only exists here if it was replaced via
+        // "Create new quotation" after a decline).
+        const existing = unwrapArray<ApiQuotation>(response, ["quotations"])[0];
+        if (!existing) return;
+
+        const id = existing._id || existing.id;
+        setQuotationId(id);
+        setLines(
+          (existing.lines || []).map((line) =>
+            makeLine({
+              serviceId: line.serviceId,
+              partId: line.partId,
+              description: line.description,
+              kind: line.kind,
+              jobType: line.jobType,
+              quantity: line.quantity,
+              unitPrice: line.unitPrice,
+            }),
+          ),
+        );
+        setDiscountPercent(existing.discountPercent || 0);
+        setTaxPercent(existing.taxPercent || 0);
+        setNote(existing.note || "");
+        setStatus(existing.status || "draft");
+        setApprovalRecord(existing.approval ?? null);
+        setInspectionLinesAdded(true);
+      } catch (err) {
+        if (!cancelled)
+          showError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load this order's existing quotation.",
+          );
+      }
+    }
+
+    void loadExistingQuotation();
     return () => {
       cancelled = true;
     };
@@ -930,6 +1062,7 @@ export function QuotationPage() {
   const statusMeta = {
     approved: { color: "green", label: "Customer approved" },
     draft: { color: "default", label: "Drafting quotation" },
+    partiallyApproved: { color: "gold", label: "Partially approved" },
     rejected: { color: "red", label: "Customer declined" },
     sent: { color: "blue", label: "Sent to customer" },
   }[status];
