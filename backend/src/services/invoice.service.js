@@ -508,9 +508,30 @@ export async function sendInvoiceToCustomer(id, actorId) {
 
     if (hasEmailOnFile) {
       const displayId = formatDisplayId("INV", invoice._id);
+      const order = invoice.repairOrderId;
       // Fire-and-forget — see quotation.service.js's sendQuotation() for why
       // this must not block the request on a slow/unreachable SMTP server.
-      void renderInvoicePdf({ ...invoice.toObject(), code: invoice.code || displayId })
+      void renderInvoicePdf({
+        code: invoice.code || displayId,
+        status: invoice.status,
+        issuedAt: invoice.issuedAt,
+        serviceDate: order?.completedAt,
+        repairOrderCode: order ? formatDisplayId("RO", order._id) : undefined,
+        paymentMethod: invoice.amountPaid > 0 ? "Recorded at desk" : "Not yet paid",
+        customerName: customer.fullName,
+        customerPhone: customer.phone,
+        customerEmail: customer.email,
+        vehicleLabel: [vehicle.brand, vehicle.model, vehicle.year].filter(Boolean).join(" "),
+        plate: vehicle.licensePlate,
+        vin: vehicle.chassisNumber || vehicle.engineNumber,
+        mileage: vehicle.lastKnownMileage != null ? `${vehicle.lastKnownMileage.toLocaleString("vi-VN")} km` : undefined,
+        lineItems: invoice.lineItems,
+        subtotal: invoice.subtotal,
+        discount: invoice.discount,
+        tax: invoice.taxAmount,
+        total: invoice.total,
+        amountPaid: invoice.amountPaid,
+      })
         .then((pdfBuffer) =>
           sendEmail({
             to: customer.email,
