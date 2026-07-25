@@ -68,6 +68,11 @@ export default function AppointmentPage() {
     root.render(<AppointmentBookingForm user={user} />)
 
     return () => {
+      // Reset so a genuine re-run (StrictMode's dev-only double-invoke on
+      // mount, or this effect ever firing again for any other reason) can
+      // actually re-mount — without this the guard permanently blocked any
+      // mount after the first cleanup, leaving the slot empty for good.
+      mountedSlotRef.current = false
       rootRef.current = null
       root.unmount()
     }
