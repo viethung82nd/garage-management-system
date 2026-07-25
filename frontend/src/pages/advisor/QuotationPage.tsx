@@ -16,15 +16,19 @@ import {
   InputNumber,
   Modal,
   Select,
+  Table,
+  Tabs,
   Tag,
 } from "antd";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import type { ColumnsType } from "antd/es/table";
 import { SignaturePad } from "../../shared/ui/SignaturePad";
 import {
   confirmQuotation,
   createQuotation,
   fetchInspectionReports,
+  fetchQuotations,
   fetchQuotationVersions,
   fetchServiceCategories,
   fetchWorkshopRepairOrderById,
@@ -261,11 +265,187 @@ function InfoRow({
   );
 }
 
+const QUOTE_STATUS_META: Record<
+  NonNullable<ApiQuotation["status"]>,
+  { color: string; label: string }
+> = {
+  draft: { color: "default", label: "Drafting quotation" },
+  sent: { color: "blue", label: "Sent to customer" },
+  approved: { color: "green", label: "Customer approved" },
+  partiallyApproved: { color: "gold", label: "Partially approved" },
+  rejected: { color: "red", label: "Customer declined" },
+};
+
+type QuotationHistoryRow = {
+  id: string;
+  code: string;
+  repairOrderId?: string;
+  customer: string;
+  vehicle: string;
+  status: NonNullable<ApiQuotation["status"]>;
+  total: number;
+  createdAt: string;
+};
+
+function mapQuotationHistoryRow(quote: ApiQuotation): QuotationHistoryRow {
+  return {
+    id: quote._id || quote.id || crypto.randomUUID(),
+    code: quote.code || "Quotation",
+    repairOrderId: quote.repairOrderId,
+    customer: quote.customerName || "Customer",
+    vehicle: [quote.vehicleName, quote.vehiclePlate].filter(Boolean).join(" · ") || "Not updated",
+    status: quote.status || "draft",
+    total: quote.totalEstimate || 0,
+    createdAt: quote.createdAt || "",
+  };
+}
+
+/** Every quotation ever created, across every repair order — the browsable
+ * log the per-quote "Quotation history" sidebar card can't provide on its
+ * own, since that one only shows edits within a single already-selected
+ * quote. Selecting a row opens that quote the same way clicking a repair
+ * order on the picker does. */
+function QuotationHistoryPanel({
+  token,
+  onOpenOrder,
+}: {
+  token: string | null;
+  onOpenOrder: (repairOrderId: string) => void;
+}) {
+  const [rows, setRows] = useState<QuotationHistoryRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [statusFilter, setStatusFilter] = useState<
+    NonNullable<ApiQuotation["status"]> | ""
+  >("");
+  const { message: apiMessage, tone: apiTone, showError, clear: clearApiMessage } =
+    useApiMessage();
+
+  useEffect(() => {
+    if (!token) return;
+    const authToken = token;
+    let cancelled = false;
+
+    async function load() {
+      setLoading(true);
+      clearApiMessage();
+      try {
+        const response = await fetchQuotations(authToken);
+        if (cancelled) return;
+        setRows(
+          unwrapArray<ApiQuotation>(response, ["quotations"]).map(
+            mapQuotationHistoryRow,
+          ),
+        );
+      } catch (err) {
+        if (!cancelled)
+          showError(
+            err instanceof Error
+              ? err.message
+              : "Unable to load quotation history from the API.",
+          );
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    void load();
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const filteredRows = statusFilter
+    ? rows.filter((row) => row.status === statusFilter)
+    : rows;
+
+  const columns: ColumnsType<QuotationHistoryRow> = [
+    { title: "Code", dataIndex: "code", key: "code" },
+    { title: "Customer", dataIndex: "customer", key: "customer" },
+    { title: "Vehicle", dataIndex: "vehicle", key: "vehicle" },
+    {
+      title: "Status",
+      dataIndex: "status",
+      key: "status",
+      render: (status: QuotationHistoryRow["status"]) => (
+        <Tag color={QUOTE_STATUS_META[status].color}>
+          {QUOTE_STATUS_META[status].label}
+        </Tag>
+      ),
+    },
+    {
+      title: "Total",
+      dataIndex: "total",
+      key: "total",
+      align: "right",
+      render: (value: number) => `${money(value)} ₫`,
+    },
+    {
+      title: "Created",
+      dataIndex: "createdAt",
+      key: "createdAt",
+      render: (value: string) => formatDateTime(value),
+    },
+    {
+      title: "",
+      key: "actions",
+      width: 100,
+      render: (_, row) =>
+        row.repairOrderId ? (
+          <Button size="small" onClick={() => onOpenOrder(row.repairOrderId!)}>
+            Open
+          </Button>
+        ) : null,
+    },
+  ];
+
+  return (
+    <div className="flex flex-col gap-4">
+      {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
+
+      <Card
+        bordered={false}
+        className="bo-card-hover bo-enter rounded-2xl"
+        style={{
+          background: advisorPalette.panel,
+          boxShadow: advisorPalette.shadow,
+          border: `1px solid ${advisorPalette.border}`,
+        }}
+      >
+        <div className="mb-4">
+          <Select
+            allowClear
+            onChange={(value) => setStatusFilter(value || "")}
+            options={(
+              Object.keys(QUOTE_STATUS_META) as Array<
+                NonNullable<ApiQuotation["status"]>
+              >
+            ).map((value) => ({ label: QUOTE_STATUS_META[value].label, value }))}
+            placeholder="All statuses"
+            style={{ width: 220 }}
+            value={statusFilter || undefined}
+          />
+        </div>
+
+        <Table
+          columns={columns}
+          dataSource={filteredRows}
+          loading={loading}
+          pagination={{ pageSize: 10, showTotal: (total) => `${total} quotations` }}
+          rowKey="id"
+          scroll={{ x: 900 }}
+          className="bo-table"
+        />
+      </Card>
+    </div>
+  );
+}
+
 export function QuotationPage() {
   const { token } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const orderIdParam = searchParams.get("orderId") || undefined;
+  const [activeTabKey, setActiveTabKey] = useState<"quote" | "history">("quote");
 
   const [order, setOrder] = useState<ApiRepairOrder | null>(null);
   const [pendingOrders, setPendingOrders] = useState<ApiRepairOrder[]>([]);
@@ -770,8 +950,8 @@ export function QuotationPage() {
     fontSize: 11,
   };
 
-  return (
-    <ServiceAdvisorShell title="Repair quotation">
+  const quoteEditorContent = (
+    <>
       {apiMessage ? (
         <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner>
       ) : null}
@@ -1748,6 +1928,31 @@ export function QuotationPage() {
           />
         </div>
       </Modal>
+    </>
+  );
+
+  return (
+    <ServiceAdvisorShell title="Repair quotation">
+      <Tabs
+        activeKey={activeTabKey}
+        onChange={(key) => setActiveTabKey(key as "quote" | "history")}
+        items={[
+          { key: "quote", label: "New quote", children: quoteEditorContent },
+          {
+            key: "history",
+            label: "History",
+            children: (
+              <QuotationHistoryPanel
+                token={token}
+                onOpenOrder={(repairOrderId) => {
+                  setActiveTabKey("quote");
+                  navigate(`/advisor/quotation?orderId=${repairOrderId}`);
+                }}
+              />
+            ),
+          },
+        ]}
+      />
     </ServiceAdvisorShell>
   );
 }
