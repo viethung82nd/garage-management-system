@@ -6,8 +6,10 @@ import { SERVICE_REQUEST_STATUSES } from "../models/service-request.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
+import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
+import { recordStatusChange } from "../utils/orderStatus.js";
 import { runInTransaction } from "../utils/transaction.js";
-import { APPROVAL_CHANNELS } from "../models/index.js";
+import { APPROVAL_CHANNELS, DeferredWorkModel, TimeLogModel } from "../models/index.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const FE_STATUSES = ["pending", "sent", "approved", "rejected"];
@@ -16,6 +18,9 @@ const FE_STATUSES = ["pending", "sent", "approved", "rejected"];
 // (see the "approved" branch below), and re-rejecting an approved proposal
 // would leave a phantom line on the order with no way to remove it.
 const TERMINAL_STATUSES = ["approved", "rejected"];
+// A declined change order is chased up at the next visit, same cadence as a
+// declined quote line (see quotation.service.js).
+const DEFERRED_REMINDER_DAYS = 30;
 
 /** SA review queue. */
 export async function listAdditionalServiceProposals({ repairOrderId }) {
@@ -54,6 +59,7 @@ export async function createAdditionalServiceProposal(
     priority,
   },
   technicianId,
+  files,
 ) {
   if (!repairOrderId || !OID_RE.test(repairOrderId)) {
     throw new ApiError(400, "A valid repairOrderId is required");
@@ -77,9 +83,14 @@ export async function createAdditionalServiceProposal(
     catalogServiceId = catalogService._id;
   }
 
-  const repairOrderForNotify = await repairOrderRepository.model
-    .findById(repairOrderId)
-    .select("advisorId");
+  const photos = await Promise.all(
+    (files ?? []).map((file) => uploadBufferToCloudinary(file.buffer, "change-order-photos")),
+  ).then((results) => results.map((result) => result.secure_url));
+
+  const repairOrder = await repairOrderRepository.findById(repairOrderId);
+  if (!repairOrder) {
+    throw new ApiError(404, "Repair order not found");
+  }
 
   const proposal = await serviceRequestRepository.create({
     repairOrderId,
@@ -90,16 +101,47 @@ export async function createAdditionalServiceProposal(
     reason,
     customerImpact,
     estimateMinutes,
-    evidenceCount,
+    photos,
+    evidenceCount: photos.length || evidenceCount || 0,
     priority: ["high", "medium", "low"].includes(priority) ? priority : "medium",
     status: "pending",
   });
 
   await proposal.populate("technicianId", "fullName email phone role");
 
-  if (repairOrderForNotify?.advisorId) {
+  // Mandatory change-order flow (10.3): flagging extra work parks the order
+  // on the customer's decision and stops the technician's clock on it — the
+  // job genuinely can't continue until the customer says yes or no. Left
+  // alone if the order is already waiting/on hold/terminal for some other
+  // reason, so this never clobbers a more specific wait already in progress.
+  const previousStatus = repairOrder.status;
+  if (["pending", "inProgress"].includes(previousStatus)) {
+    repairOrder.status = "waitingCustomer";
+    await repairOrder.save();
+    await recordStatusChange({
+      repairOrderId: repairOrder._id,
+      from: previousStatus,
+      to: "waitingCustomer",
+      changedBy: technicianId,
+      reason: `Additional work flagged: ${proposal.serviceName}`,
+    });
+  }
+
+  const openTimeLog = await TimeLogModel.findOne({ repairOrderId, technicianId, endedAt: null });
+  if (openTimeLog) {
+    const endedAt = new Date();
+    openTimeLog.endedAt = endedAt;
+    openTimeLog.durationMinutes = Math.max(
+      0,
+      Math.round((endedAt - openTimeLog.startedAt) / 60000),
+    );
+    openTimeLog.pauseReason = "Additional work flagged — awaiting customer decision";
+    await openTimeLog.save();
+  }
+
+  if (repairOrder.advisorId) {
     await createNotification({
-      userId: repairOrderForNotify.advisorId,
+      userId: repairOrder.advisorId,
       type: "additionalServiceProposed",
       title: "New additional service proposal",
       message: `${proposal.technicianId?.fullName || "A technician"} flagged extra work: ${proposal.serviceName}.`,
@@ -109,6 +151,33 @@ export async function createAdditionalServiceProposal(
   }
 
   return proposal;
+}
+
+/**
+ * Once a change order is resolved (approved or rejected), the wait it caused
+ * is over — but only if nothing else is still pending customer decision on
+ * this order, and only if the order hasn't since moved on for an unrelated
+ * reason (a real waitingParts, a QC pass, etc.), which this must not clobber.
+ */
+async function resumeOrderIfIdle(repairOrderId, resolvedProposalId) {
+  const stillPending = await serviceRequestRepository.model.countDocuments({
+    repairOrderId,
+    _id: { $ne: resolvedProposalId },
+    status: { $in: ["pending", "sent"] },
+  });
+  if (stillPending > 0) return;
+
+  const order = await repairOrderRepository.findById(repairOrderId);
+  if (!order || order.status !== "waitingCustomer") return;
+
+  order.status = "inProgress";
+  await order.save();
+  await recordStatusChange({
+    repairOrderId: order._id,
+    from: "waitingCustomer",
+    to: "inProgress",
+    reason: "Change order resolved",
+  });
 }
 
 /**
@@ -202,10 +271,33 @@ export async function customerDecideProposal(id, { approved, note }, customerId)
     });
   } else {
     await proposal.save();
+    await createDeferredWorkForDecline(proposal, order.vehicleId._id, ownerId, note);
   }
+
+  await resumeOrderIfIdle(proposal.repairOrderId, proposal._id);
 
   await proposal.populate("technicianId", "fullName email phone role");
   return proposal;
+}
+
+/**
+ * Declined extra work is a follow-up obligation, not a dead end — same idea
+ * as a declined quote line (see quotation.service.js). Attached to the
+ * vehicle so it outlives this one visit.
+ */
+async function createDeferredWorkForDecline(proposal, vehicleId, customerId, declineReason) {
+  if (!vehicleId) return;
+  await DeferredWorkModel.create({
+    vehicleId,
+    customerId: customerId || undefined,
+    sourceRepairOrderId: proposal.repairOrderId,
+    serviceId: proposal.serviceId || undefined,
+    description: proposal.serviceName || "Recommended additional work",
+    estimatedPrice: (proposal.laborCost || 0) + (proposal.partsCost || 0),
+    declineReason: declineReason?.trim() || undefined,
+    status: "open",
+    remindAt: new Date(Date.now() + DEFERRED_REMINDER_DAYS * 24 * 60 * 60 * 1000),
+  });
 }
 
 /**
@@ -283,6 +375,18 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
       recordedBy: reviewedBy,
       note: approval.note?.trim(),
     });
+    await resumeOrderIfIdle(proposal.repairOrderId, proposal._id);
+  } else if (status === "rejected") {
+    await proposal.save();
+    const order = await repairOrderRepository.model
+      .findById(proposal.repairOrderId)
+      .populate({ path: "vehicleId", select: "customerId" });
+    await createDeferredWorkForDecline(
+      proposal,
+      order?.vehicleId?._id,
+      order?.vehicleId?.customerId,
+    );
+    await resumeOrderIfIdle(proposal.repairOrderId, proposal._id);
   } else {
     await proposal.save();
   }

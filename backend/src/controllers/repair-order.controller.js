@@ -155,7 +155,12 @@ export async function issuePartsForOrder(req, res) {
  * one service line).
  */
 export async function clockOn(req, res) {
-  const timeLog = await repairOrderService.clockOn(req.params.id, req.body ?? {}, req.user.sub);
+  const timeLog = await repairOrderService.clockOn(
+    req.params.id,
+    req.body ?? {},
+    req.user.sub,
+    req.user.role,
+  );
   res.status(201).json(timeLog);
 }
 

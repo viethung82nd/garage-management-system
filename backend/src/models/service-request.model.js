@@ -57,6 +57,13 @@ const serviceRequestSchema = new Schema(
       type: Number,
       min: 0,
     },
+    // Photos the technician attached when flagging the issue — real evidence,
+    // not just a count. evidenceCount is kept in sync from photos.length so
+    // the existing SA-facing "N photo(s) attached" display keeps working.
+    photos: {
+      type: [String],
+      default: [],
+    },
     evidenceCount: {
       type: Number,
       min: 0,

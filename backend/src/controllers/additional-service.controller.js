@@ -14,6 +14,7 @@ export async function createAdditionalServiceProposal(req, res) {
   const proposal = await additionalServiceService.createAdditionalServiceProposal(
     req.body ?? {},
     req.user.sub,
+    req.files,
   );
   res.status(201).json(proposal);
 }

@@ -28,6 +28,12 @@ const OID_RE = /^[0-9a-fA-F]{24}$/;
 const WARRANTY_MONTHS = 3;
 const WARRANTY_KM = 5000;
 
+// BR-JOB-05: how far actual clocked time may run past a line's catalog
+// estimate before it's worth a supervisor's attention. Fires once per line,
+// the first time the threshold is crossed — not on every subsequent clock-off
+// of an already-flagged line.
+const HOURS_OVERRUN_THRESHOLD_PERCENT = 30;
+
 const vehicleCustomerPopulate = {
   path: "customerId",
   select: "fullName phone email accountType role",
@@ -359,6 +365,23 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
     }
     if (!ORDER_SERVICE_STATUSES.includes(status)) {
       throw new ApiError(400, `A step's status must be one of: ${ORDER_SERVICE_STATUSES.join(", ")}`);
+    }
+
+    // BR-JOB-04: 3C (Cause/Correction — the line itself is the Complaint) is
+    // warranty and dispute documentation, not a nice-to-have note. A line
+    // can't reach "completed" without it on record, whether it was already
+    // saved on an earlier partial update or is arriving with this one.
+    if (status === "completed") {
+      const nextCause =
+        (typeof cause === "string" && cause.trim()) || order.services[index].cause;
+      const nextCorrection =
+        (typeof correction === "string" && correction.trim()) || order.services[index].correction;
+      if (!nextCause || !nextCorrection) {
+        throw new ApiError(
+          400,
+          "Cause and correction (3C) must be recorded before this line can be marked complete",
+        );
+      }
     }
 
     order.services[index].status = status;
@@ -951,7 +974,7 @@ export async function issuePartsForOrder(id, actorId) {
  * pinned to one service line). Opens a TimeLog row; the first clock-on on a
  * still-pending order also moves it into "inProgress".
  */
-export async function clockOn(orderId, { lineIndex, note }, technicianId) {
+export async function clockOn(orderId, { lineIndex, note }, technicianId, actorRole) {
   if (!orderId.match(OID_RE)) {
     throw new ApiError(400, "Invalid repair order ID format");
   }
@@ -963,6 +986,18 @@ export async function clockOn(orderId, { lineIndex, note }, technicianId) {
 
   if (TERMINAL_ORDER_STATUSES.includes(order.status)) {
     throw new ApiError(409, `Cannot clock on to a ${order.status} repair order`);
+  }
+
+  // BR-JOB-01: work only happens on what's actually been assigned — a
+  // technician can't just pick up any car on the floor. Admin keeps override
+  // access for support/testing.
+  if (actorRole !== "admin") {
+    if (!order.technicianId) {
+      throw new ApiError(409, "This repair order has no technician assigned yet");
+    }
+    if (String(order.technicianId) !== String(technicianId)) {
+      throw new ApiError(403, "Only the technician assigned to this repair order can clock on to it");
+    }
   }
 
   // The whole point of the waiting/on-hold states is that the vehicle is
@@ -1060,7 +1095,63 @@ export async function clockOff(orderId, { pauseReason, note }, technicianId) {
 
   await timeLog.save();
 
+  await checkLaborOverrun(orderId, timeLog, durationMinutes);
+
   return timeLog;
+}
+
+/**
+ * BR-JOB-05: compare a line's total clocked minutes (across every technician
+ * and every clock-on/off span) against its catalog estimate, and alert once
+ * if it has just crossed the overrun threshold. Best-effort and non-blocking
+ * for the same reason every notification in this file is — a reporting side
+ * effect must never fail the clock-off itself.
+ */
+async function checkLaborOverrun(orderId, closedTimeLog, justClosedMinutes) {
+  if (closedTimeLog.lineIndex === undefined || closedTimeLog.lineIndex === null) return;
+
+  try {
+    const order = await repairOrderRepository.model
+      .findById(orderId)
+      .select("code services vehicleId")
+      .populate({ path: "services.serviceId", select: "estimatedDuration" })
+      .populate({ path: "vehicleId", select: "licensePlate brand model" })
+      .lean();
+    const line = order?.services?.[closedTimeLog.lineIndex];
+    const estimatedMinutes = line?.serviceId?.estimatedDuration;
+    if (!estimatedMinutes || estimatedMinutes <= 0) return;
+
+    const lineLogs = await TimeLogModel.find({
+      repairOrderId: orderId,
+      lineIndex: closedTimeLog.lineIndex,
+      endedAt: { $ne: null },
+    })
+      .select("durationMinutes")
+      .lean();
+    const actualMinutes = lineLogs.reduce((sum, log) => sum + (log.durationMinutes || 0), 0);
+    const overrunPercent = ((actualMinutes - estimatedMinutes) / estimatedMinutes) * 100;
+    if (overrunPercent < HOURS_OVERRUN_THRESHOLD_PERCENT) return;
+
+    // Already over threshold before this span closed — already alerted once.
+    const priorMinutes = actualMinutes - justClosedMinutes;
+    const priorOverrunPercent = ((priorMinutes - estimatedMinutes) / estimatedMinutes) * 100;
+    if (priorMinutes > 0 && priorOverrunPercent >= HOURS_OVERRUN_THRESHOLD_PERCENT) return;
+
+    const vehicleLabel = order.vehicleId
+      ? [order.vehicleId.brand, order.vehicleId.model, order.vehicleId.licensePlate].filter(Boolean).join(" ")
+      : "a vehicle";
+    const lineName = line?.name || "a job";
+    const payload = {
+      type: "laborOverrun",
+      title: "Job running over its estimate",
+      message: `${lineName} on ${order.code || vehicleLabel} has run ${Math.round(actualMinutes)} min against an estimate of ${estimatedMinutes} min (+${Math.round(overrunPercent)}%).`,
+      refId: order._id,
+      refModel: "RepairOrder",
+    };
+    await Promise.all([notifyRole("serviceAdvisor", payload), notifyRole("admin", payload)]);
+  } catch (err) {
+    console.warn("[repair-order] labor overrun check failed:", err?.message ?? err);
+  }
 }
 
 /** All time logs for a repair order, plus the total minutes across closed spans. */

@@ -107,9 +107,53 @@ describe("repair-order.service", () => {
         vehicleId: vehicle._id.toString(),
         services: [{ serviceId: svc1._id.toString() }, { serviceId: svc2._id.toString() }],
       });
-      await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 0 });
-      const result = await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 1 });
+      await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 0, cause: "Worn part", correction: "Replaced part" });
+      const result = await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 1, cause: "Worn part", correction: "Replaced part" });
       expect(result.order.status).toBe("completed");
+    });
+
+    it("rejects completing a line without cause and correction on record (BR-JOB-04)", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(),
+        services: [{ serviceId: svc._id.toString() }],
+      });
+
+      await expect(
+        repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 0 }),
+      ).rejects.toMatchObject({ status: 400 });
+
+      await expect(
+        repairOrderService.updateRepairProgress(order._id.toString(), {
+          status: "completed",
+          stepIndex: 0,
+          cause: "Worn part",
+        }),
+      ).rejects.toMatchObject({ status: 400 });
+    });
+
+    it("allows completing a line when cause/correction were already saved on an earlier update", async () => {
+      const { user: customer } = await createUser({ role: "onlineCustomer" });
+      const vehicle = await vehicleFor(customer);
+      const svc = await serviceDoc();
+      const order = await repairOrderService.createRepairOrder({
+        vehicleId: vehicle._id.toString(),
+        services: [{ serviceId: svc._id.toString() }],
+      });
+
+      await repairOrderService.updateRepairProgress(order._id.toString(), {
+        status: "inProgress",
+        stepIndex: 0,
+        cause: "Worn part",
+        correction: "Replaced part",
+      });
+      const result = await repairOrderService.updateRepairProgress(order._id.toString(), {
+        status: "completed",
+        stepIndex: 0,
+      });
+      expect(result.order.services[0].status).toBe("completed");
     });
 
     it("rejects changing status of a completed order (except to completed)", async () => {
@@ -467,8 +511,8 @@ describe("repair-order.service", () => {
         vehicleId: vehicle._id.toString(),
         services: [{ serviceId: svc1._id.toString() }, { serviceId: svc2._id.toString() }],
       });
-      await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 0 });
-      await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 1 });
+      await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 0, cause: "Worn part", correction: "Replaced part" });
+      await repairOrderService.updateRepairProgress(order._id.toString(), { status: "completed", stepIndex: 1, cause: "Worn part", correction: "Replaced part" });
       const qc = await repairOrderService.submitQualityCheck(order._id.toString(), { passed: true }, advisor._id.toString());
       expect(qc.order.status).toBe("readyForDelivery");
 

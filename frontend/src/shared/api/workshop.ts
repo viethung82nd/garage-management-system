@@ -516,10 +516,18 @@ export type CreateAdditionalServiceProposalPayload = {
   estimateMinutes?: number
   evidenceCount?: number
   priority?: 'high' | 'medium' | 'low'
+  /** Real evidence photos of the issue found — sent multipart, same pattern as step notes. */
+  photos?: File[]
 }
 
 export function createAdditionalServiceProposal(token: string, payload: CreateAdditionalServiceProposalPayload) {
-  return apiRequest<ApiAdditionalServiceProposal>('/api/additional-service-proposals', { method: 'POST', token, body: JSON.stringify(payload) })
+  const { photos, ...fields } = payload
+  const formData = new FormData()
+  Object.entries(fields).forEach(([key, value]) => {
+    if (value !== undefined && value !== null) formData.append(key, String(value))
+  })
+  photos?.forEach((file) => formData.append('photos', file))
+  return apiRequest<ApiAdditionalServiceProposal>('/api/additional-service-proposals', { method: 'POST', token, body: formData })
 }
 
 export type QualityCheckResult = 'pass' | 'fail' | 'na'

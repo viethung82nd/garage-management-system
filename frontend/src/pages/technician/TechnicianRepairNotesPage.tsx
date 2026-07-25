@@ -112,6 +112,11 @@ export function TechnicianRepairNotesPage() {
   const [selectedStepIndex, setSelectedStepIndex] = useState<number | null>(null)
   const [note, setNote] = useState('')
   const [stepPhotos, setStepPhotos] = useState<UploadFile[]>([])
+  // 3C (Cause/Correction — the step itself is the Complaint) — the backend
+  // now refuses to mark a step complete without both on record.
+  const [cause, setCause] = useState('')
+  const [correction, setCorrection] = useState('')
+  const [causeErrors, setCauseErrors] = useState<Record<string, string>>({})
   const [previewImage, setPreviewImage] = useState('')
   const [previewOpen, setPreviewOpen] = useState(false)
   const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
@@ -126,6 +131,7 @@ export function TechnicianRepairNotesPage() {
   const [proposalReason, setProposalReason] = useState('')
   const [proposalEstimateMinutes, setProposalEstimateMinutes] = useState(30)
   const [proposalPriority, setProposalPriority] = useState<'high' | 'medium' | 'low'>('medium')
+  const [proposalPhotos, setProposalPhotos] = useState<UploadFile[]>([])
   const [proposalErrors, setProposalErrors] = useState<Record<string, string>>({})
   const [submittingProposal, setSubmittingProposal] = useState(false)
 
@@ -270,6 +276,9 @@ export function TechnicianRepairNotesPage() {
     setSelectedStepIndex(index)
     setNote('')
     setStepPhotos([])
+    setCause('')
+    setCorrection('')
+    setCauseErrors({})
   }
 
   function applyUpdatedOrder(updated: ApiRepairOrder | undefined, advanceFrom?: number) {
@@ -302,6 +311,13 @@ export function TechnicianRepairNotesPage() {
   async function completeStep() {
     const repairOrderId = repairOrder?._id || repairOrder?.id
     if (!repairOrderId || !selectedStep || !token) return
+
+    const errors: Record<string, string> = {}
+    if (!cause.trim()) errors.cause = 'Record what caused the problem.'
+    if (!correction.trim()) errors.correction = 'Record what you actually did to fix it.'
+    setCauseErrors(errors)
+    if (Object.keys(errors).length) return
+
     setSaving(true)
     clearApiMessage()
     try {
@@ -312,10 +328,17 @@ export function TechnicianRepairNotesPage() {
           photos: stepPhotos.map((file) => file.originFileObj as File).filter(Boolean),
         })
       }
-      const response = await updateWorkshopRepairProgress(token, repairOrderId, { status: 'completed', stepIndex: selectedStep.stepIndex })
+      const response = await updateWorkshopRepairProgress(token, repairOrderId, {
+        status: 'completed',
+        stepIndex: selectedStep.stepIndex,
+        cause: cause.trim(),
+        correction: correction.trim(),
+      })
       applyUpdatedOrder(extractOrder(response), selectedStep.stepIndex)
       setNote('')
       setStepPhotos([])
+      setCause('')
+      setCorrection('')
       showSuccess('Step completed.')
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Unable to complete this step')
@@ -396,13 +419,14 @@ export function TechnicianRepairNotesPage() {
       await createAdditionalServiceProposal(token, {
         affectedPart: proposalAffectedPart.trim() || undefined,
         estimateMinutes: proposalEstimateMinutes,
+        photos: proposalPhotos.map((file) => file.originFileObj as File).filter(Boolean),
         priority: proposalPriority,
         reason: proposalReason.trim(),
         repairOrderId,
         serviceId: proposalServiceId || undefined,
         serviceName: proposalServiceName.trim(),
       })
-      showSuccess('Additional service proposal sent to the service advisor.')
+      showSuccess("Additional service proposal sent to the service advisor. This order is now waiting on the customer's decision.")
       setProposalOpen(false)
       setProposalServiceId('')
       setProposalServiceName('')
@@ -410,6 +434,7 @@ export function TechnicianRepairNotesPage() {
       setProposalReason('')
       setProposalEstimateMinutes(30)
       setProposalPriority('medium')
+      setProposalPhotos([])
       setProposalErrors({})
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Unable to submit the additional service proposal')
@@ -664,6 +689,30 @@ export function TechnicianRepairNotesPage() {
                 ) : (
                   <div className="mt-4 flex flex-col gap-3">
                     <div>
+                      <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Cause</div>
+                      <TextArea
+                        onChange={(event) => setCause(event.target.value)}
+                        placeholder="What caused the problem?"
+                        rows={2}
+                        status={causeErrors.cause ? 'error' : undefined}
+                        value={cause}
+                      />
+                      {fieldError(causeErrors.cause)}
+                    </div>
+
+                    <div>
+                      <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Correction</div>
+                      <TextArea
+                        onChange={(event) => setCorrection(event.target.value)}
+                        placeholder="What did you actually do to fix it?"
+                        rows={2}
+                        status={causeErrors.correction ? 'error' : undefined}
+                        value={correction}
+                      />
+                      {fieldError(causeErrors.correction)}
+                    </div>
+
+                    <div>
                       <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Notes for this step</div>
                       <TextArea onChange={(event) => setNote(event.target.value)} placeholder="What did you find or do for this item?" rows={5} value={note} />
                     </div>
@@ -775,11 +824,34 @@ export function TechnicianRepairNotesPage() {
                         value={proposalPriority}
                       />
                     </LabeledField>
+                    <LabeledField label="Evidence photos">
+                      <Upload
+                        beforeUpload={() => false}
+                        fileList={proposalPhotos}
+                        listType="picture-card"
+                        onChange={({ fileList }) => setProposalPhotos(fileList)}
+                        onPreview={async (file) => {
+                          const src = file.url || file.preview || (file.originFileObj ? await fileToDataUrl(file.originFileObj as File) : '')
+                          if (!src) return
+                          setPreviewImage(src)
+                          setPreviewOpen(true)
+                        }}
+                        accept="image/*"
+                        multiple
+                      >
+                        {proposalPhotos.length >= 10 ? null : (
+                          <div>
+                            <PictureOutlined />
+                            <div style={{ marginTop: 8 }}>Upload</div>
+                          </div>
+                        )}
+                      </Upload>
+                    </LabeledField>
                     <div className="flex gap-2">
                       <Button block icon={<PlusOutlined />} loading={submittingProposal} onClick={submitProposal} type="primary">
                         Send to advisor
                       </Button>
-                      <Button onClick={() => { setProposalOpen(false); setProposalServiceId(''); setProposalErrors({}) }}>Cancel</Button>
+                      <Button onClick={() => { setProposalOpen(false); setProposalServiceId(''); setProposalPhotos([]); setProposalErrors({}) }}>Cancel</Button>
                     </div>
                   </div>
                 ) : (

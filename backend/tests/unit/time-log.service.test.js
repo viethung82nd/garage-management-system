@@ -11,7 +11,9 @@ async function serviceDoc(basePrice = 100000) {
   return ServiceModel.create({ name: "Oil Change", basePrice, isActive: true });
 }
 
-async function pendingOrder() {
+/** clockOn now requires the order to actually be assigned to the calling
+ *  technician (BR-JOB-01) — pass technicianId to pre-assign it. */
+async function pendingOrder(technicianId) {
   const { user: customer } = await createUser({ role: "onlineCustomer" });
   const vehicle = await vehicleFor(customer);
   const svc = await serviceDoc();
@@ -19,7 +21,8 @@ async function pendingOrder() {
     vehicleId: vehicle._id.toString(),
     services: [{ serviceId: svc._id.toString() }],
   });
-  return order;
+  if (!technicianId) return order;
+  return repairOrderService.updateRepairOrder(order._id.toString(), { technicianId });
 }
 
 /** Pushes a time log's startedAt back by `minutesAgo` so clockOff produces a
@@ -35,7 +38,7 @@ describe("technician time logging", () => {
   describe("clockOn", () => {
     it("creates an open time log and moves a pending order to inProgress", async () => {
       const { user: tech } = await createUser({ role: "technician" });
-      const order = await pendingOrder();
+      const order = await pendingOrder(tech._id.toString());
 
       const timeLog = await repairOrderService.clockOn(order._id.toString(), {}, tech._id.toString());
 
@@ -51,12 +54,14 @@ describe("technician time logging", () => {
     it("does not disturb an order that is already past pending", async () => {
       const { user: tech1 } = await createUser({ role: "technician" });
       const { user: tech2 } = await createUser({ role: "technician" });
-      const order = await pendingOrder();
+      const order = await pendingOrder(tech1._id.toString());
 
       const firstLog = await repairOrderService.clockOn(order._id.toString(), {}, tech1._id.toString());
       await repairOrderService.clockOff(order._id.toString(), {}, tech1._id.toString());
       void firstLog;
 
+      // Reassigned to a second technician mid-job — still must not reset status.
+      await repairOrderService.updateRepairOrder(order._id.toString(), { technicianId: tech2._id.toString() });
       const secondLog = await repairOrderService.clockOn(order._id.toString(), {}, tech2._id.toString());
       expect(secondLog.endedAt).toBeFalsy();
 
@@ -66,8 +71,8 @@ describe("technician time logging", () => {
 
     it("rejects when the technician already has an open time log on another order", async () => {
       const { user: tech } = await createUser({ role: "technician" });
-      const order1 = await pendingOrder();
-      const order2 = await pendingOrder();
+      const order1 = await pendingOrder(tech._id.toString());
+      const order2 = await pendingOrder(tech._id.toString());
 
       await repairOrderService.clockOn(order1._id.toString(), {}, tech._id.toString());
 
@@ -80,6 +85,7 @@ describe("technician time logging", () => {
       const { user: tech } = await createUser({ role: "technician" });
       const order = await pendingOrder();
       await repairOrderService.updateRepairOrder(order._id.toString(), {
+        technicianId: tech._id.toString(),
         status: "waitingParts",
         reason: "Waiting on brake pads",
       });
@@ -106,9 +112,36 @@ describe("technician time logging", () => {
       ).rejects.toMatchObject({ status: 404 });
     });
 
-    it("rejects an out-of-range lineIndex", async () => {
+    it("rejects a technician clocking on to an order with no technician assigned (BR-JOB-01)", async () => {
       const { user: tech } = await createUser({ role: "technician" });
       const order = await pendingOrder();
+
+      await expect(
+        repairOrderService.clockOn(order._id.toString(), {}, tech._id.toString(), "technician"),
+      ).rejects.toMatchObject({ status: 409 });
+    });
+
+    it("rejects a technician clocking on to an order assigned to someone else (BR-JOB-01)", async () => {
+      const { user: assigned } = await createUser({ role: "technician" });
+      const { user: other } = await createUser({ role: "technician" });
+      const order = await pendingOrder(assigned._id.toString());
+
+      await expect(
+        repairOrderService.clockOn(order._id.toString(), {}, other._id.toString(), "technician"),
+      ).rejects.toMatchObject({ status: 403 });
+    });
+
+    it("lets an admin clock on regardless of assignment", async () => {
+      const { user: admin } = await createUser({ role: "admin" });
+      const order = await pendingOrder();
+
+      const timeLog = await repairOrderService.clockOn(order._id.toString(), {}, admin._id.toString(), "admin");
+      expect(timeLog.endedAt).toBeFalsy();
+    });
+
+    it("rejects an out-of-range lineIndex", async () => {
+      const { user: tech } = await createUser({ role: "technician" });
+      const order = await pendingOrder(tech._id.toString());
       await expect(
         repairOrderService.clockOn(order._id.toString(), { lineIndex: 5 }, tech._id.toString()),
       ).rejects.toMatchObject({ status: 400 });
@@ -118,7 +151,7 @@ describe("technician time logging", () => {
   describe("clockOff", () => {
     it("closes the log and computes durationMinutes", async () => {
       const { user: tech } = await createUser({ role: "technician" });
-      const order = await pendingOrder();
+      const order = await pendingOrder(tech._id.toString());
 
       const opened = await repairOrderService.clockOn(order._id.toString(), {}, tech._id.toString());
       await backdateStart(opened._id, 45);
@@ -137,7 +170,7 @@ describe("technician time logging", () => {
 
     it("does not change the order's status", async () => {
       const { user: tech } = await createUser({ role: "technician" });
-      const order = await pendingOrder();
+      const order = await pendingOrder(tech._id.toString());
       await repairOrderService.clockOn(order._id.toString(), {}, tech._id.toString());
       await repairOrderService.clockOff(order._id.toString(), {}, tech._id.toString());
 
@@ -156,8 +189,8 @@ describe("technician time logging", () => {
 
     it("409s when the technician's open log is on a different order", async () => {
       const { user: tech } = await createUser({ role: "technician" });
-      const order1 = await pendingOrder();
-      const order2 = await pendingOrder();
+      const order1 = await pendingOrder(tech._id.toString());
+      const order2 = await pendingOrder(tech._id.toString());
       await repairOrderService.clockOn(order1._id.toString(), {}, tech._id.toString());
 
       await expect(
@@ -169,7 +202,7 @@ describe("technician time logging", () => {
   describe("getOrderTimeLogs", () => {
     it("sums durationMinutes across closed logs and excludes still-open ones", async () => {
       const { user: tech } = await createUser({ role: "technician" });
-      const order = await pendingOrder();
+      const order = await pendingOrder(tech._id.toString());
 
       const span1 = await repairOrderService.clockOn(order._id.toString(), {}, tech._id.toString());
       await backdateStart(span1._id, 30);

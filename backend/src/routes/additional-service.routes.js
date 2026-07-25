@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requireRole } from "../middlewares/auth.middleware.js";
 import { catchAsync } from "../utils/catchAsync.js";
+import { imageUpload } from "../middlewares/upload.middleware.js";
 import {
   listAdditionalServiceProposals,
   createAdditionalServiceProposal,
@@ -17,10 +18,14 @@ additionalServiceRouter.get(
   catchAsync(listAdditionalServiceProposals),
 );
 
+// Multipart so the technician's real evidence photos ride along with the
+// proposal — see additional-service.service.js#createAdditionalServiceProposal.
+const changeOrderPhotoUpload = imageUpload();
 additionalServiceRouter.post(
   "",
   requireAuth,
   requireRole("technician", "admin"),
+  changeOrderPhotoUpload.array("photos", 10),
   catchAsync(createAdditionalServiceProposal),
 );
 
