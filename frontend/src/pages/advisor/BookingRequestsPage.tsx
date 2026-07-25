@@ -1,6 +1,7 @@
-import { BellOutlined, CarOutlined, SearchOutlined, UserDeleteOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Input, Select, Table, Tabs, Tag } from 'antd'
+import { BellOutlined, CalendarOutlined, CarOutlined, SearchOutlined, UnorderedListOutlined, UserDeleteOutlined } from '@ant-design/icons'
+import { Avatar, Badge, Button, Calendar, Card, Input, Segmented, Select, Table, Tabs, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
+import type { Dayjs } from 'dayjs'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
@@ -28,6 +29,10 @@ type BookingRequest = {
   id: string
   customer: string
   date: string
+  // Raw "YYYY-MM-DD" grouping key for the calendar view — `date` above is
+  // already locale-formatted for display and unsuitable for matching against
+  // a Calendar cell's Dayjs value.
+  isoDate: string
   initials: string
   phone: string
   plate: string
@@ -49,10 +54,12 @@ function mapBooking(booking: ApiBooking): BookingRequest {
   const customer = booking.customerId || booking.customer
   const vehicle = booking.vehicleId || booking.vehicle
   const service = booking.serviceId || booking.service
+  const rawDate = booking.bookingDate || booking.date
 
   return {
     customer: personName(customer, 'Customer'),
-    date: booking.bookingDate || booking.date ? formatApiDate(booking.bookingDate || booking.date) : 'Not updated',
+    date: rawDate ? formatApiDate(rawDate) : 'Not updated',
+    isoDate: rawDate && !Number.isNaN(new Date(rawDate).getTime()) ? new Date(rawDate).toISOString().slice(0, 10) : '',
     id: booking._id || booking.id || crypto.randomUUID(),
     initials: getUserInitials(customer),
     phone: customer?.phone || 'No phone on file',
@@ -77,6 +84,15 @@ const statusColors: Record<BookingStatus, string> = {
   noShow: advisorPalette.amber,
   pending: 'default',
   rejected: 'red',
+}
+
+// Badge dots need a real CSS color (unlike Tag's "default"/"red" preset
+// names above), so the calendar view gets its own small map.
+const calendarDotColors: Record<BookingStatus, string> = {
+  confirmed: advisorPalette.green,
+  noShow: advisorPalette.amber,
+  pending: advisorPalette.red,
+  rejected: advisorPalette.textMuted,
 }
 
 const serviceFilterOptions = [
@@ -119,6 +135,8 @@ export function BookingRequestsPage() {
   const [service, setService] = useState('all')
   const [activeTab, setActiveTab] = useState<'pending' | 'processed' | 'noshow'>('pending')
   const [timeBucket, setTimeBucket] = useState<ApiTimeBucket>()
+  const [viewMode, setViewMode] = useState<'list' | 'calendar'>('list')
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<Dayjs>()
 
   useEffect(() => {
     if (!token) return
@@ -150,7 +168,7 @@ export function BookingRequestsPage() {
   // Callback list is fetched lazily on first visit to its tab, and refetched
   // whenever a booking is newly marked no-show so the list stays current.
   useEffect(() => {
-    if (!token || activeTab !== 'noshow' || noShowLoaded) return
+    if (!token || noShowLoaded || (activeTab !== 'noshow' && viewMode !== 'calendar')) return
     const authToken = token
     let cancelled = false
 
@@ -175,7 +193,7 @@ export function BookingRequestsPage() {
     return () => {
       cancelled = true
     }
-  }, [token, activeTab, noShowLoaded])
+  }, [token, activeTab, viewMode, noShowLoaded])
 
   // Read-only glance at today's technician capacity — day-level only, since
   // technician rostering isn't tracked at sub-day granularity.
@@ -218,6 +236,25 @@ export function BookingRequestsPage() {
       return matchesTab && matchesQuery && matchesService
     })
   }, [bookings, query, service, activeTab])
+
+  // Every booking (both tabs' source list plus no-shows), grouped by day —
+  // the calendar view's data source. `bookings` already covers pending +
+  // processed; noShowList is fetched separately (see the effect above).
+  const bookingsByDate = useMemo(() => {
+    const map = new Map<string, BookingRequest[]>()
+    for (const booking of [...bookings, ...noShowList]) {
+      if (!booking.isoDate) continue
+      const existing = map.get(booking.isoDate)
+      if (existing) existing.push(booking)
+      else map.set(booking.isoDate, [booking])
+    }
+    return map
+  }, [bookings, noShowList])
+
+  const selectedDateBookings = useMemo(() => {
+    if (!selectedCalendarDate) return []
+    return bookingsByDate.get(selectedCalendarDate.format('YYYY-MM-DD')) ?? []
+  }, [bookingsByDate, selectedCalendarDate])
 
   // Confirming and receiving the vehicle are the same real-world moment, so
   // "Confirm" hands off to Vehicle Reception instead of just flipping a
@@ -429,22 +466,75 @@ export function BookingRequestsPage() {
       ) : null}
 
       <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
-        <Tabs
-          activeKey={activeTab}
-          onChange={(key) => setActiveTab(key as 'pending' | 'processed' | 'noshow')}
-          tabBarExtraContent={
-            <Button icon={<BellOutlined />} loading={reminderSending} onClick={sendReminders}>
-              Send 24h reminders
-            </Button>
-          }
-          items={[
-            { key: 'pending', label: `Needs review (${pendingCount})` },
-            { key: 'processed', label: `Reviewed (${processedCount})` },
-            { key: 'noshow', label: `No-shows (${noShowList.length})` },
-          ]}
-        />
+        <div className="flex flex-wrap items-center justify-between gap-3" style={{ marginBottom: 16 }}>
+          <Segmented
+            value={viewMode}
+            onChange={(value) => setViewMode(value as 'list' | 'calendar')}
+            options={[
+              { label: 'List', value: 'list', icon: <UnorderedListOutlined /> },
+              { label: 'Calendar', value: 'calendar', icon: <CalendarOutlined /> },
+            ]}
+          />
+          <Button icon={<BellOutlined />} loading={reminderSending} onClick={sendReminders}>
+            Send 24h reminders
+          </Button>
+        </div>
 
-        {activeTab === 'noshow' ? (
+        {viewMode === 'list' ? (
+          <Tabs
+            activeKey={activeTab}
+            onChange={(key) => setActiveTab(key as 'pending' | 'processed' | 'noshow')}
+            items={[
+              { key: 'pending', label: `Needs review (${pendingCount})` },
+              { key: 'processed', label: `Reviewed (${processedCount})` },
+              { key: 'noshow', label: `No-shows (${noShowList.length})` },
+            ]}
+          />
+        ) : null}
+
+        {viewMode === 'calendar' ? (
+          <div className="flex flex-col gap-4">
+            <Calendar
+              onSelect={setSelectedCalendarDate}
+              cellRender={(date, info) => {
+                if (info.type !== 'date') return info.originNode
+                const dayBookings = bookingsByDate.get(date.format('YYYY-MM-DD')) ?? []
+                if (dayBookings.length === 0) return null
+                const shown = dayBookings.slice(0, 3)
+                return (
+                  <ul style={{ margin: 0, padding: 0, listStyle: 'none' }}>
+                    {shown.map((booking) => (
+                      <li key={booking.id} style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        <Badge color={calendarDotColors[booking.status]} text={<span style={{ fontSize: 11 }}>{booking.time} {booking.customer}</span>} />
+                      </li>
+                    ))}
+                    {dayBookings.length > shown.length ? (
+                      <li style={{ fontSize: 11, color: advisorPalette.textMuted }}>+{dayBookings.length - shown.length} more</li>
+                    ) : null}
+                  </ul>
+                )
+              }}
+            />
+
+            <div>
+              <div style={{ color: advisorPalette.ink, fontWeight: 700, marginBottom: 12 }}>
+                {selectedCalendarDate
+                  ? `${selectedCalendarDate.format('DD/MM/YYYY')} — ${selectedDateBookings.length} booking(s)`
+                  : 'Select a date to see its bookings'}
+              </div>
+              <Table
+                columns={columns}
+                dataSource={selectedDateBookings}
+                loading={loading || noShowLoading}
+                pagination={false}
+                rowKey="id"
+                scroll={{ x: 960 }}
+                className="bo-table"
+                locale={{ emptyText: selectedCalendarDate ? 'No bookings on this day.' : 'Pick a date on the calendar above.' }}
+              />
+            </div>
+          </div>
+        ) : activeTab === 'noshow' ? (
           <Table
             columns={noShowColumns}
             dataSource={noShowList}
