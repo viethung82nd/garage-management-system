@@ -10,6 +10,7 @@ import {
   AutoComplete,
   Button,
   Card,
+  Divider,
   Empty,
   Input,
   InputNumber,
@@ -278,6 +279,18 @@ export function QuotationPage() {
   const [services, setServices] = useState<ApiService[]>([]);
   const [, setCategories] = useState<ApiServiceCategory[]>([]);
   const [pickedServiceId, setPickedServiceId] = useState("");
+  // Toolbar-level "add from parts catalog" — mirrors the service picker above
+  // so adding a real part is exactly as easy as adding a real service, instead
+  // of only being reachable by first adding a blank part line and searching
+  // inside its row.
+  const [toolbarPartQuery, setToolbarPartQuery] = useState("");
+  const [toolbarPartOptions, setToolbarPartOptions] = useState<
+    ApiPartOption[]
+  >([]);
+  const [pickedPart, setPickedPart] = useState<ApiPartOption | null>(null);
+  const toolbarPartTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
+    undefined,
+  );
   const {
     message: apiMessage,
     tone: apiTone,
@@ -460,6 +473,39 @@ export function QuotationPage() {
 
   function addManualLine(kind: QuotationLineKind) {
     setLines((current) => [...current, makeLine({ kind })]);
+  }
+
+  // Debounced parts-catalogue lookup for the toolbar's "add from parts
+  // catalog" picker — same pattern as searchPartsForLine below, one level up.
+  function searchToolbarParts(query: string) {
+    setToolbarPartQuery(query);
+    setPickedPart(null);
+    if (!token) return;
+    if (toolbarPartTimer.current) clearTimeout(toolbarPartTimer.current);
+    toolbarPartTimer.current = setTimeout(async () => {
+      try {
+        const response = await searchParts(token, query);
+        setToolbarPartOptions(unwrapArray<ApiPartOption>(response, ["parts"]));
+      } catch {
+        // Search picker degrades to no suggestions on failure — not a hard error.
+      }
+    }, 300);
+  }
+
+  function addPickedPartLine() {
+    if (!pickedPart) return;
+    setLines((current) => [
+      ...current,
+      makeLine({
+        kind: "part",
+        description: pickedPart.name,
+        partId: pickedPart._id,
+        unitPrice: pickedPart.unitPrice,
+      }),
+    ]);
+    setPickedPart(null);
+    setToolbarPartQuery("");
+    setToolbarPartOptions([]);
   }
 
   // Debounced parts-catalogue lookup for a single "part" line's picker.
@@ -1048,7 +1094,7 @@ export function QuotationPage() {
                                             padding: "0 4px",
                                           }}
                                         >
-                                          Kho
+                                          In stock
                                         </Tag>
                                       ) : null}
                                     </span>
@@ -1223,24 +1269,55 @@ export function QuotationPage() {
                     disabled={!pickedServiceId}
                     icon={<PlusOutlined />}
                     onClick={addServiceLine}
+                  >
+                    Add
+                  </Button>
+
+                  <AutoComplete
+                    filterOption={false}
+                    onChange={setToolbarPartQuery}
+                    onSearch={searchToolbarParts}
+                    onSelect={(_value, option) =>
+                      setPickedPart(
+                        (option as unknown as { part: ApiPartOption }).part,
+                      )
+                    }
+                    options={toolbarPartOptions.map((part) => ({
+                      value: part.name,
+                      label: `${part.name} — ${part.sku} (${money(part.unitPrice)})`,
+                      part,
+                    }))}
+                    placeholder="Add from parts catalog..."
+                    style={{ minWidth: 260 }}
+                    value={toolbarPartQuery}
                   />
+                  <Button
+                    disabled={!pickedPart}
+                    icon={<PlusOutlined />}
+                    onClick={addPickedPartLine}
+                  >
+                    Add
+                  </Button>
+
+                  <Divider style={{ margin: "0 4px", height: 24 }} type="vertical" />
+
                   <Button
                     icon={<PlusOutlined />}
                     onClick={() => addManualLine("part")}
                   >
-                    Part
+                    Blank part
                   </Button>
                   <Button
                     icon={<PlusOutlined />}
                     onClick={() => addManualLine("labor")}
                   >
-                    Labor
+                    Blank labor
                   </Button>
                   <Button
                     icon={<PlusOutlined />}
                     onClick={() => addManualLine("service")}
                   >
-                    Service
+                    Blank service
                   </Button>
                 </div>
               ) : null}
@@ -1516,6 +1593,7 @@ export function QuotationPage() {
         onOk={submitConfirm}
         open={confirmModalOpen}
         title="Confirm & sign"
+        width={680}
       >
         <Tag color={confirmIntent ? "green" : "red"}>
           {confirmIntent ? "Customer approves quote" : "Customer declines quote"}
