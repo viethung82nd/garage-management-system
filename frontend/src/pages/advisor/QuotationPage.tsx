@@ -25,6 +25,7 @@ import {
   confirmQuotation,
   createQuotation,
   fetchInspectionReports,
+  fetchQuotationVersions,
   fetchServiceCategories,
   fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
@@ -42,6 +43,7 @@ import {
   type ApiInspectionReport,
   type ApiPartOption,
   type ApiQuotation,
+  type ApiQuoteVersion,
   type ApiRecommendedService,
   type ApiRepairOrder,
   type ApiService,
@@ -300,6 +302,11 @@ export function QuotationPage() {
   const [approvalRecord, setApprovalRecord] =
     useState<ApiQuotation["approval"]>(null);
 
+  // History of prior edits to this quotation, oldest first — every edit
+  // archives an immutable snapshot before overwriting the live figures.
+  const [versions, setVersions] = useState<ApiQuoteVersion[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
+
   // Part-catalogue search results per line id, for the "part" line picker.
   const [partOptions, setPartOptions] = useState<
     Record<string, ApiPartOption[]>
@@ -446,6 +453,35 @@ export function QuotationPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [inspection]);
+
+  useEffect(() => {
+    if (!token || !quotationId) {
+      setVersions([]);
+      return;
+    }
+    const authToken = token;
+    const id = quotationId;
+    let cancelled = false;
+
+    async function loadVersions() {
+      setVersionsLoading(true);
+      try {
+        const response = await fetchQuotationVersions(authToken, id);
+        if (!cancelled) setVersions(response.versions ?? []);
+      } catch {
+        // History is a nice-to-have alongside the live quote — a failed
+        // fetch shouldn't block editing, so this degrades to an empty list.
+        if (!cancelled) setVersions([]);
+      } finally {
+        if (!cancelled) setVersionsLoading(false);
+      }
+    }
+
+    void loadVersions();
+    return () => {
+      cancelled = true;
+    };
+  }, [token, quotationId]);
 
   const subtotal = useMemo(
     () => lines.reduce((sum, line) => sum + line.quantity * line.unitPrice, 0),
@@ -629,8 +665,19 @@ export function QuotationPage() {
     setSaving(true);
     clearApiMessage();
     try {
-      await ensureSaved();
+      const id = await ensureSaved();
       showSuccess("Draft quotation saved.");
+      // Editing an existing draft archives the pre-edit state server-side —
+      // refresh so the new entry shows up without needing a page reload.
+      if (id && token) {
+        try {
+          const response = await fetchQuotationVersions(token, id);
+          setVersions(response.versions ?? []);
+        } catch {
+          // Non-critical — the history card just won't be current until the
+          // next load.
+        }
+      }
     } catch (err) {
       showError(
         err instanceof Error ? err.message : "Unable to save the quotation.",
@@ -1374,6 +1421,75 @@ export function QuotationPage() {
                   </div>
                 ))}
               </div>
+            </Card>
+
+            <Card
+              bordered={false}
+              className="bo-card-hover bo-enter rounded-2xl"
+              style={{
+                background: advisorPalette.panel,
+                boxShadow: advisorPalette.shadow,
+                border: `1px solid ${advisorPalette.border}`,
+              }}
+              title="Quotation history"
+            >
+              {versionsLoading ? (
+                <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
+                  Loading...
+                </span>
+              ) : versions.length ? (
+                <div className="flex flex-col gap-3">
+                  {versions.map((version) => (
+                    <div
+                      key={version._id ?? version.version}
+                      style={{
+                        borderBottom: `1px solid ${advisorPalette.border}`,
+                        paddingBottom: 10,
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span
+                          style={{
+                            color: advisorPalette.ink,
+                            fontWeight: 700,
+                            fontSize: 13,
+                          }}
+                        >
+                          Version {version.version}
+                        </span>
+                        <span
+                          style={{
+                            color: advisorPalette.ink,
+                            fontWeight: 700,
+                            fontSize: 13,
+                          }}
+                        >
+                          {money(version.totalEstimate || 0)} ₫
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          color: advisorPalette.textMuted,
+                          fontSize: 12,
+                          marginTop: 2,
+                        }}
+                      >
+                        {formatDateTime(version.snapshotAt)}
+                        {typeof version.snapshotBy === "object" &&
+                        version.snapshotBy?.fullName
+                          ? ` · ${version.snapshotBy.fullName}`
+                          : ""}
+                        {version.reason ? ` · ${version.reason}` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
+                  No revisions yet — a version is archived every time a saved
+                  draft is edited again.
+                </span>
+              )}
             </Card>
           </div>
 

@@ -162,7 +162,9 @@ export async function getQuotationVersions(id) {
   if (!OID_RE.test(id)) {
     throw new ApiError(400, "Invalid quotation ID format");
   }
-  const versions = await QuoteVersionModel.find({ quoteId: id }).sort({ version: 1 });
+  const versions = await QuoteVersionModel.find({ quoteId: id })
+    .populate("snapshotBy", "fullName")
+    .sort({ version: 1 });
   return { versions };
 }
 

@@ -30,6 +30,7 @@ type BoardCard = {
   promisedAt?: string
   isComeback?: boolean
   status: string
+  invoicedAt?: string
 }
 
 function mapCard(order: ApiRepairOrder): BoardCard {
@@ -38,6 +39,7 @@ function mapCard(order: ApiRepairOrder): BoardCard {
     code: formatOrderId(order),
     id: order._id || order.id || crypto.randomUUID(),
     isComeback: order.isComeback,
+    invoicedAt: order.invoicedAt,
     plate: vehiclePlate(vehicle),
     promisedAt: order.promisedAt,
     status: order.status || '',
@@ -134,6 +136,10 @@ export function ProductionBoardPage() {
     COLUMNS.forEach((column) => {
       grouped[column.key] = cards.filter((card) => column.statuses.includes(card.status))
     })
+    // Passing QC doesn't mean the car can actually go out the door — the
+    // customer still has to be billed first. Showing it as "ready" here
+    // would be misleading, so it stays off the board entirely until invoiced.
+    grouped.ready = grouped.ready.filter((card) => Boolean(card.invoicedAt))
     return grouped
   }, [orders])
 

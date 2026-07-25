@@ -676,6 +676,25 @@ export function fetchQuotations(token: string, query = '') {
   return apiRequest<{ quotations?: ApiQuotation[] } | ApiQuotation[]>(`/api/quotations${query}`, { token })
 }
 
+/** An immutable snapshot of a quotation's state just before an edit overwrote it. */
+export type ApiQuoteVersion = {
+  _id?: string
+  version?: number
+  lines?: ApiQuotationLine[]
+  discountPercent?: number
+  taxPercent?: number
+  totalEstimate?: number
+  status?: string
+  reason?: string
+  snapshotBy?: { fullName?: string } | string
+  snapshotAt?: string
+}
+
+/** GET /api/quotations/:id/versions — full edit history of one quotation, oldest first. */
+export function fetchQuotationVersions(token: string, id: string) {
+  return apiRequest<{ versions?: ApiQuoteVersion[] }>(`/api/quotations/${id}/versions`, { token })
+}
+
 export type TransferRequestStatus = 'pending' | 'approved' | 'rejected'
 
 export type ApiTransferRequest = {
