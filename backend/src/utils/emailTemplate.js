@@ -14,11 +14,14 @@
 
 import { env } from "../config/env.js";
 
-// The deployed frontend's own origin — already the source of truth CORS
-// checks against, and it already serves everything under /kapa-auth/ as
-// static files, so the sidebar's real logo can be linked to directly
-// instead of hosting a separate copy of it anywhere.
-export const SITE_URL = env.corsOrigin[0];
+// The frontend's public URL — it already serves everything under
+// /kapa-auth/ as static files, so the sidebar's real logo can be linked to
+// directly instead of hosting a separate copy of it anywhere. Was briefly
+// env.corsOrigin[0], which is wrong: that list's order is whatever a dev
+// happened to type (locally that's "http://localhost:5173" first), so
+// every email's logo and every CTA button linked to localhost — completely
+// unreachable from a real customer's inbox.
+export const SITE_URL = env.publicSiteUrl;
 const LOGO_URL = `${SITE_URL}/kapa-auth/wp-content/uploads/2023/01/Kapa_Logo-1.svg`;
 
 const BRAND = {

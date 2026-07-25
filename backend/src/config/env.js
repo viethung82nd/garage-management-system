@@ -29,6 +29,13 @@ export const env = {
     .split(",")
     .map((o) => o.trim())
     .filter(Boolean),
+  // The one canonical public URL for the deployed frontend — used to build
+  // links/assets (email CTA buttons, the logo image) that a real customer's
+  // inbox has to be able to reach. Deliberately NOT derived from corsOrigin:
+  // that list's first entry is whatever a dev happened to put first (often
+  // localhost, which is exactly what silently broke every email link and
+  // the logo before this existed — see utils/emailTemplate.js).
+  publicSiteUrl: optional("PUBLIC_SITE_URL", "https://garage-management-system-fe.onrender.com"),
   // Optional (not required()) so the server still boots for anyone who
   // hasn't set up Cloudinary yet — only the upload endpoints need this, not
   // the whole app. They fail with a clear error instead if it's missing.
