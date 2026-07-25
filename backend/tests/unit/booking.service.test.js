@@ -147,5 +147,18 @@ describe("booking.service", () => {
       const second = await bookingService.resolveVehicle({ licensePlate: plate }, user._id.toString());
       expect(second._id.toString()).toBe(first._id.toString());
     });
+
+    it("gives a clear error instead of a raw duplicate-key crash when a new phone reuses a registered email", async () => {
+      const email = `taken-${Date.now()}@example.com`;
+      const { user: existing } = await createUser({ role: "onlineCustomer", email, phone: "0900000001" });
+
+      await expect(
+        bookingService.resolveCustomer({ fullName: "Someone Else", phone: "0900000002", email }),
+      ).rejects.toMatchObject({ status: 409 });
+
+      // And the email conflict must not have left an orphaned half-created user.
+      const byNewPhone = await bookingService.resolveCustomer({ fullName: "Brand New", phone: "0900000003" });
+      expect(byNewPhone._id.toString()).not.toBe(existing._id.toString());
+    });
   });
 });

@@ -218,21 +218,57 @@ export async function resolveCustomer({ fullName, phone, email }, session) {
     return existing;
   }
 
+  // Phone is new, but email is also a unique field — without this check, an
+  // email already registered to a different account (e.g. the customer
+  // typed a new/different phone number this time) would blow straight
+  // through the insert below and surface as an opaque duplicate-key 500-ish
+  // error instead of a message a service advisor (or the customer) can
+  // actually act on.
+  if (normalizedEmail) {
+    const existingByEmail = await userRepository.model
+      .findOne({ email: normalizedEmail })
+      .session(session ?? null);
+    if (existingByEmail) {
+      throw new ApiError(
+        409,
+        `Email ${normalizedEmail} is already registered${existingByEmail.phone ? ` to phone number ${existingByEmail.phone}` : ""}. Please use that phone number, or verify the customer's information.`,
+      );
+    }
+  }
+
   // Chưa có khách hàng -> tạo mới. Model.create([doc], {session}) is the
   // session-aware create form and returns an array even for a single doc.
-  const [created] = await userRepository.model.create(
-    [
-      {
-        fullName: normalizedName,
-        phone: normalizedPhone,
-        email: normalizedEmail || undefined,
-        role: "walkInCustomer",
-        accountType: "walkIn",
-      },
-    ],
-    { session },
-  );
-  return created;
+  try {
+    const [created] = await userRepository.model.create(
+      [
+        {
+          fullName: normalizedName,
+          phone: normalizedPhone,
+          email: normalizedEmail || undefined,
+          role: "walkInCustomer",
+          accountType: "walkIn",
+        },
+      ],
+      { session },
+    );
+    return created;
+  } catch (err) {
+    // A genuine race against a concurrent request landed between the checks
+    // above and this insert — fall back to whichever record won instead of
+    // surfacing a raw duplicate-key error.
+    if (err?.code === 11000) {
+      const winner = await userRepository.model
+        .findOne({
+          $or: [
+            { phone: normalizedPhone },
+            ...(normalizedEmail ? [{ email: normalizedEmail }] : []),
+          ],
+        })
+        .session(session ?? null);
+      if (winner) return winner;
+    }
+    throw err;
+  }
 }
 
 /** Finds a vehicle by licence plate, or registers a new one for the customer.
@@ -265,11 +301,24 @@ export async function resolveVehicle(
     }
     return existing;
   }
-  const [created] = await vehicleRepository.model.create(
-    [{ licensePlate: plate, brand, model, customerId }],
-    { session },
-  );
-  return created;
+  try {
+    const [created] = await vehicleRepository.model.create(
+      [{ licensePlate: plate, brand, model, customerId }],
+      { session },
+    );
+    return created;
+  } catch (err) {
+    // A concurrent request registered this same plate between the lookup
+    // above and this insert — reuse whichever record won instead of
+    // surfacing a raw duplicate-key error.
+    if (err?.code === 11000) {
+      const winner = await vehicleRepository.model
+        .findOne({ licensePlate: plate })
+        .session(session ?? null);
+      if (winner) return winner;
+    }
+    throw err;
+  }
 }
 
 /** Populates a booking with the fields clients need for display. */
