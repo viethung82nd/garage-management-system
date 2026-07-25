@@ -16,11 +16,10 @@ import {
   Modal,
   Select,
   Tag,
-  Upload,
 } from "antd";
-import type { UploadFile } from "antd/es/upload/interface";
 import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
+import { SignaturePad } from "../../shared/ui/SignaturePad";
 import {
   confirmQuotation,
   createQuotation,
@@ -92,18 +91,6 @@ const CHANNEL_LABELS: Record<ApprovalChannel, string> = {
   email: "Email",
   sms: "SMS",
 };
-
-// Signatures are captured locally as a data URL (same pattern used by the
-// delivery dialog in RepairOrderAssignmentPage) rather than uploaded to a
-// separate endpoint — the confirm call is a single JSON POST.
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
 
 const jobTypeOptions: Array<{ label: string; value: JobType }> = JOB_TYPES.map(
   (type) => ({ label: JOB_TYPE_LABELS[type], value: type }),
@@ -323,12 +310,8 @@ export function QuotationPage() {
   const [confirmIntent, setConfirmIntent] = useState(true);
   const [confirmChannel, setConfirmChannel] =
     useState<ApprovalChannel>("inPerson");
-  const [customerSignatureFile, setCustomerSignatureFile] = useState<
-    UploadFile[]
-  >([]);
-  const [advisorSignatureFile, setAdvisorSignatureFile] = useState<
-    UploadFile[]
-  >([]);
+  const [customerSignature, setCustomerSignature] = useState<string | undefined>();
+  const [advisorSignature, setAdvisorSignature] = useState<string | undefined>();
 
   // No ?orderId= yet — offer real pending orders to pick from.
   useEffect(() => {
@@ -642,8 +625,8 @@ export function QuotationPage() {
     if (!validateLines()) return;
     setConfirmIntent(approved);
     setConfirmChannel("inPerson");
-    setCustomerSignatureFile([]);
-    setAdvisorSignatureFile([]);
+    setCustomerSignature(undefined);
+    setAdvisorSignature(undefined);
     setConfirmModalOpen(true);
   }
 
@@ -654,20 +637,6 @@ export function QuotationPage() {
     try {
       const id = await ensureSaved();
       if (!id) throw new Error("Unable to create the quotation.");
-      const customerFile = customerSignatureFile[0];
-      const advisorFile = advisorSignatureFile[0];
-      const customerSignature = customerFile
-        ? customerFile.url ||
-          (customerFile.originFileObj
-            ? await fileToDataUrl(customerFile.originFileObj as File)
-            : undefined)
-        : undefined;
-      const advisorSignature = advisorFile
-        ? advisorFile.url ||
-          (advisorFile.originFileObj
-            ? await fileToDataUrl(advisorFile.originFileObj as File)
-            : undefined)
-        : undefined;
       const confirmed = await confirmQuotation(token, id, {
         approved: confirmIntent,
         channel: confirmChannel,
@@ -1565,21 +1534,7 @@ export function QuotationPage() {
             >
               Customer signature
             </div>
-            <Upload
-              accept="image/*"
-              beforeUpload={() => false}
-              fileList={customerSignatureFile}
-              listType="picture-card"
-              maxCount={1}
-              onChange={({ fileList }) => setCustomerSignatureFile(fileList)}
-            >
-              {customerSignatureFile.length >= 1 ? null : (
-                <div>
-                  <PlusOutlined />
-                  <div style={{ marginTop: 8 }}>Upload</div>
-                </div>
-              )}
-            </Upload>
+            <SignaturePad onChange={setCustomerSignature} value={customerSignature} width={280} />
           </div>
           <div>
             <div
@@ -1593,21 +1548,7 @@ export function QuotationPage() {
             >
               Advisor signature
             </div>
-            <Upload
-              accept="image/*"
-              beforeUpload={() => false}
-              fileList={advisorSignatureFile}
-              listType="picture-card"
-              maxCount={1}
-              onChange={({ fileList }) => setAdvisorSignatureFile(fileList)}
-            >
-              {advisorSignatureFile.length >= 1 ? null : (
-                <div>
-                  <PlusOutlined />
-                  <div style={{ marginTop: 8 }}>Upload</div>
-                </div>
-              )}
-            </Upload>
+            <SignaturePad onChange={setAdvisorSignature} value={advisorSignature} width={280} />
           </div>
         </div>
 

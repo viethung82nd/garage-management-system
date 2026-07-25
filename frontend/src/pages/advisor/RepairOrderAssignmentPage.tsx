@@ -1,6 +1,5 @@
-import { CarOutlined, CheckOutlined, DownOutlined, PlusOutlined, ProfileOutlined } from '@ant-design/icons'
-import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Tag, Upload } from 'antd'
-import type { UploadFile } from 'antd/es/upload/interface'
+import { CarOutlined, CheckOutlined, DownOutlined, ProfileOutlined } from '@ant-design/icons'
+import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Tag } from 'antd'
 import { useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -19,23 +18,12 @@ import {
   type ApiTechnician,
 } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
+import { SignaturePad } from '../../shared/ui/SignaturePad'
 import { InlineBanner, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(Math.round(value))} ₫`
-}
-
-// Delivery signature is captured locally as a data URL (same pattern as
-// reception's walk-around photos) rather than uploaded to a separate
-// endpoint — the deliver call is a single JSON POST.
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader()
-    reader.onload = () => resolve(reader.result as string)
-    reader.onerror = reject
-    reader.readAsDataURL(file)
-  })
 }
 
 type OrderStatusKey =
@@ -181,7 +169,7 @@ export function RepairOrderAssignmentPage() {
   // Vehicle handover — signature + old-parts confirmation for orders ready for delivery.
   const [deliverOpen, setDeliverOpen] = useState(false)
   const [oldPartsReturned, setOldPartsReturned] = useState(false)
-  const [signatureFile, setSignatureFile] = useState<UploadFile[]>([])
+  const [deliverySignature, setDeliverySignature] = useState<string | undefined>()
   const [deliverSaving, setDeliverSaving] = useState(false)
 
   useEffect(() => {
@@ -304,7 +292,7 @@ export function RepairOrderAssignmentPage() {
   function openDeliverModal() {
     setDeliverOpen(true)
     setOldPartsReturned(false)
-    setSignatureFile([])
+    setDeliverySignature(undefined)
   }
 
   async function confirmDeliver() {
@@ -312,9 +300,7 @@ export function RepairOrderAssignmentPage() {
     setDeliverSaving(true)
     clearApiMessage()
     try {
-      const file = signatureFile[0]
-      const signature = file ? file.url || (file.originFileObj ? await fileToDataUrl(file.originFileObj as File) : undefined) : undefined
-      const updated = await deliverVehicleApi(token, orderIdParam, { oldPartsReturned, signature })
+      const updated = await deliverVehicleApi(token, orderIdParam, { oldPartsReturned, signature: deliverySignature })
       setOrder(updated)
       showSuccess('Vehicle delivered to customer.')
       setDeliverOpen(false)
@@ -525,21 +511,7 @@ export function RepairOrderAssignmentPage() {
           <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
             Customer signature
           </div>
-          <Upload
-            accept="image/*"
-            beforeUpload={() => false}
-            fileList={signatureFile}
-            listType="picture-card"
-            maxCount={1}
-            onChange={({ fileList }) => setSignatureFile(fileList)}
-          >
-            {signatureFile.length >= 1 ? null : (
-              <div>
-                <PlusOutlined />
-                <div style={{ marginTop: 8 }}>Upload</div>
-              </div>
-            )}
-          </Upload>
+          <SignaturePad onChange={setDeliverySignature} value={deliverySignature} width={320} />
         </div>
       </Modal>
     </ServiceAdvisorShell>

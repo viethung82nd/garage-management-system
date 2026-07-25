@@ -36,6 +36,7 @@ import {
   type ReceptionResponse,
 } from "../../shared/api/workshop";
 import { getUserInitials, useAuth } from "../../shared/auth";
+import { SignaturePad } from "../../shared/ui/SignaturePad";
 import {
   InlineBanner,
   advisorPalette,
@@ -223,7 +224,7 @@ export function VehicleReceptionPage() {
   const [fuelLevel, setFuelLevel] = useState<string>();
   const [isTowIn, setIsTowIn] = useState(false);
   const [photoFiles, setPhotoFiles] = useState<UploadFile[]>([]);
-  const [signatureFile, setSignatureFile] = useState<UploadFile[]>([]);
+  const [receptionSignature, setReceptionSignature] = useState<string | undefined>();
   const [previewImage, setPreviewImage] = useState("");
   const [previewOpen, setPreviewOpen] = useState(false);
 
@@ -501,7 +502,6 @@ export function VehicleReceptionPage() {
       }
 
       const receptionPhotos = await filesToDataUrls(photoFiles);
-      const [receptionSignature] = await filesToDataUrls(signatureFile);
 
       const response = await createVehicleReception(token, {
         bookingId: sourceBooking?.id || sourceBooking?._id || bookingId,
@@ -1071,32 +1071,7 @@ export function VehicleReceptionPage() {
 
                   <div style={{ marginTop: 20 }}>
                     <LabeledField label="Customer signature">
-                      <Upload
-                        accept="image/*"
-                        beforeUpload={() => false}
-                        fileList={signatureFile}
-                        listType="picture-card"
-                        maxCount={1}
-                        onChange={({ fileList }) => setSignatureFile(fileList)}
-                        onPreview={async (file) => {
-                          const src =
-                            file.url ||
-                            file.preview ||
-                            (file.originFileObj
-                              ? await fileToDataUrl(file.originFileObj as File)
-                              : "");
-                          if (!src) return;
-                          setPreviewImage(src);
-                          setPreviewOpen(true);
-                        }}
-                      >
-                        {signatureFile.length >= 1 ? null : (
-                          <div>
-                            <PlusOutlined />
-                            <div style={{ marginTop: 8 }}>Upload</div>
-                          </div>
-                        )}
-                      </Upload>
+                      <SignaturePad onChange={setReceptionSignature} value={receptionSignature} width={320} />
                     </LabeledField>
                   </div>
 
