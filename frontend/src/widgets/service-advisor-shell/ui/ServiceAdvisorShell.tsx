@@ -7,7 +7,6 @@ import {
   FileTextOutlined,
   HeartOutlined,
   PlusCircleOutlined,
-  ProjectOutlined,
   SwapOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
@@ -23,7 +22,6 @@ function activeMenuKey(pathname: string) {
   if (pathname.startsWith("/advisor/bookings")) return "bookings";
   if (pathname.startsWith("/advisor/reception")) return "reception";
   if (pathname.startsWith("/advisor/inspection")) return "inspection";
-  if (pathname.startsWith("/advisor/production-board")) return "production-board";
   if (pathname.startsWith("/advisor/work-orders")) return "work-orders";
   if (pathname.startsWith("/advisor/quotation")) return "quotation";
   if (pathname.startsWith("/advisor/additional-services"))
@@ -126,11 +124,6 @@ export function ServiceAdvisorShell({
             label: (
               <Link to="/advisor/transfer-requests">Transfer requests</Link>
             ),
-          },
-          {
-            key: "production-board",
-            icon: <ProjectOutlined />,
-            label: <Link to="/advisor/production-board">Production board</Link>,
           },
           {
             key: "customer-care",

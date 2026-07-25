@@ -58,9 +58,6 @@ const ServiceAdvisorProfilePage = lazy(() =>
 const CustomerCarePage = lazy(() =>
   import('../pages/advisor/CustomerCarePage').then((module) => ({ default: module.CustomerCarePage })),
 )
-const ProductionBoardPage = lazy(() =>
-  import('../pages/advisor/ProductionBoardPage').then((module) => ({ default: module.ProductionBoardPage })),
-)
 const TechnicianWorkOrdersPage = lazy(() =>
   import('../pages/technician/TechnicianWorkOrdersPage').then((module) => ({ default: module.TechnicianWorkOrdersPage })),
 )
@@ -423,18 +420,9 @@ export default function App() {
           </Suspense>
         }
       />
-      <Route
-        path="/advisor/production-board"
-        element={
-          <Suspense fallback={<RouteFallback />}>
-            <RequireAuth>
-              <RequireRole roles={['serviceAdvisor']}>
-                <ProductionBoardPage />
-              </RequireRole>
-            </RequireAuth>
-          </Suspense>
-        }
-      />
+      {/* Production board was merged into Work orders — the board is now
+          the landing view there when no ?orderId= is set. */}
+      <Route path="/advisor/production-board" element={<Navigate to="/advisor/work-orders" replace />} />
       <Route
         path="/advisor/customer-care"
         element={

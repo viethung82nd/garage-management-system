@@ -1,6 +1,6 @@
 import { CarOutlined, CheckOutlined, DownOutlined, ProfileOutlined } from '@ant-design/icons'
 import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Tag } from 'antd'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   deliverVehicleApi,
@@ -106,43 +106,132 @@ const statusTag: Record<Technician['status'], { color: string; label: string }> 
   offline: { color: 'default', label: 'Off shift' },
 }
 
-/** Picker shown when the page arrives with no ?orderId= — only orders that already have quoted, confirmed services and no technician yet. */
-function OrderPicker({ orders, onPick }: { orders: ApiRepairOrder[]; onPick: (id: string) => void }) {
-  if (!orders.length) {
-    return (
-      <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
-        <Empty description="No confirmed repair orders are waiting on a technician right now." />
-      </Card>
-    )
+// ============= PRODUCTION BOARD (merged in — this doubles as the "pick an
+// order" landing view when the page arrives with no ?orderId=) =============
+
+type BoardColumnKey = 'pending' | 'inProgress' | 'waiting' | 'ready'
+
+const BOARD_COLUMNS: { key: BoardColumnKey; title: string; statuses: string[] }[] = [
+  { key: 'pending', statuses: ['pending'], title: 'Pending' },
+  { key: 'inProgress', statuses: ['inProgress'], title: 'In progress' },
+  { key: 'waiting', statuses: ['waitingParts', 'waitingCustomer', 'onHold'], title: 'Waiting' },
+  { key: 'ready', statuses: ['readyForDelivery'], title: 'Ready for delivery' },
+]
+
+type BoardCard = {
+  id: string
+  code: string
+  plate: string
+  technician: string
+  promisedAt?: string
+  isComeback?: boolean
+  status: string
+  invoicedAt?: string
+}
+
+function mapBoardCard(order: ApiRepairOrder): BoardCard {
+  const vehicle = order.vehicleId || order.vehicle
+  return {
+    code: formatOrderId(order),
+    id: order._id || order.id || crypto.randomUUID(),
+    isComeback: order.isComeback,
+    invoicedAt: order.invoicedAt,
+    plate: vehiclePlate(vehicle),
+    promisedAt: order.promisedAt,
+    status: order.status || '',
+    technician: personName(order.technicianId || order.technician, 'Unassigned'),
   }
+}
+
+/** Countdown/overdue label against the promised handover time — ticks every
+ * minute via the `now` state in the calling component, not internally. */
+function promiseState(promisedAt: string | undefined, now: number) {
+  if (!promisedAt) return { label: 'No promised time', late: false }
+  const target = new Date(promisedAt).getTime()
+  if (Number.isNaN(target)) return { label: 'No promised time', late: false }
+
+  const diffMs = target - now
+  const late = diffMs < 0
+  const absMinutes = Math.round(Math.abs(diffMs) / 60000)
+  const hours = Math.floor(absMinutes / 60)
+  const minutes = absMinutes % 60
+  const duration = hours > 0 ? `${hours}h${String(minutes).padStart(2, '0')}` : `${minutes}p`
+  return { label: late ? `Trễ hẹn · ${duration}` : `Còn ${duration}`, late }
+}
+
+function BoardCardItem({ card, now, onClick }: { card: BoardCard; now: number; onClick: () => void }) {
+  const promise = promiseState(card.promisedAt, now)
 
   return (
     <Card
-      bordered={false}
-      className="bo-card-hover bo-enter rounded-2xl"
-      style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}
-      title="Select a repair order to assign"
+      bordered
+      hoverable
+      onClick={onClick}
+      size="small"
+      style={{
+        background: promise.late ? '#fff1f0' : advisorPalette.panel,
+        borderColor: promise.late ? advisorPalette.red : advisorPalette.border,
+        cursor: 'pointer',
+      }}
+      styles={{ body: { padding: 12 } }}
     >
-      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {orders.map((order) => {
-          const id = order._id || order.id || ''
-          const vehicle = order.vehicleId || order.vehicle
-          return (
-            <Card bordered key={id} size="small" hoverable onClick={() => onPick(id)} style={{ borderColor: advisorPalette.border, cursor: 'pointer' }}>
-              <div className="flex items-center justify-between gap-2">
-                <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{formatOrderId(order)}</span>
-                {order.isComeback ? <Tag color={advisorPalette.amber} style={{ marginInlineEnd: 0 }}>Comeback</Tag> : null}
-              </div>
-              <div style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 4 }}>{personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer')}</div>
-              <div style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
-                {vehicleName(vehicle)} · {vehiclePlate(vehicle)}
-              </div>
-              <div style={{ color: advisorPalette.red, fontSize: 13, fontWeight: 600, marginTop: 6 }}>{order.services?.length || 0} confirmed service(s)</div>
-            </Card>
-          )
-        })}
+      <div className="flex items-center justify-between gap-2">
+        <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>{card.code}</span>
+        {card.isComeback ? (
+          <Tag color={advisorPalette.amber} style={{ marginInlineEnd: 0 }}>
+            Comeback
+          </Tag>
+        ) : null}
       </div>
+      <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 4 }}>{card.plate}</div>
+      <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 2 }}>{card.technician}</div>
+      <Tag color={promise.late ? 'red' : 'default'} style={{ marginInlineEnd: 0, marginTop: 8 }}>
+        {promise.label}
+      </Tag>
     </Card>
+  )
+}
+
+/** Shown when the page arrives with no ?orderId= — every order, grouped by
+ * status. Doubles as both the shop-floor overview and the entry point into
+ * the assign/status/deliver actions below (click a card to drill in). */
+function ProductionBoard({ orders, now, onPick }: { orders: ApiRepairOrder[]; now: number; onPick: (id: string) => void }) {
+  const cardsByColumn = useMemo(() => {
+    const cards = orders.map(mapBoardCard)
+    const grouped: Record<BoardColumnKey, BoardCard[]> = { inProgress: [], pending: [], ready: [], waiting: [] }
+    BOARD_COLUMNS.forEach((column) => {
+      grouped[column.key] = cards.filter((card) => column.statuses.includes(card.status))
+    })
+    // Passing QC doesn't mean the car can actually go out the door — the
+    // customer still has to be billed first. Showing it as "ready" here
+    // would be misleading, so it stays off the board entirely until invoiced.
+    grouped.ready = grouped.ready.filter((card) => Boolean(card.invoicedAt))
+    return grouped
+  }, [orders])
+
+  return (
+    <div className="grid gap-4 lg:grid-cols-4">
+      {BOARD_COLUMNS.map((column) => {
+        const cards = cardsByColumn[column.key]
+        return (
+          <div className="flex flex-col gap-3" key={column.key}>
+            <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ background: advisorPalette.panelAlt }}>
+              <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>{column.title}</span>
+              <Tag style={{ marginInlineEnd: 0 }}>{cards.length}</Tag>
+            </div>
+            <div className="flex flex-col gap-2" style={{ maxHeight: 640, overflowY: 'auto', paddingRight: 2 }}>
+              {cards.length ? (
+                cards.map((card) => <BoardCardItem card={card} key={card.id} now={now} onClick={() => onPick(card.id)} />)
+              ) : (
+                <Card bordered={false} size="small" style={{ background: advisorPalette.panel, border: `1px dashed ${advisorPalette.border}` }}>
+                  <Empty description="No orders" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                </Card>
+              )}
+            </div>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -153,7 +242,8 @@ export function RepairOrderAssignmentPage() {
   const orderIdParam = searchParams.get('orderId') || undefined
 
   const [order, setOrder] = useState<ApiRepairOrder | null>(null)
-  const [assignableOrders, setAssignableOrders] = useState<ApiRepairOrder[]>([])
+  const [boardOrders, setBoardOrders] = useState<ApiRepairOrder[]>([])
+  const [boardNow, setBoardNow] = useState(() => Date.now())
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
   const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
@@ -177,22 +267,27 @@ export function RepairOrderAssignmentPage() {
     const authToken = token
     let cancelled = false
 
-    async function loadAssignable() {
+    async function loadBoard() {
       try {
-        const response = await fetchWorkshopRepairOrders(authToken, '?status=pending')
+        const response = await fetchWorkshopRepairOrders(authToken)
         if (cancelled) return
-        const orders = unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders'])
-        setAssignableOrders(orders.filter((item) => (item.services?.length || 0) > 0 && !item.technicianId))
+        setBoardOrders(unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders']))
       } catch (err) {
         if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load repair orders from the API')
       }
     }
 
-    void loadAssignable()
+    void loadBoard()
     return () => {
       cancelled = true
     }
   }, [token, orderIdParam])
+
+  useEffect(() => {
+    if (orderIdParam) return
+    const interval = window.setInterval(() => setBoardNow(Date.now()), 60000)
+    return () => window.clearInterval(interval)
+  }, [orderIdParam])
 
   useEffect(() => {
     if (!token || !orderIdParam) {
@@ -318,7 +413,7 @@ export function RepairOrderAssignmentPage() {
       {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
       {!orderIdParam ? (
-        <OrderPicker orders={assignableOrders} onPick={(id) => navigate(`/advisor/work-orders?orderId=${id}`)} />
+        <ProductionBoard orders={boardOrders} now={boardNow} onPick={(id) => navigate(`/advisor/work-orders?orderId=${id}`)} />
       ) : !order ? (
         <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
           <Empty description="Loading repair order..." />
