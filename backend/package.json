@@ -26,7 +26,8 @@
     "mongodb": "^7.3.0",
     "mongoose": "^8.6.0",
     "multer": "^2.2.0",
-    "nodemailer": "^9.0.3"
+    "nodemailer": "^9.0.3",
+    "pdfkit": "^0.19.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

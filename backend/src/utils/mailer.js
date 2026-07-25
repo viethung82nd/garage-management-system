@@ -35,9 +35,10 @@ function getTransporter() {
  * the business action that triggered it, so errors are logged and swallowed
  * rather than thrown.
  *
- * @param {{ to: string, subject: string, html: string }} params
+ * @param {{ to: string, subject: string, html: string,
+ *           attachments?: Array<{ filename: string, content: Buffer, contentType?: string }> }} params
  */
-export async function sendEmail({ to, subject, html }) {
+export async function sendEmail({ to, subject, html, attachments }) {
   if (!to) return false;
 
   const transporter = getTransporter();
@@ -57,6 +58,7 @@ export async function sendEmail({ to, subject, html }) {
       to,
       subject,
       html,
+      attachments,
     });
     return true;
   } catch (err) {

@@ -6,6 +6,7 @@ import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
 import { renderEmailLayout, SITE_URL } from "../utils/emailTemplate.js";
+import { renderQuotationPdf } from "../utils/pdfDocuments.js";
 import { runInTransaction } from "../utils/transaction.js";
 import { logAudit } from "../utils/audit.js";
 import { reserveStock } from "../utils/stock.js";
@@ -206,26 +207,37 @@ export async function sendQuotation(id) {
       // Fire-and-forget: sendEmail already swallows its own errors, and the
       // customer was already informed via the in-app notification above — no
       // caller should have "Send quote" hang on a slow/unreachable SMTP server.
-      void sendEmail({
-        to: customer.email,
-        subject: `Your repair quote ${quote.code} is ready`,
-        html: renderEmailLayout({
-          preheader: `Your quote ${quote.code} is ready to review — please approve before work begins.`,
-          heading: "Your repair quote is ready",
-          bodyHtml: `
-            <p style="margin:0 0 8px;">Hi ${customer.fullName || "there"},</p>
-            <p style="margin:0;">Your quote <strong>${quote.code}</strong> for <strong>${quote.vehicleName || "your vehicle"}</strong>${quote.vehiclePlate ? ` (${quote.vehiclePlate})` : ""} is ready. Please review and approve it before we begin work.</p>
-          `,
-          highlight: {
-            label: "Total estimate",
-            value: `${quote.totalEstimate?.toLocaleString("vi-VN")} ₫`,
-          },
-          button: {
-            label: "Review & approve quote",
-            url: `${SITE_URL}/customer/bookings`,
-          },
-        }),
-      }).catch(() => {});
+      void renderQuotationPdf(quote)
+        .then((pdfBuffer) =>
+          sendEmail({
+            to: customer.email,
+            subject: `Your repair quote ${quote.code} is ready`,
+            html: renderEmailLayout({
+              preheader: `Your quote ${quote.code} is ready to review — please approve before work begins.`,
+              heading: "Your repair quote is ready",
+              bodyHtml: `
+                <p style="margin:0 0 8px;">Hi ${customer.fullName || "there"},</p>
+                <p style="margin:0;">Your quote <strong>${quote.code}</strong> for <strong>${quote.vehicleName || "your vehicle"}</strong>${quote.vehiclePlate ? ` (${quote.vehiclePlate})` : ""} is ready — the full breakdown is attached as a PDF. Please review and approve it before we begin work.</p>
+              `,
+              highlight: {
+                label: "Total estimate",
+                value: `${quote.totalEstimate?.toLocaleString("vi-VN")} ₫`,
+              },
+              button: {
+                label: "Review & approve quote",
+                url: `${SITE_URL}/customer/bookings`,
+              },
+            }),
+            attachments: [
+              {
+                filename: `${quote.code || "quote"}.pdf`,
+                content: pdfBuffer,
+                contentType: "application/pdf",
+              },
+            ],
+          }),
+        )
+        .catch(() => {});
     }
   }
 

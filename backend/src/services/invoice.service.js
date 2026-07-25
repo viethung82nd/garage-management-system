@@ -7,6 +7,7 @@ import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
 import { renderEmailLayout, SITE_URL } from "../utils/emailTemplate.js";
+import { renderInvoicePdf } from "../utils/pdfDocuments.js";
 import { logAudit } from "../utils/audit.js";
 import { generateCode } from "../utils/sequence.js";
 import { PartModel } from "../models/index.js";
@@ -506,28 +507,40 @@ export async function sendInvoiceToCustomer(id, actorId) {
     });
 
     if (hasEmailOnFile) {
+      const displayId = formatDisplayId("INV", invoice._id);
       // Fire-and-forget — see quotation.service.js's sendQuotation() for why
       // this must not block the request on a slow/unreachable SMTP server.
-      void sendEmail({
-        to: customer.email,
-        subject: `Invoice ${formatDisplayId("INV", invoice._id)} — ${invoice.total.toLocaleString("vi-VN")} ₫`,
-        html: renderEmailLayout({
-          preheader: `Your invoice is ready — total due ${invoice.total.toLocaleString("vi-VN")} ₫.`,
-          heading: "Your invoice is ready",
-          bodyHtml: `
-            <p style="margin:0 0 8px;">Hi ${customer.fullName || "there"},</p>
-            <p style="margin:0;">Your invoice for <strong>${[vehicle.brand, vehicle.model].filter(Boolean).join(" ") || "your vehicle"}</strong>${vehicle.licensePlate ? ` (${vehicle.licensePlate})` : ""} is ready. Please settle at the service desk or by bank transfer as agreed.</p>
-          `,
-          highlight: {
-            label: "Total due",
-            value: `${invoice.total.toLocaleString("vi-VN")} ₫`,
-          },
-          button: {
-            label: "View invoice",
-            url: `${SITE_URL}/customer/invoices`,
-          },
-        }),
-      }).catch(() => {});
+      void renderInvoicePdf({ ...invoice.toObject(), code: invoice.code || displayId })
+        .then((pdfBuffer) =>
+          sendEmail({
+            to: customer.email,
+            subject: `Invoice ${displayId} — ${invoice.total.toLocaleString("vi-VN")} ₫`,
+            html: renderEmailLayout({
+              preheader: `Your invoice is ready — total due ${invoice.total.toLocaleString("vi-VN")} ₫.`,
+              heading: "Your invoice is ready",
+              bodyHtml: `
+                <p style="margin:0 0 8px;">Hi ${customer.fullName || "there"},</p>
+                <p style="margin:0;">Your invoice for <strong>${[vehicle.brand, vehicle.model].filter(Boolean).join(" ") || "your vehicle"}</strong>${vehicle.licensePlate ? ` (${vehicle.licensePlate})` : ""} is ready — the full breakdown is attached as a PDF. Please settle at the service desk or by bank transfer as agreed.</p>
+              `,
+              highlight: {
+                label: "Total due",
+                value: `${invoice.total.toLocaleString("vi-VN")} ₫`,
+              },
+              button: {
+                label: "View invoice",
+                url: `${SITE_URL}/customer/invoices`,
+              },
+            }),
+            attachments: [
+              {
+                filename: `${displayId}.pdf`,
+                content: pdfBuffer,
+                contentType: "application/pdf",
+              },
+            ],
+          }),
+        )
+        .catch(() => {});
     }
   }
 
