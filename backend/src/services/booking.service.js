@@ -13,7 +13,7 @@ import { BOOKING_STATUSES } from "../models/booking.model.js";
 import { ScheduleModel } from "../models/schedule.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { ACTIVE_BOOKING_STATUSES, getSlotTimes, isValidSlot } from "../config/constants.js";
-import { todayUtc } from "../utils/date.js";
+import { todayUtc, slotStartInstant } from "../utils/date.js";
 import { createNotification, notifyRole } from "../utils/notify.js";
 import { getSystemConfig } from "./config.service.js";
 
@@ -407,7 +407,7 @@ export async function createBooking({
 
   const day = parseBookingDate(bookingDate);
   // Reject a slot whose start time has already passed (covers today's stale slots).
-  const slotStart = new Date(`${bookingDate}T${timeSlot}:00.000Z`);
+  const slotStart = slotStartInstant(bookingDate, timeSlot);
   if (slotStart < new Date()) {
     throw new ApiError(400, "the requested slot is in the past");
   }
@@ -467,6 +467,23 @@ export async function createBooking({
 
   const customerDoc = await resolveCustomer(customer);
   const vehicleDoc = await resolveVehicle(vehicle, customerDoc._id);
+
+  // A vehicle with an appointment still outstanding (not yet received into a
+  // repair order) shouldn't be booked again — the customer almost certainly
+  // means to reschedule the existing one, and letting a second unresolved
+  // booking pile up for the same car is exactly the kind of duplicate this
+  // should catch rather than silently allow.
+  const existingActiveBooking = await bookingRepository.findOne({
+    vehicleId: vehicleDoc._id,
+    status: { $in: ACTIVE_BOOKING_STATUSES },
+    repairOrderId: null,
+  });
+  if (existingActiveBooking) {
+    throw new ApiError(
+      409,
+      `This vehicle already has an outstanding appointment on ${existingActiveBooking.bookingDate.toISOString().slice(0, 10)} at ${existingActiveBooking.timeSlot} — reschedule or cancel it before booking a new one.`,
+    );
+  }
 
   // Claim the lowest free seat. The unique partial index makes each seat
   // exclusive: if a concurrent request grabs the same seat first, create() fails
@@ -663,7 +680,7 @@ export async function rescheduleBooking(
     throw new ApiError(400, `timeSlot must be one of: ${slotTimes.join(", ")}`);
   }
   const day = parseBookingDate(bookingDate);
-  const slotStart = new Date(`${bookingDate}T${timeSlot}:00.000Z`);
+  const slotStart = slotStartInstant(bookingDate, timeSlot);
   if (slotStart < new Date()) {
     throw new ApiError(400, "the requested slot is in the past");
   }
@@ -878,8 +895,9 @@ export async function generateAppointmentReminders() {
     const key = String(booking._id);
     if (seen.has(key)) continue;
 
-    const slotStart = new Date(
-      `${booking.bookingDate.toISOString().slice(0, 10)}T${booking.timeSlot}:00.000Z`
+    const slotStart = slotStartInstant(
+      booking.bookingDate.toISOString().slice(0, 10),
+      booking.timeSlot,
     );
     if (slotStart <= now || slotStart > in24h) continue;
 
