@@ -127,6 +127,10 @@ export default function CustomerProfilePage() {
   const [profileFormError, setProfileFormError] = useState('')
   const [profileFormSaving, setProfileFormSaving] = useState(false)
   const [profileFormSaved, setProfileFormSaved] = useState(false)
+  const [passwordForm, setPasswordForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [passwordFormError, setPasswordFormError] = useState('')
+  const [passwordFormSaving, setPasswordFormSaving] = useState(false)
+  const [passwordFormSaved, setPasswordFormSaved] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState('')
@@ -261,6 +265,46 @@ export default function CustomerProfilePage() {
     setProfileFormSaved(false)
   }
 
+  function updatePasswordField(field: keyof typeof passwordForm, value: string) {
+    setPasswordForm((current) => ({ ...current, [field]: value }))
+    setPasswordFormError('')
+    setPasswordFormSaved(false)
+  }
+
+  async function handlePasswordSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    setPasswordFormError('')
+    setPasswordFormSaved(false)
+
+    if (!passwordForm.currentPassword) {
+      setPasswordFormError('Enter your current password.')
+      return
+    }
+    if (passwordForm.newPassword.length < 8) {
+      setPasswordFormError('New password must be at least 8 characters.')
+      return
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      setPasswordFormError('New password and confirmation do not match.')
+      return
+    }
+    if (!token) return
+
+    setPasswordFormSaving(true)
+    try {
+      await updateCustomerProfile(token, {
+        currentPassword: passwordForm.currentPassword,
+        newPassword: passwordForm.newPassword,
+      })
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      setPasswordFormSaved(true)
+    } catch (error) {
+      setPasswordFormError(error instanceof Error ? error.message : 'Unable to change your password. Please try again.')
+    } finally {
+      setPasswordFormSaving(false)
+    }
+  }
+
   function openDeleteModal() {
     setDeleteError('')
     setDeleteModalOpen(true)
@@ -379,6 +423,45 @@ export default function CustomerProfilePage() {
                 </CustomerFormField>
                 <CustomerPrimaryButton type="submit" disabled={profileFormSaving}>
                   {profileFormSaving ? 'Saving...' : 'Save changes'}
+                </CustomerPrimaryButton>
+              </form>
+
+              <form className="customer-profile-form mt-4" onSubmit={handlePasswordSubmit} style={{ borderTop: '1px solid #e5e7eb', paddingTop: 24 }}>
+                <span className="customer-booking-card__label">Change password</span>
+                {passwordFormError ? <p className="customer-profile-form__error">{passwordFormError}</p> : null}
+                {passwordFormSaved ? <p className="customer-profile-form__success">Password changed.</p> : null}
+                <CustomerFormField id="profile-currentPassword" label="Current password" required>
+                  <CustomerInput
+                    id="profile-currentPassword"
+                    name="currentPassword"
+                    type="password"
+                    autoComplete="current-password"
+                    value={passwordForm.currentPassword}
+                    onChange={(event) => updatePasswordField('currentPassword', event.target.value)}
+                  />
+                </CustomerFormField>
+                <CustomerFormField id="profile-newPassword" label="New password" required>
+                  <CustomerInput
+                    id="profile-newPassword"
+                    name="newPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordForm.newPassword}
+                    onChange={(event) => updatePasswordField('newPassword', event.target.value)}
+                  />
+                </CustomerFormField>
+                <CustomerFormField id="profile-confirmPassword" label="Confirm new password" required>
+                  <CustomerInput
+                    id="profile-confirmPassword"
+                    name="confirmPassword"
+                    type="password"
+                    autoComplete="new-password"
+                    value={passwordForm.confirmPassword}
+                    onChange={(event) => updatePasswordField('confirmPassword', event.target.value)}
+                  />
+                </CustomerFormField>
+                <CustomerPrimaryButton type="submit" disabled={passwordFormSaving}>
+                  {passwordFormSaving ? 'Changing...' : 'Change password'}
                 </CustomerPrimaryButton>
               </form>
 
