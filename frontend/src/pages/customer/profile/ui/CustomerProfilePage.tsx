@@ -206,7 +206,10 @@ export default function CustomerProfilePage() {
         vehicle: [primaryVehicle?.brand, primaryVehicle?.model, primaryVehicle?.year].filter(Boolean).join(' ') || 'Vehicle updating',
         plate: primaryVehicle?.licensePlate || 'Not recorded',
         vin: primaryVehicle?.chassisNumber || primaryVehicle?.engineNumber || 'Not recorded',
-        mileage: 'Not recorded',
+        mileage:
+          primaryVehicle?.lastKnownMileage != null
+            ? `${new Intl.NumberFormat('vi-VN').format(primaryVehicle.lastKnownMileage)} km`
+            : 'Not recorded',
         lastService:
           repairOrders[0]?.completedAt
             ? formatVisitDate(repairOrders[0].completedAt)

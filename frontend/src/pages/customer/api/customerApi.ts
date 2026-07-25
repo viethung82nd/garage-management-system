@@ -28,6 +28,7 @@ export type CustomerBookingApiRecord = {
     chassisNumber?: string
     engineNumber?: string
     color?: string
+    lastKnownMileage?: number | null
   }
   serviceId?: {
     _id: string
@@ -66,6 +67,7 @@ export type CustomerRepairOrderApiRecord = {
     color?: string
     chassisNumber?: string
     engineNumber?: string
+    lastKnownMileage?: number | null
     customerId?: {
       _id: string
       fullName: string
