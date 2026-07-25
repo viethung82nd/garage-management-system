@@ -25,6 +25,7 @@ import { purchaseOrderRouter } from "./purchase-order.routes.js";
 import { reminderRouter } from "./reminder.routes.js";
 import { followUpRouter } from "./follow-up.routes.js";
 import { resourceRouter } from "./resource.routes.js";
+import { configRouter } from "./config.routes.js";
 
 /** Mounts every domain router under its API path. Gathered here so app.js
  *  only needs to know about one router. */
@@ -58,6 +59,7 @@ export function createApiRouter() {
   router.use("/reminders", reminderRouter);
   router.use("/follow-ups", followUpRouter);
   router.use("/resources", resourceRouter);
+  router.use("/admin/config", configRouter);
 
   return router;
 }

@@ -1,9 +1,10 @@
-import { ClockCircleOutlined, TeamOutlined } from '@ant-design/icons'
+import { ClockCircleOutlined, TeamOutlined, ToolOutlined } from '@ant-design/icons'
 import { Button, Card, Form, InputNumber } from 'antd'
 import { useEffect, useState, type ReactNode } from 'react'
 import { fetchSystemConfig, updateSystemConfig, type SystemConfig } from '../api/configApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
 import { InlineBanner } from '../../../../widgets/backoffice-shell'
+import { useAuth } from '../../../../shared/auth'
 
 function SectionCard({
   icon,
@@ -69,6 +70,7 @@ function HourTimeline({ openHour, lastSlotHour }: { openHour?: number; lastSlotH
 }
 
 export default function AdminConfigPage() {
+  const { token } = useAuth()
   const [isLoading, setIsLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [requestError, setRequestError] = useState('')
@@ -77,15 +79,19 @@ export default function AdminConfigPage() {
   const openHour = Form.useWatch('openHour', form)
   const lastSlotHour = Form.useWatch('lastSlotHour', form)
   const slotCapacity = Form.useWatch('slotCapacity', form)
+  const techShiftHours = Form.useWatch('techShiftHours', form)
+  const capacityEfficiency = Form.useWatch('capacityEfficiency', form)
+  const capacityReserveRatio = Form.useWatch('capacityReserveRatio', form)
 
   useEffect(() => {
+    if (!token) return
     let cancelled = false
 
     const load = async () => {
       setIsLoading(true)
       setRequestError('')
       try {
-        const config = await fetchSystemConfig()
+        const config = await fetchSystemConfig(token)
         if (cancelled) return
         form.setFieldsValue(config)
       } catch (error) {
@@ -101,14 +107,15 @@ export default function AdminConfigPage() {
     return () => {
       cancelled = true
     }
-  }, [form])
+  }, [form, token])
 
   async function handleSubmit(values: SystemConfig) {
+    if (!token) return
     setSaving(true)
     setRequestError('')
     setSaved(false)
     try {
-      await updateSystemConfig(values)
+      await updateSystemConfig(token, values)
       setSaved(true)
     } catch (error) {
       setRequestError(error instanceof Error ? error.message : 'Unable to save system configuration.')
@@ -120,6 +127,12 @@ export default function AdminConfigPage() {
   const hasValidWindow = typeof openHour === 'number' && typeof lastSlotHour === 'number' && lastSlotHour >= openHour
   const slotCount = hasValidWindow ? lastSlotHour - openHour + 1 : 0
   const dailyCapacity = hasValidWindow && typeof slotCapacity === 'number' ? slotCount * slotCapacity : 0
+
+  const hasLabourInputs =
+    typeof techShiftHours === 'number' && typeof capacityEfficiency === 'number' && typeof capacityReserveRatio === 'number'
+  const perTechnicianHours = hasLabourInputs
+    ? (techShiftHours * 60 * capacityEfficiency * (1 - capacityReserveRatio)) / 60
+    : 0
 
   return (
     <AdminShell eyebrow="Admin" title="System configuration">
@@ -161,6 +174,69 @@ export default function AdminConfigPage() {
               </Form.Item>
             </SectionCard>
 
+            <SectionCard icon={<ToolOutlined />} eyebrow="Capacity" title="Labour capacity" enterDelay={3}>
+              <p className="mb-4 text-sm leading-relaxed" style={{ color: adminPalette.inkSoft }}>
+                Drives the "Available hours" figure service advisors see on Booking requests — the labour-minutes
+                signal, separate from the seat count above.
+              </p>
+              <div className="grid gap-x-4 sm:grid-cols-2">
+                <Form.Item
+                  name="techShiftHours"
+                  label="Technician shift length"
+                  rules={[{ required: true, message: 'Shift length is required' }]}
+                  extra="Paid hours a technician is rostered for in a working day."
+                >
+                  <InputNumber min={1} max={24} addonAfter="h" style={{ width: '100%' }} disabled={isLoading} />
+                </Form.Item>
+                <Form.Item
+                  name="defaultJobMinutes"
+                  label="Default job duration"
+                  rules={[{ required: true, message: 'Default job duration is required' }]}
+                  extra="Used when a booking's service has no estimated duration on file."
+                >
+                  <InputNumber min={1} max={1440} addonAfter="min" style={{ width: '100%' }} disabled={isLoading} />
+                </Form.Item>
+                <Form.Item
+                  name="capacityEfficiency"
+                  label="Technician efficiency"
+                  rules={[{ required: true, message: 'Efficiency is required' }]}
+                  extra="Share of a shift that becomes billable wrench time (breaks, admin, cleanup eat into the rest)."
+                >
+                  <InputNumber<number>
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    style={{ width: '100%' }}
+                    disabled={isLoading}
+                    formatter={(value) => (value === undefined || value === null ? '' : `${Math.round(Number(value) * 100)}%`)}
+                    parser={(value) => (Number((value ?? '').replace(/[^\d.]/g, '')) || 0) / 100}
+                  />
+                </Form.Item>
+                <Form.Item
+                  name="capacityReserveRatio"
+                  label="Reserved buffer"
+                  rules={[{ required: true, message: 'Reserved buffer is required' }]}
+                  extra="Kept unbooked for walk-ins, warranty comebacks and running-late carry-over."
+                >
+                  <InputNumber<number>
+                    min={0}
+                    max={1}
+                    step={0.01}
+                    style={{ width: '100%' }}
+                    disabled={isLoading}
+                    formatter={(value) => (value === undefined || value === null ? '' : `${Math.round(Number(value) * 100)}%`)}
+                    parser={(value) => (Number((value ?? '').replace(/[^\d.]/g, '')) || 0) / 100}
+                  />
+                </Form.Item>
+              </div>
+              {hasLabourInputs ? (
+                <p className="mt-1 text-sm" style={{ color: adminPalette.inkSoft }}>
+                  Example: <strong style={{ color: adminPalette.ink }}>1</strong> technician on a full shift contributes{' '}
+                  <strong style={{ color: adminPalette.ink }}>{perTechnicianHours.toFixed(1)}h</strong> of available capacity.
+                </p>
+              ) : null}
+            </SectionCard>
+
             <div>
               <Button type="primary" htmlType="submit" loading={saving} disabled={isLoading}>
                 Save configuration
@@ -170,7 +246,7 @@ export default function AdminConfigPage() {
 
           <Card
             bordered={false}
-            className="bo-enter bo-enter-3 h-fit rounded-2xl"
+            className="bo-enter bo-enter-4 h-fit rounded-2xl"
             styles={{ body: { padding: 24 } }}
             style={{ background: adminPalette.panel, boxShadow: adminPalette.shadow, border: `1px solid ${adminPalette.border}` }}
           >

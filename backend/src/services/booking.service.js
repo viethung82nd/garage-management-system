@@ -12,18 +12,10 @@ import { resourceRepository } from "../repositories/resource.repository.js";
 import { BOOKING_STATUSES } from "../models/booking.model.js";
 import { ScheduleModel } from "../models/schedule.model.js";
 import { ApiError } from "../utils/apiError.js";
-import {
-  SLOT_CAPACITY,
-  ACTIVE_BOOKING_STATUSES,
-  getSlotTimes,
-  isValidSlot,
-  TECH_SHIFT_HOURS,
-  CAPACITY_EFFICIENCY,
-  CAPACITY_RESERVE_RATIO,
-  DEFAULT_JOB_MINUTES,
-} from "../config/constants.js";
+import { ACTIVE_BOOKING_STATUSES, getSlotTimes, isValidSlot } from "../config/constants.js";
 import { todayUtc } from "../utils/date.js";
 import { createNotification, notifyRole } from "../utils/notify.js";
+import { getSystemConfig } from "./config.service.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 const OID_RE = /^[0-9a-fA-F]{24}$/;
@@ -99,6 +91,8 @@ async function takenSeats(bookingDate, timeSlot) {
  * for, the seat-based booking limit that actually enforces overbooking safety.
  */
 async function computeTimeBucket(bookingDate) {
+  const config = await getSystemConfig();
+
   // Technician headcount for the day: prefer an actual roster (Schedule) for
   // that date; if none was entered, fall back to every active technician on
   // staff — a reasonable default rather than reporting zero capacity.
@@ -112,7 +106,7 @@ async function computeTimeBucket(bookingDate) {
       : await userRepository.model.countDocuments({ role: "technician", isActive: { $ne: false } });
 
   const capacityMinutes = Math.round(
-    technicianCount * TECH_SHIFT_HOURS * 60 * CAPACITY_EFFICIENCY * (1 - CAPACITY_RESERVE_RATIO),
+    technicianCount * config.techShiftHours * 60 * config.capacityEfficiency * (1 - config.capacityReserveRatio),
   );
 
   // Sum the estimated duration of every active booking that day, falling back
@@ -131,7 +125,7 @@ async function computeTimeBucket(bookingDate) {
     {
       $addFields: {
         durationMinutes: {
-          $ifNull: [{ $arrayElemAt: ["$service.estimatedDuration", 0] }, DEFAULT_JOB_MINUTES],
+          $ifNull: [{ $arrayElemAt: ["$service.estimatedDuration", 0] }, config.defaultJobMinutes],
         },
       },
     },
@@ -162,6 +156,8 @@ export async function getSlots(dateParam) {
     throw new ApiError(400, "date is in the past");
   }
 
+  const config = await getSystemConfig();
+
   // One grouped count for the whole day, then map onto the configured slots.
   const counts = await bookingRepository.aggregate([
     { $match: { bookingDate, status: { $in: ACTIVE_BOOKING_STATUSES } } },
@@ -169,19 +165,19 @@ export async function getSlots(dateParam) {
   ]);
   const bookedBySlot = new Map(counts.map((c) => [c._id, c.count]));
 
-  const slots = getSlotTimes().map((timeSlot) => {
+  const slots = getSlotTimes(config.openHour, config.lastSlotHour).map((timeSlot) => {
     const booked = bookedBySlot.get(timeSlot) ?? 0;
     return {
       timeSlot,
-      capacity: SLOT_CAPACITY,
+      capacity: config.slotCapacity,
       booked,
-      available: booked < SLOT_CAPACITY,
+      available: booked < config.slotCapacity,
     };
   });
 
   const timeBucket = await computeTimeBucket(bookingDate);
 
-  return { date: dateParam, capacity: SLOT_CAPACITY, slots, timeBucket };
+  return { date: dateParam, capacity: config.slotCapacity, slots, timeBucket };
 }
 
 /** Finds a user by phone, or creates a walk-in customer record for them. */
@@ -402,11 +398,11 @@ export async function createBooking({
   if (!vehicle?.licensePlate?.trim()) {
     throw new ApiError(400, "vehicle.licensePlate is required");
   }
-  if (!isValidSlot(timeSlot)) {
-    throw new ApiError(
-      400,
-      `timeSlot must be one of: ${getSlotTimes().join(", ")}`,
-    );
+
+  const config = await getSystemConfig();
+  const slotTimes = getSlotTimes(config.openHour, config.lastSlotHour);
+  if (!isValidSlot(timeSlot, slotTimes)) {
+    throw new ApiError(400, `timeSlot must be one of: ${slotTimes.join(", ")}`);
   }
 
   const day = parseBookingDate(bookingDate);
@@ -441,7 +437,7 @@ export async function createBooking({
 
   // Fast-path rejection of a full slot before any find-or-create side effects.
   const taken = await takenSeats(day, timeSlot);
-  if (taken.size >= SLOT_CAPACITY) {
+  if (taken.size >= config.slotCapacity) {
     throw new ApiError(409, "the requested slot is fully booked");
   }
 
@@ -477,7 +473,7 @@ export async function createBooking({
   // with E11000 (code 11000) and we advance to the next free seat. Capacity can
   // never be exceeded; running out of free seats means the slot is full.
   let booking;
-  for (let seatNo = 1; seatNo <= SLOT_CAPACITY; seatNo += 1) {
+  for (let seatNo = 1; seatNo <= config.slotCapacity; seatNo += 1) {
     if (taken.has(seatNo)) continue;
     try {
       booking = await bookingRepository.create({
@@ -661,11 +657,10 @@ export async function rescheduleBooking(
     throw new ApiError(409, `Cannot reschedule a ${booking.status} booking`);
   }
 
-  if (!isValidSlot(timeSlot)) {
-    throw new ApiError(
-      400,
-      `timeSlot must be one of: ${getSlotTimes().join(", ")}`,
-    );
+  const config = await getSystemConfig();
+  const slotTimes = getSlotTimes(config.openHour, config.lastSlotHour);
+  if (!isValidSlot(timeSlot, slotTimes)) {
+    throw new ApiError(400, `timeSlot must be one of: ${slotTimes.join(", ")}`);
   }
   const day = parseBookingDate(bookingDate);
   const slotStart = new Date(`${bookingDate}T${timeSlot}:00.000Z`);
@@ -680,12 +675,12 @@ export async function rescheduleBooking(
   }
 
   const taken = await takenSeats(day, timeSlot);
-  if (taken.size >= SLOT_CAPACITY) {
+  if (taken.size >= config.slotCapacity) {
     throw new ApiError(409, "the requested slot is fully booked");
   }
 
   let saved = false;
-  for (let seatNo = 1; seatNo <= SLOT_CAPACITY; seatNo += 1) {
+  for (let seatNo = 1; seatNo <= config.slotCapacity; seatNo += 1) {
     if (taken.has(seatNo)) continue;
     booking.bookingDate = day;
     booking.timeSlot = timeSlot;

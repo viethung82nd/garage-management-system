@@ -33,3 +33,4 @@ export * from "./odometer-log.model.js";
 export * from "./resource.model.js";
 export * from "./reminder.model.js";
 export * from "./follow-up.model.js";
+export * from "./system-config.model.js";
