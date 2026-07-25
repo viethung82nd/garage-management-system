@@ -1,4 +1,4 @@
-import { CheckOutlined, SendOutlined, ToolOutlined } from '@ant-design/icons'
+import { CheckOutlined, ToolOutlined } from '@ant-design/icons'
 import { Avatar, Button, Card, Image, Input, InputNumber, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
@@ -304,32 +304,6 @@ export function QualityVerificationPage() {
         err instanceof Error
           ? err.message
           : 'Unable to save the quality check. Check the API connection.',
-      )
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  /** Retry-only fallback for the rare case the automatic forward (above) failed. */
-  async function retryForwardToAccountant() {
-    if (!selectedOrder || !token) return
-
-    setSaving(true)
-    clearApiMessage()
-    try {
-      await forwardRepairOrderToAccountant(token, selectedOrder.id)
-      const forwardedAt = new Date().toISOString()
-      setOrders((current) =>
-        current.map((order) =>
-          order.id === selectedOrder.id
-            ? { ...order, forwardedToAccountantAt: forwardedAt }
-            : order,
-        ),
-      )
-      showSuccess('Repair order forwarded to accounting for invoicing.')
-    } catch (err) {
-      showError(
-        err instanceof Error ? err.message : 'Unable to forward the repair order to accounting.',
       )
     } finally {
       setSaving(false)
@@ -722,45 +696,6 @@ export function QualityVerificationPage() {
                     ) : null}
                   </div>
                 </>
-              )}
-            </Card>
-
-            <Card
-              bordered={false}
-              className="bo-card-hover bo-enter rounded-2xl"
-              style={{
-                background: advisorPalette.panel,
-                boxShadow: advisorPalette.shadow,
-                border: `1px solid ${advisorPalette.border}`,
-              }}
-              title="Handover"
-            >
-              {selectedOrder.forwardedToAccountantAt ? (
-                <Tag color="green">Forwarded to accounting</Tag>
-              ) : verdictByOrder[selectedOrder.id] === 'rework' ? (
-                <p style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
-                  This order was returned to the technician for rework — it will forward to
-                  accounting once it passes quality check.
-                </p>
-              ) : verdictByOrder[selectedOrder.id] === 'passed' ? (
-                <>
-                  <p style={{ color: advisorPalette.red, fontSize: 13, marginBottom: 12 }}>
-                    Passed quality check, but the forward to accounting didn't go through.
-                  </p>
-                  <Button
-                    block
-                    disabled={saving}
-                    icon={<SendOutlined />}
-                    onClick={retryForwardToAccountant}
-                    type="primary"
-                  >
-                    Retry forward to accountant
-                  </Button>
-                </>
-              ) : (
-                <p style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
-                  Passing quality check forwards this order to accounting automatically.
-                </p>
               )}
             </Card>
           </div>
