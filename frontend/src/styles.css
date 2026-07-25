@@ -529,6 +529,23 @@ select {
   margin-right: auto;
 }
 
+/* The 12ch cap on .customer-section-heading--compact h2 exists so a hero
+   headline breaks into a short, punchy two-line stack — but "Check repair
+   progress fast" reads better as one line, and the tracking page's column
+   has room for it on any screen wide enough for the two-column form layout
+   to make sense in the first place. Scoped to this page only; the shared
+   two-line hero look elsewhere is unaffected. */
+.customer-tracking-heading .customer-section-heading h2 {
+  max-width: none;
+  white-space: nowrap;
+}
+
+@media (max-width: 575.98px) {
+  .customer-tracking-heading .customer-section-heading h2 {
+    white-space: normal;
+  }
+}
+
 .customer-highlight-list {
   display: grid;
   gap: 18px;
