@@ -36,6 +36,27 @@ function asVehicleRef(value?: ApiVehicle | string) {
   return typeof value === 'object' ? value : undefined
 }
 
+function personPhone(value?: { phone?: string } | string) {
+  return typeof value === 'object' ? value?.phone : undefined
+}
+
+/** Name + click-to-call phone, the two things CSKH staff actually need to
+ * reach a customer — used consistently across every tab on this page. */
+function CustomerCell({ name, phone }: { name: string; phone?: string }) {
+  return (
+    <div>
+      <div style={{ color: advisorPalette.ink, fontWeight: 600 }}>{name}</div>
+      {phone ? (
+        <a href={`tel:${phone}`} style={{ color: advisorPalette.textMuted, fontSize: 12 }} onClick={(event) => event.stopPropagation()}>
+          {phone}
+        </a>
+      ) : (
+        <span style={{ color: advisorPalette.textMuted, fontSize: 12 }}>No phone on file</span>
+      )}
+    </div>
+  )
+}
+
 function FieldLabel({ children }: { children: ReactNode }) {
   return (
     <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>
@@ -83,6 +104,7 @@ type ReminderRow = {
   type: ReminderType
   vehiclePlate: string
   customer: string
+  customerPhone?: string
   dueAt: string
   status: ReminderStatus
 }
@@ -93,6 +115,7 @@ function mapReminder(reminder: ApiReminder): ReminderRow {
     type: reminder.type || 'maintenanceDue',
     vehiclePlate: vehiclePlate(asVehicleRef(reminder.vehicleId)),
     customer: personName(reminder.customerId, 'Customer'),
+    customerPhone: personPhone(reminder.customerId),
     dueAt: reminder.dueAt || '',
     status: reminder.status || 'pending',
   }
@@ -173,8 +196,8 @@ function RemindersPanel({ token }: { token: string | null }) {
     },
     {
       title: 'Customer',
-      dataIndex: 'customer',
       key: 'customer',
+      render: (_, row) => <CustomerCell name={row.customer} phone={row.customerPhone} />,
     },
     {
       title: 'Due date',
@@ -297,6 +320,8 @@ type FollowUpRow = {
   id: string
   repairOrderLabel: string
   vehicleLabel: string
+  customer: string
+  customerPhone?: string
   dueAt: string
   status: FollowUpStatus
   escalated: boolean
@@ -310,6 +335,8 @@ function mapFollowUp(followUp: ApiFollowUp): FollowUpRow {
     id: followUp._id || followUp.id || crypto.randomUUID(),
     repairOrderLabel: repairOrderId ? orderId({ _id: repairOrderId }) : 'Repair order',
     vehicleLabel: vehicle ? `${vehicleName(vehicle)} - ${vehiclePlate(vehicle)}` : 'Not updated',
+    customer: personName(followUp.customerId, 'Customer'),
+    customerPhone: personPhone(followUp.customerId),
     dueAt: followUp.dueAt || '',
     status: followUp.status || 'pending',
     escalated: followUp.escalated || false,
@@ -365,12 +392,14 @@ function RecordOutcomeModal({
       title="Record outcome"
     >
       {followUp ? (
-        <div
-          className="flex items-center justify-between"
-          style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}
-        >
-          <span style={{ color: advisorPalette.ink, fontWeight: 600 }}>{followUp.vehicleLabel}</span>
-          <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>{followUp.repairOrderLabel}</span>
+        <div style={{ background: advisorPalette.panelAlt, borderRadius: 10, padding: '10px 14px', marginBottom: 16 }}>
+          <div className="flex items-center justify-between">
+            <span style={{ color: advisorPalette.ink, fontWeight: 600 }}>{followUp.vehicleLabel}</span>
+            <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>{followUp.repairOrderLabel}</span>
+          </div>
+          <div className="mt-2">
+            <CustomerCell name={followUp.customer} phone={followUp.customerPhone} />
+          </div>
         </div>
       ) : null}
 
@@ -484,6 +513,11 @@ function FollowUpsPanel({ token }: { token: string | null }) {
 
   const columns: ColumnsType<FollowUpRow> = [
     {
+      title: 'Customer',
+      key: 'customer',
+      render: (_, row) => <CustomerCell name={row.customer} phone={row.customerPhone} />,
+    },
+    {
       title: 'Repair order / vehicle',
       key: 'order',
       render: (_, row) => (
@@ -547,7 +581,7 @@ function FollowUpsPanel({ token }: { token: string | null }) {
           loading={loading}
           pagination={{ pageSize: 8, showTotal: (total) => `${total} follow-ups` }}
           rowKey="id"
-          scroll={{ x: 780 }}
+          scroll={{ x: 980 }}
           className="bo-table"
         />
       </Card>
@@ -562,6 +596,8 @@ function FollowUpsPanel({ token }: { token: string | null }) {
 type DeferredWorkRow = {
   id: string
   vehicleLabel: string
+  customer: string
+  customerPhone?: string
   description: string
   estimatedPrice: number
   declineReason: string
@@ -575,6 +611,8 @@ function mapDeferredWork(item: ApiDeferredWork): DeferredWorkRow {
   return {
     id: item._id || item.id || crypto.randomUUID(),
     vehicleLabel: vehicle ? `${vehicleName(vehicle)} - ${vehiclePlate(vehicle)}` : 'Not updated',
+    customer: personName(item.customerId, 'Customer'),
+    customerPhone: personPhone(item.customerId),
     description: item.description || 'Not updated',
     estimatedPrice: item.estimatedPrice || 0,
     declineReason: item.declineReason || 'Not provided',
@@ -633,6 +671,11 @@ function DeferredWorkPanel({ token }: { token: string | null }) {
   }
 
   const columns: ColumnsType<DeferredWorkRow> = [
+    {
+      title: 'Customer',
+      key: 'customer',
+      render: (_, row) => <CustomerCell name={row.customer} phone={row.customerPhone} />,
+    },
     {
       title: 'Vehicle',
       dataIndex: 'vehicleLabel',
@@ -694,7 +737,7 @@ function DeferredWorkPanel({ token }: { token: string | null }) {
           loading={loading}
           pagination={{ pageSize: 8, showTotal: (total) => `${total} items` }}
           rowKey="id"
-          scroll={{ x: 960 }}
+          scroll={{ x: 1160 }}
           className="bo-table"
         />
       </Card>
