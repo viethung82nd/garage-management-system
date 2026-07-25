@@ -47,7 +47,11 @@ export function createApp() {
   // everything else in the chain.
   app.use(helmet());
   app.use(cors({ origin: env.corsOrigin }));
-  app.use(express.json());
+  // Vehicle reception embeds walk-around photos + the signature pad as
+  // base64 data URLs directly in the JSON body rather than multipart —
+  // express's 100kb default limit rejects almost any real phone photo
+  // outright. Raised to fit a handful of photos plus a signature.
+  app.use(express.json({ limit: "20mb" }));
   app.use(generalLimiter);
   app.use("/api/auth", strictLimiter);
   app.use("/api/bookings", strictLimiter);

@@ -10,7 +10,6 @@ import {
   Avatar,
   Button,
   Card,
-  Checkbox,
   Col,
   Empty,
   Image,
@@ -222,7 +221,11 @@ export function VehicleReceptionPage() {
   // vehicle at hand-in. Kept outside `form` since none of it participates in
   // validateForm()'s pass-through-from-history semantics.
   const [fuelLevel, setFuelLevel] = useState<string>();
-  const [isTowIn, setIsTowIn] = useState(false);
+  // The "arrived on a tow" checkbox is hidden (see the walk-around intake
+  // card below) until something downstream actually reads isTowIn — kept as
+  // an always-false constant rather than deleted so restoring the checkbox
+  // is a one-line change.
+  const isTowIn = false;
   const [photoFiles, setPhotoFiles] = useState<UploadFile[]>([]);
   const [receptionSignature, setReceptionSignature] = useState<string | undefined>();
   const [previewImage, setPreviewImage] = useState("");
@@ -1014,7 +1017,7 @@ export function VehicleReceptionPage() {
                   title="Walk-around intake"
                 >
                   <Row gutter={16}>
-                    <Col span={12}>
+                    <Col span={24}>
                       <LabeledField label="Fuel level">
                         <Select
                           allowClear
@@ -1028,14 +1031,11 @@ export function VehicleReceptionPage() {
                         />
                       </LabeledField>
                     </Col>
-                    <Col span={12} style={{ display: "flex", alignItems: "flex-end" }}>
-                      <Checkbox
-                        checked={isTowIn}
-                        onChange={(event) => setIsTowIn(event.target.checked)}
-                      >
-                        Vehicle arrived on a tow
-                      </Checkbox>
-                    </Col>
+                    {/* "Vehicle arrived on a tow" is captured and saved on the
+                        repair order (isTowIn), but nothing downstream reads
+                        it yet (no road-test block, no display elsewhere) —
+                        hidden until a real use exists for it. State/submit
+                        wiring left in place so it's a one-line revert. */}
                   </Row>
 
                   <div style={{ marginTop: 20 }}>

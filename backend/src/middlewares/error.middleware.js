@@ -26,6 +26,15 @@ export function errorHandler(err, _req, res, _next) {
     // Duplicate key on a unique index.
     status = 409;
     message = "Resource already exists";
+  } else if (err?.type === "entity.too.large" || err?.status === 413) {
+    // express.json() rejects an oversized body before any route runs — e.g.
+    // too many/too large walk-around photos embedded as base64 in a
+    // reception payload. Surface it plainly instead of a bare 500.
+    status = 413;
+    message = "Request is too large — try attaching fewer or smaller photos.";
+  } else if (err?.type === "entity.parse.failed") {
+    status = 400;
+    message = "Malformed JSON in request body";
   }
 
   if (status >= 500) {
