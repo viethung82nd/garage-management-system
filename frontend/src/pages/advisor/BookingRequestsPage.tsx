@@ -349,15 +349,19 @@ export function BookingRequestsPage() {
                   Reject
                 </Button>
               </>
-            ) : null}
-            <Button
-              disabled={busy && noShowBusyId !== booking.id}
-              loading={noShowBusyId === booking.id}
-              icon={<UserDeleteOutlined />}
-              onClick={() => markNoShowRequest(booking.id)}
-            >
-              Mark no-show
-            </Button>
+            ) : (
+              // Only a confirmed booking has a real slot the customer could
+              // have missed — a still-pending request in Needs review isn't
+              // eligible yet, so this action doesn't show there.
+              <Button
+                disabled={busy && noShowBusyId !== booking.id}
+                loading={noShowBusyId === booking.id}
+                icon={<UserDeleteOutlined />}
+                onClick={() => markNoShowRequest(booking.id)}
+              >
+                Mark no-show
+              </Button>
+            )}
           </div>
         )
       },
