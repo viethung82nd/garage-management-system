@@ -1,10 +1,15 @@
 import { FollowUpModel, RepairOrderModel, FOLLOW_UP_STATUSES, COMPLAINT_CATEGORIES } from "../models/index.js";
 import { followUpRepository } from "../repositories/follow-up.repository.js";
 import { ApiError } from "../utils/apiError.js";
+import { notifyRole } from "../utils/notify.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
 const FOLLOW_UP_DELAY_HOURS = 72;
+
+// A CSAT at or below this is treated as a dissatisfied customer — the
+// Toyota standard's "must follow through" case, not just a score to log.
+const DISSATISFIED_CSAT_THRESHOLD = 2;
 
 /**
  * Creates the pending post-delivery check-in for one repair order, due 72
@@ -145,6 +150,22 @@ export async function recordFollowUpOutcome(
     throw new ApiError(409, "This follow-up is already closed");
   }
 
+  // A dissatisfied customer must be followed through, not just logged and
+  // closed (Toyota S1: "phải theo đến cùng với khách không hài lòng") — block
+  // closing an escalated follow-up until someone records what was actually
+  // done about it.
+  const effectiveCsat = csatScore !== undefined ? csatScore : followUp.csatScore;
+  const effectiveNote = note !== undefined ? note : followUp.note;
+  const becomingDissatisfied =
+    typeof effectiveCsat === "number" && effectiveCsat <= DISSATISFIED_CSAT_THRESHOLD;
+
+  if (status === "closed" && (followUp.escalated || becomingDissatisfied) && !effectiveNote?.trim()) {
+    throw new ApiError(
+      400,
+      "This customer was dissatisfied — add a resolution note before closing the follow-up",
+    );
+  }
+
   if (status !== undefined) followUp.status = status;
   if (csatScore !== undefined) followUp.csatScore = csatScore;
   if (npsScore !== undefined) followUp.npsScore = npsScore;
@@ -158,7 +179,27 @@ export async function recordFollowUpOutcome(
     followUp.contactedBy = actorId;
   }
 
+  if (status === "closed") {
+    followUp.resolvedAt = new Date();
+  }
+
+  const justEscalated = becomingDissatisfied && !followUp.escalated;
+  if (justEscalated) {
+    followUp.escalated = true;
+  }
+
   await followUp.save();
+
+  if (justEscalated) {
+    const payload = {
+      type: "followUpEscalated",
+      title: "Dissatisfied customer needs follow-through",
+      message: `A follow-up scored ${effectiveCsat}/5 CSAT — this needs to be resolved before it's closed.`,
+      refId: followUp.repairOrderId,
+      refModel: "RepairOrder",
+    };
+    await Promise.all([notifyRole("serviceAdvisor", payload), notifyRole("admin", payload)]);
+  }
 
   return followUp;
 }

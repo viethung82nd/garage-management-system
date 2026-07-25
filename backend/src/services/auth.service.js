@@ -139,7 +139,7 @@ export async function createStaff({ fullName, email, phone, password, role }, cr
  */
 export async function updateMe(
   userId,
-  { fullName, phone, email, currentPassword, newPassword },
+  { fullName, phone, email, dateOfBirth, currentPassword, newPassword },
 ) {
   const user = await userRepository.findById(userId);
   if (!user) {
@@ -155,6 +155,18 @@ export async function updateMe(
 
   if (phone !== undefined) {
     user.phone = phone?.trim() || undefined;
+  }
+
+  if (dateOfBirth !== undefined) {
+    if (!dateOfBirth) {
+      user.dateOfBirth = undefined;
+    } else {
+      const parsed = new Date(dateOfBirth);
+      if (Number.isNaN(parsed.getTime()) || parsed > new Date()) {
+        throw new ApiError(400, "dateOfBirth must be a valid date in the past");
+      }
+      user.dateOfBirth = parsed;
+    }
   }
 
   if (email !== undefined && email.toLowerCase() !== user.email) {

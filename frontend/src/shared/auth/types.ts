@@ -6,6 +6,7 @@ export type AuthUser = {
   fullName: string
   email?: string
   phone?: string
+  dateOfBirth?: string
   role: AuthRole
   accountType: 'registered' | 'walkIn'
   isActive: boolean

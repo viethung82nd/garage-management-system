@@ -87,6 +87,7 @@ export function ProfitAndReceivablesPanel({ startDate, endDate }: { startDate: s
         <KpiTile label="Labour hours sold" value={kpis ? `${kpis.laborHoursSold} h` : '—'} />
         <KpiTile label="Carry-over rate" value={kpis ? `${kpis.carryOverRate}%` : '—'} hint="Toyota target < 5%" />
         <KpiTile label="Rework rate" value={kpis ? `${kpis.reworkRate}%` : '—'} />
+        <KpiTile label="Retention rate" value={kpis ? `${kpis.retentionRate}%` : '—'} hint="Repeat customers in the period" />
       </div>
 
       {/* Gross profit split */}

@@ -195,6 +195,7 @@ export type UpdateCustomerProfilePayload = {
   fullName: string
   phone?: string
   email?: string
+  dateOfBirth?: string
 }
 
 export function updateCustomerProfile(token: string, payload: UpdateCustomerProfilePayload) {

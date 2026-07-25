@@ -109,6 +109,7 @@ export type WorkshopKpis = {
   ordersCompleted: number
   carryOverRate: number
   reworkRate: number
+  retentionRate: number
 }
 
 /** GET /api/admin/reports/kpis — workshop KPIs for a date range. */

@@ -83,6 +83,20 @@ const followUpSchema = new Schema(
       type: String,
       trim: true,
     },
+    // Set automatically the first time a dissatisfied score (csatScore <= 2)
+    // is recorded — the Toyota standard requires following through with an
+    // unhappy customer, not just logging the score and moving on. An
+    // escalated follow-up cannot be closed without a resolution note (see
+    // recordFollowUpOutcome), so this can't be silently dropped.
+    escalated: {
+      type: Boolean,
+      default: false,
+    },
+    // When the loop was actually closed — the turnaround-time basis (dueAt to
+    // resolvedAt) since there's no separate hard SLA-deadline field.
+    resolvedAt: {
+      type: Date,
+    },
   },
   { timestamps: true },
 );

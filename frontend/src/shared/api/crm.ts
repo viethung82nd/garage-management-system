@@ -12,6 +12,7 @@ export const REMINDER_TYPES = [
   'warrantyExpiry',
   'deferredWork',
   'lapsedCustomer',
+  'birthday',
 ] as const
 export type ReminderType = (typeof REMINDER_TYPES)[number]
 
@@ -95,6 +96,10 @@ export type ApiFollowUp = {
   npsScore?: number
   complaintCategory?: ComplaintCategory
   note?: string
+  // Set once a dissatisfied score (<=2 CSAT) is recorded — the backend then
+  // refuses to close this follow-up without a resolution note.
+  escalated?: boolean
+  resolvedAt?: string
   createdAt?: string
   updatedAt?: string
 }

@@ -53,6 +53,7 @@ const reminderTypeLabels: Record<ReminderType, string> = {
   warrantyExpiry: 'Warranty expiry',
   deferredWork: 'Deferred work',
   lapsedCustomer: 'Lapsed customer',
+  birthday: 'Customer birthday',
 }
 
 const reminderStatusLabels: Record<ReminderStatus, string> = {
@@ -286,9 +287,10 @@ const complaintCategoryOptions = (Object.keys(complaintCategoryLabels) as Compla
   value,
 }))
 
-const followUpResultOptions: { label: string; value: 'contacted' | 'noAnswer' }[] = [
+const followUpResultOptions: { label: string; value: 'contacted' | 'noAnswer' | 'closed' }[] = [
   { label: 'Contacted', value: 'contacted' },
   { label: 'No answer', value: 'noAnswer' },
+  { label: 'Closed', value: 'closed' },
 ]
 
 type FollowUpRow = {
@@ -297,6 +299,7 @@ type FollowUpRow = {
   vehicleLabel: string
   dueAt: string
   status: FollowUpStatus
+  escalated: boolean
 }
 
 function mapFollowUp(followUp: ApiFollowUp): FollowUpRow {
@@ -309,6 +312,7 @@ function mapFollowUp(followUp: ApiFollowUp): FollowUpRow {
     vehicleLabel: vehicle ? `${vehicleName(vehicle)} - ${vehiclePlate(vehicle)}` : 'Not updated',
     dueAt: followUp.dueAt || '',
     status: followUp.status || 'pending',
+    escalated: followUp.escalated || false,
   }
 }
 
@@ -325,7 +329,7 @@ function RecordOutcomeModal({
   open: boolean
   saving: boolean
 }) {
-  const [status, setStatus] = useState<'contacted' | 'noAnswer'>('contacted')
+  const [status, setStatus] = useState<'contacted' | 'noAnswer' | 'closed'>('contacted')
   const [csatScore, setCsatScore] = useState<number>()
   const [npsScore, setNpsScore] = useState<number>()
   const [complaintCategory, setComplaintCategory] = useState<ComplaintCategory>()
@@ -368,6 +372,12 @@ function RecordOutcomeModal({
           <span style={{ color: advisorPalette.ink, fontWeight: 600 }}>{followUp.vehicleLabel}</span>
           <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>{followUp.repairOrderLabel}</span>
         </div>
+      ) : null}
+
+      {followUp?.escalated ? (
+        <p style={{ color: advisorPalette.red, fontSize: 13, marginBottom: 16 }}>
+          This customer was dissatisfied — a resolution note is required before this can be closed.
+        </p>
       ) : null}
 
       <div className="flex flex-col gap-3">

@@ -38,6 +38,11 @@ const userSchema = new Schema(
       type: String,
       trim: true,
     },
+    // Customer-relationship touch, not an identity field — only month/day are
+    // used (birthday reminders), so this is optional and self-reported.
+    dateOfBirth: {
+      type: Date,
+    },
     passwordHash: {
       type: String,
     },

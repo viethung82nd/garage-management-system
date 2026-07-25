@@ -123,7 +123,7 @@ export default function CustomerProfilePage() {
   const [repairOrders, setRepairOrders] = useState<CustomerRepairOrderApiRecord[]>([])
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
   const [requestError, setRequestError] = useState('')
-  const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', email: '' })
+  const [profileForm, setProfileForm] = useState({ fullName: '', phone: '', email: '', dateOfBirth: '' })
   const [profileFormError, setProfileFormError] = useState('')
   const [profileFormSaving, setProfileFormSaving] = useState(false)
   const [profileFormSaved, setProfileFormSaved] = useState(false)
@@ -137,6 +137,7 @@ export default function CustomerProfilePage() {
       fullName: user.fullName || '',
       phone: user.phone || '',
       email: user.email || '',
+      dateOfBirth: user.dateOfBirth ? user.dateOfBirth.slice(0, 10) : '',
     })
   }, [user])
 
@@ -243,6 +244,7 @@ export default function CustomerProfilePage() {
         fullName: profileForm.fullName.trim(),
         phone: profileForm.phone.trim() || undefined,
         email: profileForm.email.trim(),
+        dateOfBirth: profileForm.dateOfBirth || undefined,
       })
       await refreshProfile()
       setProfileFormSaved(true)
@@ -363,6 +365,16 @@ export default function CustomerProfilePage() {
                     type="email"
                     value={profileForm.email}
                     onChange={(event) => updateProfileField('email', event.target.value)}
+                  />
+                </CustomerFormField>
+                <CustomerFormField id="profile-dateOfBirth" label="Date of birth">
+                  <CustomerInput
+                    id="profile-dateOfBirth"
+                    name="dateOfBirth"
+                    type="date"
+                    max={new Date().toISOString().slice(0, 10)}
+                    value={profileForm.dateOfBirth}
+                    onChange={(event) => updateProfileField('dateOfBirth', event.target.value)}
                   />
                 </CustomerFormField>
                 <CustomerPrimaryButton type="submit" disabled={profileFormSaving}>

@@ -259,6 +259,7 @@ export async function getWorkshopKpis({ startDate, endDate }) {
   }
 
   const round1 = (n) => Math.round(n * 10) / 10;
+  const retentionRate = await getRetentionRate(start, end);
 
   return {
     startDate: start,
@@ -276,5 +277,37 @@ export async function getWorkshopKpis({ startDate, endDate }) {
     // measure, now that comebacks are linked to their original order.
     comebacksOpened,
     comebackRate: ordersOpened.length > 0 ? round1((comebacksOpened / ordersOpened.length) * 100) : 0,
+    // Share of this period's customers who'd already been in before it
+    // started — a repeat-visit measure, distinct from comebackRate (redone
+    // work) — see getRetentionRate.
+    retentionRate,
   };
+}
+
+/**
+ * Retention rate (doc 14.4): of the customers actually served in the period,
+ * what share were repeat customers — had at least one delivered order before
+ * the period even started — rather than a first-time visit. Answers "are we
+ * keeping customers", distinct from comebackRate ("did we redo our own work").
+ */
+async function getRetentionRate(start, end) {
+  const periodCustomers = await RepairOrderModel.aggregate([
+    { $match: { deliveredAt: { $gte: start, $lte: end } } },
+    { $lookup: { from: "vehicles", localField: "vehicleId", foreignField: "_id", as: "vehicle" } },
+    { $unwind: "$vehicle" },
+    { $match: { "vehicle.customerId": { $ne: null } } },
+    { $group: { _id: "$vehicle.customerId" } },
+  ]);
+  if (!periodCustomers.length) return 0;
+
+  const periodCustomerIds = periodCustomers.map((row) => row._id);
+  const returningCustomers = await RepairOrderModel.aggregate([
+    { $match: { deliveredAt: { $lt: start } } },
+    { $lookup: { from: "vehicles", localField: "vehicleId", foreignField: "_id", as: "vehicle" } },
+    { $unwind: "$vehicle" },
+    { $match: { "vehicle.customerId": { $in: periodCustomerIds } } },
+    { $group: { _id: "$vehicle.customerId" } },
+  ]);
+
+  return Math.round((returningCustomers.length / periodCustomerIds.length) * 1000) / 10;
 }

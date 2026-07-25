@@ -10,6 +10,8 @@ export const REMINDER_TYPES = [
   "warrantyExpiry",
   "deferredWork",
   "lapsedCustomer",
+  // Customer-level, not vehicle-level — see vehicleId below.
+  "birthday",
 ];
 
 export const REMINDER_STATUSES = ["pending", "sent", "dismissed", "done"];
@@ -28,10 +30,13 @@ export const REMINDER_STATUSES = ["pending", "sent", "dismissed", "done"];
  */
 const reminderSchema = new Schema(
   {
+    // Required for every type except "birthday", which is about the customer,
+    // not any one of their vehicles — enforced in the service layer, not here,
+    // since Mongoose can't conditionally require a field by a sibling's value
+    // without a custom validator.
     vehicleId: {
       type: Schema.Types.ObjectId,
       ref: "Vehicle",
-      required: true,
     },
     customerId: {
       type: Schema.Types.ObjectId,
