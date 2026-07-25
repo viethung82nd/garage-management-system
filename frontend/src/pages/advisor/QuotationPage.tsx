@@ -279,18 +279,11 @@ export function QuotationPage() {
   const [services, setServices] = useState<ApiService[]>([]);
   const [, setCategories] = useState<ApiServiceCategory[]>([]);
   const [pickedServiceId, setPickedServiceId] = useState("");
-  // Toolbar-level "add from parts catalog" — mirrors the service picker above
-  // so adding a real part is exactly as easy as adding a real service, instead
-  // of only being reachable by first adding a blank part line and searching
-  // inside its row.
-  const [toolbarPartQuery, setToolbarPartQuery] = useState("");
-  const [toolbarPartOptions, setToolbarPartOptions] = useState<
-    ApiPartOption[]
-  >([]);
-  const [pickedPart, setPickedPart] = useState<ApiPartOption | null>(null);
-  const toolbarPartTimer = useRef<ReturnType<typeof setTimeout> | undefined>(
-    undefined,
-  );
+  // Full parts catalog, preloaded once — same idea as `services` above, so
+  // both catalog pickers open as a browsable dropdown instead of staying
+  // empty until the user types something.
+  const [partsCatalog, setPartsCatalog] = useState<ApiPartOption[]>([]);
+  const [pickedPartId, setPickedPartId] = useState("");
   const {
     message: apiMessage,
     tone: apiTone,
@@ -412,9 +405,10 @@ export function QuotationPage() {
 
     async function loadServices() {
       try {
-        const [catalog, categoryResponse] = await Promise.all([
+        const [catalog, categoryResponse, partsResponse] = await Promise.all([
           fetchWorkshopServices(authToken),
           fetchServiceCategories(),
+          searchParts(authToken, ""),
         ]);
         if (cancelled) return;
         setServices(Array.isArray(catalog) ? catalog : []);
@@ -423,6 +417,7 @@ export function QuotationPage() {
             ? categoryResponse
             : categoryResponse?.categories || [],
         );
+        setPartsCatalog(unwrapArray<ApiPartOption>(partsResponse, ["parts"]));
       } catch (err) {
         if (!cancelled)
           showError(
@@ -475,37 +470,19 @@ export function QuotationPage() {
     setLines((current) => [...current, makeLine({ kind })]);
   }
 
-  // Debounced parts-catalogue lookup for the toolbar's "add from parts
-  // catalog" picker — same pattern as searchPartsForLine below, one level up.
-  function searchToolbarParts(query: string) {
-    setToolbarPartQuery(query);
-    setPickedPart(null);
-    if (!token) return;
-    if (toolbarPartTimer.current) clearTimeout(toolbarPartTimer.current);
-    toolbarPartTimer.current = setTimeout(async () => {
-      try {
-        const response = await searchParts(token, query);
-        setToolbarPartOptions(unwrapArray<ApiPartOption>(response, ["parts"]));
-      } catch {
-        // Search picker degrades to no suggestions on failure — not a hard error.
-      }
-    }, 300);
-  }
-
   function addPickedPartLine() {
-    if (!pickedPart) return;
+    const part = partsCatalog.find((item) => item._id === pickedPartId);
+    if (!part) return;
     setLines((current) => [
       ...current,
       makeLine({
         kind: "part",
-        description: pickedPart.name,
-        partId: pickedPart._id,
-        unitPrice: pickedPart.unitPrice,
+        description: part.name,
+        partId: part._id,
+        unitPrice: part.unitPrice,
       }),
     ]);
-    setPickedPart(null);
-    setToolbarPartQuery("");
-    setToolbarPartOptions([]);
+    setPickedPartId("");
   }
 
   // Debounced parts-catalogue lookup for a single "part" line's picker.
@@ -1025,7 +1002,8 @@ export function QuotationPage() {
                                           size="small"
                                           value={line.description}
                                           options={(
-                                            partOptions[line.id] || []
+                                            partOptions[line.id] ??
+                                            partsCatalog
                                           ).map((part) => ({
                                             value: part.name,
                                             label: `${part.name} — ${part.sku} (${money(part.unitPrice)})`,
@@ -1273,26 +1251,24 @@ export function QuotationPage() {
                     Add
                   </Button>
 
-                  <AutoComplete
-                    filterOption={false}
-                    onChange={setToolbarPartQuery}
-                    onSearch={searchToolbarParts}
-                    onSelect={(_value, option) =>
-                      setPickedPart(
-                        (option as unknown as { part: ApiPartOption }).part,
-                      )
+                  <Select
+                    showSearch
+                    filterOption={(input, option) =>
+                      String(option?.label ?? "")
+                        .toLowerCase()
+                        .includes(input.toLowerCase())
                     }
-                    options={toolbarPartOptions.map((part) => ({
-                      value: part.name,
+                    onChange={setPickedPartId}
+                    options={partsCatalog.map((part) => ({
                       label: `${part.name} — ${part.sku} (${money(part.unitPrice)})`,
-                      part,
+                      value: part._id,
                     }))}
                     placeholder="Add from parts catalog..."
                     style={{ minWidth: 260 }}
-                    value={toolbarPartQuery}
+                    value={pickedPartId || undefined}
                   />
                   <Button
-                    disabled={!pickedPart}
+                    disabled={!pickedPartId}
                     icon={<PlusOutlined />}
                     onClick={addPickedPartLine}
                   >
