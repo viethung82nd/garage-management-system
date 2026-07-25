@@ -8,6 +8,8 @@ import { userRepository } from "../repositories/user.repository.js";
 import { BOOKING_STATUSES } from "../models/booking.model.js";
 import { REPORT_PERIODS } from "../models/revenue-report.model.js";
 import { USER_ROLES } from "../models/user.model.js";
+import { TERMINAL_ORDER_STATUSES } from "../models/repair-order.model.js";
+import { TimeLogModel } from "../models/index.js";
 import { ApiError } from "../utils/apiError.js";
 import { todayUtc } from "../utils/date.js";
 
@@ -360,6 +362,40 @@ export async function getTechnicianPerformance({ startDate, endDate }) {
 }
 
 /**
+ * Adds `activeOrders` (repair orders currently assigned to this technician
+ * that haven't reached a terminal status) and `status` (busy = has an open
+ * time log running right now, offline = deactivated account, else
+ * available) to a list of technician users. Neither of those lives on the
+ * User model — without this, every technician picker (work-order
+ * assignment, transfer requests) silently reads "0 active, Available" for
+ * everyone regardless of real workload, which defeats the point of showing
+ * it at all.
+ */
+async function enrichTechnicians(users) {
+  if (!users.length) return users;
+  const technicianIds = users.map((user) => user._id);
+
+  const [orderCounts, openTimeLogs] = await Promise.all([
+    repairOrderRepository.model.aggregate([
+      { $match: { technicianId: { $in: technicianIds }, status: { $nin: TERMINAL_ORDER_STATUSES } } },
+      { $group: { _id: "$technicianId", count: { $sum: 1 } } },
+    ]),
+    TimeLogModel.find({ technicianId: { $in: technicianIds }, endedAt: null })
+      .select("technicianId")
+      .lean(),
+  ]);
+
+  const activeOrdersById = new Map(orderCounts.map((row) => [String(row._id), row.count]));
+  const busyIds = new Set(openTimeLogs.map((log) => String(log.technicianId)));
+
+  return users.map((user) => ({
+    ...user,
+    activeOrders: activeOrdersById.get(String(user._id)) || 0,
+    status: user.isActive === false ? "offline" : busyIds.has(String(user._id)) ? "busy" : "available",
+  }));
+}
+
+/**
  * List users for admin account management. Optional `role` filters to a single
  * role (validated against USER_ROLES). Returns a lean projection without
  * passwordHash, newest first.
@@ -375,7 +411,7 @@ export async function listUsers({ role }, requesterRole) {
       .find({ role: "technician" }, USER_LIST_FIELDS)
       .sort({ createdAt: -1 })
       .lean();
-    return { users };
+    return { users: await enrichTechnicians(users) };
   }
 
   const filter = {};
@@ -391,7 +427,7 @@ export async function listUsers({ role }, requesterRole) {
     .sort({ createdAt: -1 })
     .lean();
 
-  return { users };
+  return { users: filter.role === "technician" ? await enrichTechnicians(users) : users };
 }
 
 /**
