@@ -226,8 +226,15 @@ function DonutChart({
   }
 
   return (
-    <div className="grid gap-5 *:min-w-0 lg:grid-cols-[180px_minmax(0,1fr)] lg:items-center">
-      <div className="relative mx-auto h-[180px] w-[180px]">
+    // Stacked, not a side-by-side grid: the two cards in this row are packed
+    // by `auto-fit, minmax(320px, 1fr)`, so card width depends on how many
+    // siblings fit the *viewport*, not on the viewport breakpoint itself —a
+    // `lg:` 2-column split fired even when the card itself was squeezed down
+    // to ~300px, forcing the legend into a column too narrow for its
+    // currency values (which can't shrink) and pushing them past the card
+    // edge. Full-width stacking is correct at every card width.
+    <div className="flex flex-col items-center gap-5">
+      <div className="relative h-40 w-40 shrink-0">
         <svg viewBox="0 0 220 220" className="h-full w-full -rotate-90">
           <circle cx="110" cy="110" r="72" fill="none" stroke="#eef1f5" strokeWidth="22" />
           {data.map((item) => {
@@ -252,7 +259,7 @@ function DonutChart({
           })}
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center text-center">
-          <div className="text-[22px] leading-none font-semibold" style={{ color: dashboardPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
+          <div className="text-[18px] leading-none font-semibold" style={{ color: dashboardPalette.ink, fontVariantNumeric: 'tabular-nums' }}>
             {formatValue(total)}
           </div>
           <div className="mt-2 text-[11px] font-semibold uppercase tracking-[0.18em]" style={{ color: dashboardPalette.textMuted }}>
@@ -261,14 +268,14 @@ function DonutChart({
         </div>
       </div>
 
-      <div className="space-y-2">
+      <div className="w-full min-w-0 space-y-2">
         {data.map((item) => (
           <div
             key={item.label}
-            className="flex items-center justify-between gap-4 rounded-xl px-4 py-2.5 transition-colors duration-150 hover:bg-black/3"
+            className="flex min-w-0 items-center justify-between gap-4 rounded-xl px-4 py-2.5 transition-colors duration-150 hover:bg-black/3"
           >
-            <div className="flex items-center gap-3">
-              <span className="h-2.5 w-2.5 rounded-full" style={{ background: item.color }} />
+            <div className="flex min-w-0 items-center gap-3">
+              <span className="h-2.5 w-2.5 shrink-0 rounded-full" style={{ background: item.color }} />
               <span className="truncate text-sm font-medium" style={{ color: dashboardPalette.inkSoft }} title={item.label}>
                 {item.label}
               </span>
