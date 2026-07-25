@@ -60,6 +60,10 @@ function toDisplayOrderId(id: string) {
   return `RO-${id.slice(-6).toUpperCase()}`
 }
 
+function toDisplayBookingId(id: string) {
+  return `APT-${id.slice(-6).toUpperCase()}`
+}
+
 function paymentMethodLabel(method?: string | null) {
   switch (method) {
     case 'bankTransfer':
@@ -112,24 +116,21 @@ function mapUpcomingStatus(status: string) {
   return { statusLabel: 'Pending review', statusTone: 'pending' as const }
 }
 
-type UpcomingAppointmentRow = {
-  key: string
-  bookingId: string
-  dateLabel: string
-  timeSlot: string
-  vehicle: string
-  plate: string
-  service: string
-  statusLabel: string
-  statusTone: 'completed' | 'in-progress' | 'pending' | 'ready'
-}
-
 type BookingRow = {
   key: string
+  // Distinguishes a real repair order from a booking that hasn't been
+  // received yet — the Action column and its click handler branch on this.
+  kind: 'order' | 'upcoming'
+  // Set only for kind: 'upcoming' — the raw Booking id the Cancel action
+  // needs (a repair order has no booking id of its own to cancel).
+  bookingId?: string
   orderId: string
   displayId: string
   invoiceId: string
   dateTime: string
+  // Raw ISO-sortable date used to interleave upcoming (future) bookings
+  // and past repair orders into one chronological list.
+  sortKey: string
   vehicle: string
   plate: string
   intakeType: 'Appointment' | 'Walk-in'
@@ -206,10 +207,12 @@ export default function CustomerBookingsPage() {
 
       return {
         key: order._id,
+        kind: 'order' as const,
         orderId: order._id,
         displayId: toDisplayOrderId(order._id),
         invoiceId: invoice?.displayId || 'Invoice pending',
         dateTime: formatDateTime(order.startedAt || order.completedAt),
+        sortKey: order.startedAt || order.completedAt || '',
         vehicle: formatVehicle(order),
         plate: order.vehicleId?.licensePlate || '',
         intakeType: linkedBooking?.source === 'walkIn' ? 'Walk-in' : 'Appointment',
@@ -233,35 +236,47 @@ export default function CustomerBookingsPage() {
   }, [bookings, invoices, repairOrders])
 
   // Bookings still awaiting reception — once a service advisor receives the
-  // vehicle, repairOrderId is set and it moves into Booking history above
-  // instead (it's no longer something the customer can self-cancel).
-  const upcomingAppointments = useMemo<UpcomingAppointmentRow[]>(() => {
+  // vehicle, repairOrderId is set and it moves out of here (it's a real
+  // order above instead, and no longer something the customer can cancel).
+  // Shaped as BookingRow so it can sit in the very same table/status filter
+  // as repair-order history rather than a separate section.
+  const upcomingRows = useMemo<BookingRow[]>(() => {
     return bookings
       .filter(
         (booking) =>
           ['pending', 'confirmed', 'rescheduled'].includes(booking.status) && !booking.repairOrderId,
       )
-      .slice()
-      .sort((a, b) =>
-        a.bookingDate === b.bookingDate
-          ? a.timeSlot.localeCompare(b.timeSlot)
-          : a.bookingDate.localeCompare(b.bookingDate),
-      )
       .map((booking) => {
         const visualStatus = mapUpcomingStatus(booking.status)
         return {
           key: booking._id,
+          kind: 'upcoming' as const,
           bookingId: booking._id,
-          dateLabel: formatBookingDateOnly(booking.bookingDate),
-          timeSlot: booking.timeSlot,
+          orderId: booking._id,
+          displayId: toDisplayBookingId(booking._id),
+          invoiceId: 'Not yet invoiced',
+          dateTime: `${formatBookingDateOnly(booking.bookingDate)} · ${booking.timeSlot}`,
+          sortKey: booking.bookingDate,
           vehicle: [booking.vehicleId?.brand, booking.vehicleId?.model].filter(Boolean).join(' ') || 'Vehicle updating',
           plate: booking.vehicleId?.licensePlate || 'Not recorded',
-          service: booking.serviceId?.name || 'Service to be discussed',
+          intakeType: booking.source === 'walkIn' ? 'Walk-in' : 'Appointment',
+          advisor: booking.advisorId?.fullName || 'Awaiting reception',
+          technician: 'Not assigned yet',
+          garageName: GARAGE_NAME,
+          amount: '—',
+          paymentMethod: '—',
+          invoiceStatus: '—',
           statusLabel: visualStatus.statusLabel,
           statusTone: visualStatus.statusTone,
         }
       })
   }, [bookings])
+
+  // One combined, chronologically-sorted list — an upcoming (future) booking
+  // naturally sorts to the top since its date is later than any past order.
+  const allBookingRows = useMemo<BookingRow[]>(() => {
+    return [...upcomingRows, ...bookingHistory].sort((a, b) => b.sortKey.localeCompare(a.sortKey))
+  }, [upcomingRows, bookingHistory])
 
   function openCancelModal(bookingId: string) {
     setCancelTargetId(bookingId)
@@ -296,7 +311,7 @@ export default function CustomerBookingsPage() {
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
 
-    return bookingHistory.filter((booking) => {
+    return allBookingRows.filter((booking) => {
       const matchesQuery =
         normalizedQuery.length === 0 ||
         booking.displayId.toLowerCase().includes(normalizedQuery) ||
@@ -307,20 +322,20 @@ export default function CustomerBookingsPage() {
 
       return matchesQuery && matchesStatus
     })
-  }, [bookingHistory, query, status])
+  }, [allBookingRows, query, status])
 
   const summary = useMemo(
     () => ({
-      completed: bookingHistory.filter((booking) => booking.statusTone === 'completed').length,
-      inProgress: bookingHistory.filter((booking) => booking.statusTone === 'in-progress').length,
-      pending: bookingHistory.filter((booking) => booking.statusTone === 'pending' || booking.statusTone === 'ready').length,
+      completed: allBookingRows.filter((booking) => booking.statusTone === 'completed').length,
+      inProgress: allBookingRows.filter((booking) => booking.statusTone === 'in-progress').length,
+      pending: allBookingRows.filter((booking) => booking.statusTone === 'pending' || booking.statusTone === 'ready').length,
     }),
-    [bookingHistory],
+    [allBookingRows],
   )
 
   const selectedBooking = useMemo(
-    () => bookingHistory.find((booking) => booking.displayId === selectedBookingId) ?? null,
-    [bookingHistory, selectedBookingId],
+    () => allBookingRows.find((booking) => booking.displayId === selectedBookingId) ?? null,
+    [allBookingRows, selectedBookingId],
   )
 
   async function openBookingDetail(booking: BookingRow) {
@@ -396,58 +411,6 @@ export default function CustomerBookingsPage() {
       </section>
 
       <section className="customer-section">
-        <CustomerSectionHeading
-          eyebrow="Upcoming"
-          title="Upcoming appointments"
-          description="Appointments awaiting confirmation or already on the calendar."
-          compact
-          centered
-        />
-
-        {upcomingAppointments.length === 0 ? (
-          <CustomerEmptyState title="No upcoming appointments" description="Book a new appointment any time from the homepage." />
-        ) : (
-          <div className="customer-bookings-table-wrap">
-            <div className="customer-bookings-table-scroll">
-              <table className="customer-bookings-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Time</th>
-                    <th>Vehicle</th>
-                    <th>Service</th>
-                    <th>Status</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {upcomingAppointments.map((appointment) => (
-                    <tr key={appointment.key}>
-                      <td>{appointment.dateLabel}</td>
-                      <td>{appointment.timeSlot}</td>
-                      <td>
-                        <strong>{appointment.vehicle}</strong>
-                        <span>{appointment.plate}</span>
-                      </td>
-                      <td>{appointment.service}</td>
-                      <td>
-                        <CustomerStatusBadge tone={appointment.statusTone}>{appointment.statusLabel}</CustomerStatusBadge>
-                      </td>
-                      <td>
-                        <button type="button" className="customer-table-link" onClick={() => openCancelModal(appointment.bookingId)}>
-                          Cancel
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        )}
-      </section>
-
-      <section className="customer-section">
         {filteredBookings.length === 0 ? (
           <CustomerEmptyState title="No booking found" description="Try another keyword or reset the status filter." />
         ) : (
@@ -485,9 +448,15 @@ export default function CustomerBookingsPage() {
                       <td>{booking.invoiceStatus}</td>
                       <td className="customer-bookings-table__amount">{booking.amount}</td>
                       <td>
-                        <button type="button" className="customer-table-link" onClick={() => void openBookingDetail(booking)}>
-                          View detail
-                        </button>
+                        {booking.kind === 'upcoming' ? (
+                          <button type="button" className="customer-table-link" onClick={() => openCancelModal(booking.bookingId!)}>
+                            Cancel
+                          </button>
+                        ) : (
+                          <button type="button" className="customer-table-link" onClick={() => void openBookingDetail(booking)}>
+                            View detail
+                          </button>
+                        )}
                       </td>
                     </tr>
                   ))}
