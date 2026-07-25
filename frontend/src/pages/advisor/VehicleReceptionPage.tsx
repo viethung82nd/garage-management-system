@@ -1,10 +1,9 @@
 import {
   CarOutlined,
   CheckOutlined,
-  PlusOutlined,
   SearchOutlined,
   UserAddOutlined,
-} from "@ant-design/icons";
+} from '@ant-design/icons'
 import {
   Alert,
   Avatar,
@@ -12,17 +11,13 @@ import {
   Card,
   Col,
   Empty,
-  Image,
   Input,
   InputNumber,
   Row,
-  Select,
   Tag,
-  Upload,
-} from "antd";
-import type { UploadFile } from "antd/es/upload/interface";
-import { useEffect, useMemo, useState } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+} from 'antd'
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   createVehicleReception,
   fetchVehicleHistory,
@@ -33,141 +28,100 @@ import {
   vehiclePlate,
   type ApiBooking,
   type ReceptionResponse,
-} from "../../shared/api/workshop";
-import { getUserInitials, useAuth } from "../../shared/auth";
-import { SignaturePad } from "../../shared/ui/SignaturePad";
-import {
-  InlineBanner,
-  advisorPalette,
-  useApiMessage,
-} from "../../widgets/backoffice-shell";
-import { ServiceAdvisorShell } from "../../widgets/service-advisor-shell";
+} from '../../shared/api/workshop'
+import { getUserInitials, useAuth } from '../../shared/auth'
+import { InlineBanner, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
+import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
-const { TextArea } = Input;
+const { TextArea } = Input
 
-type PlateStatus = "idle" | "checking" | "found" | "not-found";
+type PlateStatus = 'idle' | 'checking' | 'found' | 'not-found'
 
 type ReceptionForm = {
-  address: string;
-  appointmentDate: string;
-  appointmentTime: string;
-  customerEmail: string;
-  customerName: string;
-  engineNo: string;
-  issueDescription: string;
-  mileage: string;
-  model: string;
-  phone: string;
-  plate: string;
-  vin: string;
-  year: string;
-};
+  address: string
+  appointmentDate: string
+  appointmentTime: string
+  customerEmail: string
+  customerName: string
+  engineNo: string
+  issueDescription: string
+  mileage: string
+  model: string
+  phone: string
+  plate: string
+  vin: string
+  year: string
+}
 
 type HistorySuggestion = {
-  id: string;
-  address: string;
-  customerEmail: string;
-  customerName: string;
-  engineNo: string;
-  lastVisit: string;
-  mileage: string;
-  model: string;
-  phone: string;
-  plate: string;
-  recommendedServices: string[];
-  riskNote: string;
-  vin: string;
-  year: string;
-};
+  id: string
+  address: string
+  customerEmail: string
+  customerName: string
+  engineNo: string
+  lastVisit: string
+  mileage: string
+  model: string
+  phone: string
+  plate: string
+  recommendedServices: string[]
+  riskNote: string
+  vin: string
+  year: string
+}
 
 const emptyForm: ReceptionForm = {
-  address: "",
-  appointmentDate: "",
-  appointmentTime: "",
-  customerEmail: "",
-  customerName: "",
-  engineNo: "",
-  issueDescription: "",
-  mileage: "",
-  model: "",
-  phone: "",
-  plate: "",
-  vin: "",
-  year: "",
-};
+  address: '',
+  appointmentDate: '',
+  appointmentTime: '',
+  customerEmail: '',
+  customerName: '',
+  engineNo: '',
+  issueDescription: '',
+  mileage: '',
+  model: '',
+  phone: '',
+  plate: '',
+  vin: '',
+  year: '',
+}
 
 function mapHistorySuggestion(item: any): HistorySuggestion {
-  const vehicle = item.vehicleId || item.vehicle || item;
-  const customer = item.customerId || item.customer || vehicle.customerId || {};
+  const vehicle = item.vehicleId || item.vehicle || item
+  const customer = item.customerId || item.customer || vehicle.customerId || {}
 
   return {
-    address: customer.address || item.address || "",
-    customerEmail: customer.email || item.customerEmail || "",
-    customerName: customer.fullName || item.customerName || "Customer",
-    engineNo: vehicle.engineNumber || item.engineNo || "",
+    address: customer.address || item.address || '',
+    customerEmail: customer.email || item.customerEmail || '',
+    customerName: customer.fullName || item.customerName || 'Customer',
+    engineNo: vehicle.engineNumber || item.engineNo || '',
     id: item._id || item.id || vehicle._id || crypto.randomUUID(),
     lastVisit:
       item.lastVisit || item.updatedAt || item.createdAt
         ? formatApiDate(item.lastVisit || item.updatedAt || item.createdAt)
-        : "Not updated",
-    mileage: String(item.mileage || vehicle.mileage || ""),
+        : 'Not updated',
+    mileage: String(item.mileage || vehicle.mileage || ''),
     model:
-      [vehicle.brand, vehicle.model].filter(Boolean).join(" ") ||
-      vehicle.model ||
-      item.model ||
-      "",
-    phone: customer.phone || item.phone || "",
-    plate: vehicle.licensePlate || vehicle.plate || item.plate || "",
+      [vehicle.brand, vehicle.model].filter(Boolean).join(' ') || vehicle.model || item.model || '',
+    phone: customer.phone || item.phone || '',
+    plate: vehicle.licensePlate || vehicle.plate || item.plate || '',
     recommendedServices:
       item.recommendedServices ||
       item.services
         ?.map((service: any) => service.name || service.serviceId?.name)
         .filter(Boolean) ||
       [],
-    riskNote: item.riskNote || item.note || "No risk notes on file.",
-    vin: vehicle.vin || vehicle.chassisNumber || item.vin || "",
-    year: String(vehicle.year || item.year || ""),
-  };
+    riskNote: item.riskNote || item.note || 'No risk notes on file.',
+    vin: vehicle.vin || vehicle.chassisNumber || item.vin || '',
+    year: String(vehicle.year || item.year || ''),
+  }
 }
 
 function normalizePlate(value: string) {
-  return value.replace(/[^a-zA-Z0-9]/g, "").toLowerCase();
+  return value.replace(/[^a-zA-Z0-9]/g, '').toLowerCase()
 }
 
-const fuelLevelOptions = ["Empty", "1/4", "1/2", "3/4", "Full"];
-
-function fileToDataUrl(file: File): Promise<string> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result as string);
-    reader.onerror = reject;
-    reader.readAsDataURL(file);
-  });
-}
-
-// Walk-around photos and the signature pad are captured locally as data URLs
-// (see the FileReader above) rather than uploaded to a separate endpoint —
-// reception stays a single JSON POST, and the file already has a `url` when
-// it came back from a prior save, so that's reused instead of re-reading it.
-async function filesToDataUrls(files: UploadFile[]): Promise<string[]> {
-  const converted = await Promise.all(
-    files.map((file) => {
-      if (file.url) return Promise.resolve(file.url);
-      return file.originFileObj
-        ? fileToDataUrl(file.originFileObj as File)
-        : Promise.resolve("");
-    }),
-  );
-  return converted.filter(Boolean);
-}
-
-function LabeledField({
-  label,
-  children,
-}: {
-  label: string;
-  children: React.ReactNode;
-}) {
+function LabeledField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
     <div>
       <div
@@ -175,200 +129,157 @@ function LabeledField({
           color: advisorPalette.textMuted,
           fontSize: 11,
           fontWeight: 700,
-          letterSpacing: "0.1em",
+          letterSpacing: '0.1em',
           marginBottom: 6,
-          textTransform: "uppercase",
+          textTransform: 'uppercase',
         }}
       >
         {label}
       </div>
       {children}
     </div>
-  );
+  )
 }
 
 export function VehicleReceptionPage() {
-  const { token } = useAuth();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const bookingId = searchParams.get("bookingId") || undefined;
-  const [form, setForm] = useState<ReceptionForm>(emptyForm);
-  const [historySuggestions, setHistorySuggestions] = useState<
-    HistorySuggestion[]
-  >([]);
-  const {
-    message: apiMessage,
-    showError,
-    clear: clearApiMessage,
-  } = useApiMessage();
-  const [fieldErrors, setFieldErrors] = useState<
-    Partial<Record<keyof ReceptionForm, string>>
-  >({});
-  const [saving, setSaving] = useState(false);
-  const [plateStatus, setPlateStatus] = useState<PlateStatus>("idle");
-  const [appliedSuggestionId, setAppliedSuggestionId] = useState<string>();
-  const [newWalkIn, setNewWalkIn] = useState(false);
-  const [sourceBooking, setSourceBooking] = useState<ApiBooking | null>(null);
+  const { token } = useAuth()
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const bookingId = searchParams.get('bookingId') || undefined
+  const [form, setForm] = useState<ReceptionForm>(emptyForm)
+  const [historySuggestions, setHistorySuggestions] = useState<HistorySuggestion[]>([])
+  const { message: apiMessage, showError, clear: clearApiMessage } = useApiMessage()
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<keyof ReceptionForm, string>>>({})
+  const [saving, setSaving] = useState(false)
+  const [plateStatus, setPlateStatus] = useState<PlateStatus>('idle')
+  const [appliedSuggestionId, setAppliedSuggestionId] = useState<string>()
+  const [newWalkIn, setNewWalkIn] = useState(false)
+  const [sourceBooking, setSourceBooking] = useState<ApiBooking | null>(null)
   // Set only when the just-saved reception came back with a comeback/odometer
   // warning — holds navigation so the advisor actually sees it instead of it
   // flashing by on the way to the inspection page.
-  const [receptionWarnings, setReceptionWarnings] = useState<
-    ReceptionResponse["warnings"]
-  >();
-  const [pendingOrderId, setPendingOrderId] = useState<string>();
-  // Walk-around intake capture — fuel level, tow-in flag, damage photos and
-  // the customer's authorising signature, gathered while circling the
-  // vehicle at hand-in. Kept outside `form` since none of it participates in
-  // validateForm()'s pass-through-from-history semantics.
-  const [fuelLevel, setFuelLevel] = useState<string>();
-  // The "arrived on a tow" checkbox is hidden (see the walk-around intake
-  // card below) until something downstream actually reads isTowIn — kept as
-  // an always-false constant rather than deleted so restoring the checkbox
-  // is a one-line change.
-  const isTowIn = false;
-  const [photoFiles, setPhotoFiles] = useState<UploadFile[]>([]);
-  const [receptionSignature, setReceptionSignature] = useState<string | undefined>();
-  const [previewImage, setPreviewImage] = useState("");
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [receptionWarnings, setReceptionWarnings] = useState<ReceptionResponse['warnings']>()
+  const [pendingOrderId, setPendingOrderId] = useState<string>()
 
   // Arriving from "Confirm" on the booking-requests queue: pre-fill from the
   // booking instead of asking the SA to search for a customer that's already
   // sitting right there in the booking record.
   useEffect(() => {
-    if (!token || !bookingId) return;
-    let cancelled = false;
+    if (!token || !bookingId) return
+    let cancelled = false
 
     async function loadBooking() {
       try {
-        const response = await fetchWorkshopBookingById(token!, bookingId!);
+        const response = await fetchWorkshopBookingById(token!, bookingId!)
         const booking = (
-          "booking" in response && response.booking
-            ? response.booking
-            : response
-        ) as ApiBooking;
-        if (cancelled || !booking) return;
-        setSourceBooking(booking);
-        const customer = booking.customerId || booking.customer;
-        const vehicle = booking.vehicleId || booking.vehicle;
+          'booking' in response && response.booking ? response.booking : response
+        ) as ApiBooking
+        if (cancelled || !booking) return
+        setSourceBooking(booking)
+        const customer = booking.customerId || booking.customer
+        const vehicle = booking.vehicleId || booking.vehicle
         setForm((current) => ({
           ...current,
-          customerName: personName(customer, ""),
-          phone: typeof customer === "object" ? customer?.phone || "" : "",
-          customerEmail:
-            typeof customer === "object" ? customer?.email || "" : "",
-          plate: vehiclePlate(vehicle).replace("No plate", ""),
-          model: formatVehicleName(vehicle).replace("Unknown vehicle", ""),
-          vin: vehicle?.vin || vehicle?.chassisNumber || "",
-        }));
-        setPlateStatus("found");
+          customerName: personName(customer, ''),
+          phone: typeof customer === 'object' ? customer?.phone || '' : '',
+          customerEmail: typeof customer === 'object' ? customer?.email || '' : '',
+          plate: vehiclePlate(vehicle).replace('No plate', ''),
+          model: formatVehicleName(vehicle).replace('Unknown vehicle', ''),
+          vin: vehicle?.vin || vehicle?.chassisNumber || '',
+        }))
+        setPlateStatus('found')
       } catch (err) {
         if (!cancelled)
-          showError(
-            err instanceof Error
-              ? err.message
-              : "Unable to load the booking to receive",
-          );
+          showError(err instanceof Error ? err.message : 'Unable to load the booking to receive')
       }
     }
 
-    void loadBooking();
+    void loadBooking()
     return () => {
-      cancelled = true;
-    };
-  }, [token, bookingId]);
+      cancelled = true
+    }
+  }, [token, bookingId])
 
-  const revealed = Boolean(bookingId) || plateStatus !== "idle" || newWalkIn;
+  const revealed = Boolean(bookingId) || plateStatus !== 'idle' || newWalkIn
 
   useEffect(() => {
-    if (!token) return;
-    const authToken = token;
+    if (!token) return
+    const authToken = token
 
-    let cancelled = false;
+    let cancelled = false
 
     async function loadHistory() {
-      clearApiMessage();
+      clearApiMessage()
       try {
-        const response = await fetchVehicleHistory(authToken);
-        const rawSuggestions = Array.isArray(response)
-          ? response
-          : response.suggestions || [];
-        if (!cancelled)
-          setHistorySuggestions(rawSuggestions.map(mapHistorySuggestion));
+        const response = await fetchVehicleHistory(authToken)
+        const rawSuggestions = Array.isArray(response) ? response : response.suggestions || []
+        if (!cancelled) setHistorySuggestions(rawSuggestions.map(mapHistorySuggestion))
       } catch (err) {
         if (!cancelled)
           showError(
-            err instanceof Error
-              ? err.message
-              : "Unable to load reception history from the API",
-          );
+            err instanceof Error ? err.message : 'Unable to load reception history from the API',
+          )
       }
     }
 
-    void loadHistory();
+    void loadHistory()
 
     return () => {
-      cancelled = true;
-    };
-  }, [token]);
+      cancelled = true
+    }
+  }, [token])
 
   const matchingSuggestions = useMemo(() => {
-    const normalizedPlate = normalizePlate(form.plate);
+    const normalizedPlate = normalizePlate(form.plate)
     if (!normalizedPlate) {
-      return historySuggestions;
+      return historySuggestions
     }
 
     return historySuggestions.filter((suggestion) =>
       normalizePlate(suggestion.plate).includes(normalizedPlate),
-    );
-  }, [form.plate, historySuggestions]);
+    )
+  }, [form.plate, historySuggestions])
 
   const activeSuggestion = historySuggestions.find(
     (suggestion) => suggestion.id === appliedSuggestionId,
-  );
+  )
 
-  function updateField<Key extends keyof ReceptionForm>(
-    key: Key,
-    value: ReceptionForm[Key],
-  ) {
-    setForm((current) => ({ ...current, [key]: value }));
-    setFieldErrors((current) =>
-      current[key] ? { ...current, [key]: undefined } : current,
-    );
-    if (key === "plate") {
-      setPlateStatus("idle");
-      setAppliedSuggestionId(undefined);
+  function updateField<Key extends keyof ReceptionForm>(key: Key, value: ReceptionForm[Key]) {
+    setForm((current) => ({ ...current, [key]: value }))
+    setFieldErrors((current) => (current[key] ? { ...current, [key]: undefined } : current))
+    if (key === 'plate') {
+      setPlateStatus('idle')
+      setAppliedSuggestionId(undefined)
     }
   }
 
   function applySuggestion(suggestion: HistorySuggestion) {
-    setAppliedSuggestionId(suggestion.id);
-    setPlateStatus("found");
+    setAppliedSuggestionId(suggestion.id)
+    setPlateStatus('found')
     setForm((current) => ({
       ...current,
       address: suggestion.address,
       customerEmail: suggestion.customerEmail,
       customerName: suggestion.customerName,
       engineNo: suggestion.engineNo,
-      issueDescription: `${suggestion.riskNote}\nRecommended services: ${suggestion.recommendedServices.join(", ")}.`,
+      issueDescription: `${suggestion.riskNote}\nRecommended services: ${suggestion.recommendedServices.join(', ')}.`,
       mileage: suggestion.mileage,
       model: suggestion.model,
       phone: suggestion.phone,
       plate: suggestion.plate,
       vin: suggestion.vin,
       year: suggestion.year,
-    }));
+    }))
   }
 
-  const phonePattern = /^0\d{9}$/;
-  const enginePattern = /^[A-Za-z0-9-]{4,30}$/;
+  const phonePattern = /^0\d{9}$/
+  const enginePattern = /^[A-Za-z0-9-]{4,30}$/
 
-  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
   function todayIso() {
-    const now = new Date();
-    return new Date(now.getTime() - now.getTimezoneOffset() * 60000)
-      .toISOString()
-      .slice(0, 10);
+    const now = new Date()
+    return new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10)
   }
 
   // Fields can arrive from history-suggestion/booking prefill data, not just
@@ -377,134 +288,122 @@ export function VehicleReceptionPage() {
   // below and used to fail completely silently (no banner, no console-visible
   // link back to the form).
   function validateForm(): Partial<Record<keyof ReceptionForm, string>> {
-    const errors: Partial<Record<keyof ReceptionForm, string>> = {};
+    const errors: Partial<Record<keyof ReceptionForm, string>> = {}
 
-    const customerName = String(form.customerName ?? "").trim();
-    const phone = String(form.phone ?? "").trim();
-    const email = String(form.customerEmail ?? "").trim();
-    const plate = String(form.plate ?? "").trim();
-    const model = String(form.model ?? "").trim();
-    const engineNo = String(form.engineNo ?? "").trim();
-    const mileage = String(form.mileage ?? "").trim();
-    const appointmentDate = String(form.appointmentDate ?? "").trim();
-    const vin = String(form.vin ?? "")
+    const customerName = String(form.customerName ?? '').trim()
+    const phone = String(form.phone ?? '').trim()
+    const email = String(form.customerEmail ?? '').trim()
+    const plate = String(form.plate ?? '').trim()
+    const model = String(form.model ?? '').trim()
+    const engineNo = String(form.engineNo ?? '').trim()
+    const mileage = String(form.mileage ?? '').trim()
+    const appointmentDate = String(form.appointmentDate ?? '').trim()
+    const vin = String(form.vin ?? '')
       .trim()
-      .toUpperCase();
+      .toUpperCase()
 
-    const vinPattern = /^[A-HJ-NPR-Z0-9]{17}$/;
+    const vinPattern = /^[A-HJ-NPR-Z0-9]{17}$/
     if (!model) {
-      errors.model = "Vehicle model is required.";
+      errors.model = 'Vehicle model is required.'
     }
 
     if (!vin) {
-      errors.vin = "VIN is required.";
+      errors.vin = 'VIN is required.'
     }
     if (!engineNo) {
-      errors.engineNo = "Engine number is required.";
+      errors.engineNo = 'Engine number is required.'
     } else if (!enginePattern.test(engineNo)) {
-      errors.engineNo = "Invalid engine number.";
+      errors.engineNo = 'Invalid engine number.'
     }
     if (!mileage) {
-      errors.mileage = "Mileage is required.";
+      errors.mileage = 'Mileage is required.'
     }
 
-    if (!customerName) errors.customerName = "Customer name is required.";
+    if (!customerName) errors.customerName = 'Customer name is required.'
 
-    if (!phone) errors.phone = "Phone number is required.";
+    if (!phone) errors.phone = 'Phone number is required.'
     else if (!phonePattern.test(phone))
-      errors.phone = "Phone number must contain exactly 10 digits.";
+      errors.phone = 'Phone number must contain exactly 10 digits.'
 
-    if (email && !emailPattern.test(email))
-      errors.customerEmail = "Enter a valid email address.";
+    if (email && !emailPattern.test(email)) errors.customerEmail = 'Enter a valid email address.'
 
-    if (!plate) errors.plate = "License plate is required.";
-    const mileageValue = mileage.replace(/,/g, "");
+    if (!plate) errors.plate = 'License plate is required.'
+    const mileageValue = mileage.replace(/,/g, '')
 
     if (mileage) {
       if (!/^\d+$/.test(mileageValue)) {
-        errors.mileage =
-          "Mileage must contain digits only and cannot be negative.";
+        errors.mileage = 'Mileage must contain digits only and cannot be negative.'
       } else if (Number(mileageValue) < 0) {
-        errors.mileage = "Mileage cannot be negative.";
+        errors.mileage = 'Mileage cannot be negative.'
       }
     }
 
     if (vin && !vinPattern.test(vin))
       errors.vin =
-        "VIN must contain exactly 17 uppercase letters and numbers (excluding I, O and Q).";
+        'VIN must contain exactly 17 uppercase letters and numbers (excluding I, O and Q).'
 
-    const appointmentTime = String(form.appointmentTime ?? "").trim();
+    const appointmentTime = String(form.appointmentTime ?? '').trim()
 
     if (appointmentDate) {
-      const promised = new Date(
-        `${appointmentDate}T${appointmentTime || "00:00"}`,
-      );
+      const promised = new Date(`${appointmentDate}T${appointmentTime || '00:00'}`)
 
       if (promised < new Date()) {
-        errors.appointmentDate =
-          "Promised return date and time cannot be in the past.";
+        errors.appointmentDate = 'Promised return date and time cannot be in the past.'
       }
     }
-    return errors;
+    return errors
   }
 
   async function checkPlate() {
-    if (!token) return;
+    if (!token) return
 
-    setPlateStatus("checking");
-    clearApiMessage();
+    setPlateStatus('checking')
+    clearApiMessage()
 
     try {
-      const response = await fetchVehicleHistory(token, form.plate);
-      const rawSuggestions = Array.isArray(response)
-        ? response
-        : response.suggestions || [];
-      const nextSuggestions = rawSuggestions.map(mapHistorySuggestion);
-      setHistorySuggestions(nextSuggestions);
+      const response = await fetchVehicleHistory(token, form.plate)
+      const rawSuggestions = Array.isArray(response) ? response : response.suggestions || []
+      const nextSuggestions = rawSuggestions.map(mapHistorySuggestion)
+      setHistorySuggestions(nextSuggestions)
 
       const exactMatch = nextSuggestions.find(
-        (suggestion) =>
-          normalizePlate(suggestion.plate) === normalizePlate(form.plate),
-      );
-      const fallbackMatch = nextSuggestions[0];
-      const suggestion = exactMatch ?? fallbackMatch;
+        (suggestion) => normalizePlate(suggestion.plate) === normalizePlate(form.plate),
+      )
+      const fallbackMatch = nextSuggestions[0]
+      const suggestion = exactMatch ?? fallbackMatch
 
       if (suggestion) {
-        applySuggestion(suggestion);
+        applySuggestion(suggestion)
       } else {
-        setAppliedSuggestionId(undefined);
-        setPlateStatus("not-found");
+        setAppliedSuggestionId(undefined)
+        setPlateStatus('not-found')
       }
     } catch (err) {
-      setAppliedSuggestionId(undefined);
-      setPlateStatus("not-found");
+      setAppliedSuggestionId(undefined)
+      setPlateStatus('not-found')
       showError(
-        err instanceof Error
-          ? err.message
-          : "Unable to look up vehicle history from the API",
-      );
+        err instanceof Error ? err.message : 'Unable to look up vehicle history from the API',
+      )
     }
   }
 
   async function submitReception() {
-    if (!token) return;
+    if (!token) return
 
-    setSaving(true);
-    clearApiMessage();
+    setSaving(true)
+    clearApiMessage()
 
     // Everything below — including validation — is inside this try/catch on
     // purpose: an unexpected throw from validateForm() used to reject
     // silently (no banner, nothing in the UI) because it ran outside any
     // catch block. Now any failure of any kind always ends up on screen.
     try {
-      const errors = validateForm();
-      setFieldErrors(errors);
+      const errors = validateForm()
+      setFieldErrors(errors)
       if (Object.keys(errors).length > 0) {
-        showError("Fix the highlighted fields before saving.");
-        return;
+        showError('Fix the highlighted fields before saving.')
+        return
       }
-
-      const receptionPhotos = await filesToDataUrls(photoFiles);
 
       const response = await createVehicleReception(token, {
         bookingId: sourceBooking?.id || sourceBooking?._id || bookingId,
@@ -518,16 +417,10 @@ export function VehicleReceptionPage() {
         mileage: form.mileage || undefined,
         issueDescription: form.issueDescription.trim() || undefined,
         promisedAt: form.appointmentDate
-          ? new Date(
-              `${form.appointmentDate}T${form.appointmentTime || "00:00"}`,
-            ).toISOString()
+          ? new Date(`${form.appointmentDate}T${form.appointmentTime || '00:00'}`).toISOString()
           : undefined,
-        fuelLevel,
-        isTowIn,
-        receptionPhotos: receptionPhotos.length ? receptionPhotos : undefined,
-        receptionSignature,
-      });
-      const newOrderId = response.repairOrder._id || response.repairOrder.id;
+      })
+      const newOrderId = response.repairOrder._id || response.repairOrder.id
 
       // The reception just minted the repair order every later stage
       // attaches to — carry it forward instead of dropping the SA back into
@@ -535,19 +428,15 @@ export function VehicleReceptionPage() {
       // flagged a comeback or odometer rollback, hold here so the advisor
       // actually sees it instead of it flashing by during the redirect.
       if (response.warnings?.comeback || response.warnings?.odometerRollback) {
-        setReceptionWarnings(response.warnings);
-        setPendingOrderId(newOrderId);
+        setReceptionWarnings(response.warnings)
+        setPendingOrderId(newOrderId)
       } else {
-        navigate(`/advisor/inspection?orderId=${newOrderId}`);
+        navigate(`/advisor/inspection?orderId=${newOrderId}`)
       }
     } catch (err) {
-      showError(
-        err instanceof Error
-          ? err.message
-          : "Unable to save the reception form",
-      );
+      showError(err instanceof Error ? err.message : 'Unable to save the reception form')
     } finally {
-      setSaving(false);
+      setSaving(false)
     }
   }
 
@@ -555,16 +444,12 @@ export function VehicleReceptionPage() {
     checking: null,
     found: <Tag color="green">History found — form pre-filled below</Tag>,
     idle: null,
-    "not-found": (
-      <Tag>No prior visit for this plate — fill in the details below</Tag>
-    ),
-  }[plateStatus];
+    'not-found': <Tag>No prior visit for this plate — fill in the details below</Tag>,
+  }[plateStatus]
 
   return (
     <ServiceAdvisorShell title="Vehicle reception">
-      {apiMessage ? (
-        <InlineBanner tone="error">{apiMessage}</InlineBanner>
-      ) : null}
+      {apiMessage ? <InlineBanner tone="error">{apiMessage}</InlineBanner> : null}
 
       {receptionWarnings ? (
         <Card
@@ -580,22 +465,17 @@ export function VehicleReceptionPage() {
           <div className="flex flex-col gap-3">
             {receptionWarnings.comeback ? (
               <Alert
-                message={`Xe đang trong hạn bảo hành của lần sửa trước (${receptionWarnings.comeback.parentCode || "N/A"}) — cân nhắc mở lệnh comeback.`}
+                message={`Xe đang trong hạn bảo hành của lần sửa trước (${receptionWarnings.comeback.parentCode || 'N/A'}) — cân nhắc mở lệnh comeback.`}
                 showIcon
                 type="warning"
               />
             ) : null}
             {receptionWarnings.odometerRollback ? (
-              <Alert
-                message={receptionWarnings.odometerRollback}
-                showIcon
-                type="warning"
-              />
+              <Alert message={receptionWarnings.odometerRollback} showIcon type="warning" />
             ) : null}
             <Button
               onClick={() =>
-                pendingOrderId &&
-                navigate(`/advisor/inspection?orderId=${pendingOrderId}`)
+                pendingOrderId && navigate(`/advisor/inspection?orderId=${pendingOrderId}`)
               }
               type="primary"
             >
@@ -607,8 +487,8 @@ export function VehicleReceptionPage() {
 
       <form
         onSubmit={(event) => {
-          event.preventDefault();
-          void submitReception();
+          event.preventDefault()
+          void submitReception()
         }}
       >
         <div className="flex flex-col gap-5">
@@ -625,15 +505,11 @@ export function VehicleReceptionPage() {
               <div style={{ flex: 1 }}>
                 <LabeledField label="License plate">
                   <Input
-                    onChange={(event) =>
-                      updateField("plate", event.target.value.toUpperCase())
-                    }
+                    onChange={(event) => updateField('plate', event.target.value.toUpperCase())}
                     placeholder="29A-123.45"
-                    prefix={
-                      <CarOutlined style={{ color: advisorPalette.red }} />
-                    }
+                    prefix={<CarOutlined style={{ color: advisorPalette.red }} />}
                     size="large"
-                    status={fieldErrors.plate ? "error" : undefined}
+                    status={fieldErrors.plate ? 'error' : undefined}
                     value={form.plate}
                   />
                   {fieldErrors.plate ? (
@@ -650,32 +526,20 @@ export function VehicleReceptionPage() {
                 </LabeledField>
               </div>
               <Button
-                icon={
-                  plateStatus === "found" ? (
-                    <CheckOutlined />
-                  ) : (
-                    <SearchOutlined />
-                  )
-                }
-                loading={plateStatus === "checking"}
+                icon={plateStatus === 'found' ? <CheckOutlined /> : <SearchOutlined />}
+                loading={plateStatus === 'checking'}
                 onClick={checkPlate}
                 size="large"
                 type="primary"
               >
                 Check history
               </Button>
-              <Button
-                icon={<UserAddOutlined />}
-                onClick={() => setNewWalkIn(true)}
-                size="large"
-              >
+              <Button icon={<UserAddOutlined />} onClick={() => setNewWalkIn(true)} size="large">
                 New walk-in customer
               </Button>
             </div>
 
-            {searchResultTag ? (
-              <div style={{ marginTop: 16 }}>{searchResultTag}</div>
-            ) : null}
+            {searchResultTag ? <div style={{ marginTop: 16 }}>{searchResultTag}</div> : null}
           </Card>
 
           <Card
@@ -690,23 +554,19 @@ export function VehicleReceptionPage() {
           >
             <div className="grid gap-3 xl:grid-cols-3">
               {matchingSuggestions.map((suggestion) => {
-                const applied = appliedSuggestionId === suggestion.id;
+                const applied = appliedSuggestionId === suggestion.id
                 return (
                   <Card
                     bordered
                     key={suggestion.id}
                     size="small"
                     style={{
-                      borderColor: applied
-                        ? advisorPalette.red
-                        : advisorPalette.border,
+                      borderColor: applied ? advisorPalette.red : advisorPalette.border,
                     }}
                   >
                     <div className="flex items-start justify-between gap-2">
                       <div>
-                        <div
-                          style={{ color: advisorPalette.ink, fontWeight: 700 }}
-                        >
+                        <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>
                           {suggestion.plate}
                         </div>
                         <div
@@ -720,14 +580,8 @@ export function VehicleReceptionPage() {
                       </div>
                       {applied ? <Tag color="red">Applied</Tag> : null}
                     </div>
-                    <div
-                      className="flex items-center gap-2"
-                      style={{ marginTop: 8 }}
-                    >
-                      <Avatar
-                        size={20}
-                        style={{ background: advisorPalette.ink, fontSize: 10 }}
-                      >
+                    <div className="flex items-center gap-2" style={{ marginTop: 8 }}>
+                      <Avatar size={20} style={{ background: advisorPalette.ink, fontSize: 10 }}>
                         {getUserInitials(suggestion.customerName)}
                       </Avatar>
                       <span
@@ -749,15 +603,10 @@ export function VehicleReceptionPage() {
                     >
                       Last visit: {suggestion.lastVisit}
                     </div>
-                    <div
-                      className="flex flex-wrap gap-1"
-                      style={{ marginTop: 8 }}
-                    >
-                      {suggestion.recommendedServices
-                        .slice(0, 2)
-                        .map((service) => (
-                          <Tag key={service}>{service}</Tag>
-                        ))}
+                    <div className="flex flex-wrap gap-1" style={{ marginTop: 8 }}>
+                      {suggestion.recommendedServices.slice(0, 2).map((service) => (
+                        <Tag key={service}>{service}</Tag>
+                      ))}
                     </div>
                     <Button
                       block
@@ -768,7 +617,7 @@ export function VehicleReceptionPage() {
                       Apply from history
                     </Button>
                   </Card>
-                );
+                )
               })}
             </div>
           </Card>
@@ -788,8 +637,7 @@ export function VehicleReceptionPage() {
           ) : (
             <div className="grid gap-5 lg:grid-cols-12">
               <div className="flex flex-col gap-5 lg:col-span-8">
-                {activeSuggestion &&
-                activeSuggestion.riskNote !== "No risk notes on file." ? (
+                {activeSuggestion && activeSuggestion.riskNote !== 'No risk notes on file.' ? (
                   <InlineBanner tone="error">
                     Risk note from a prior visit: {activeSuggestion.riskNote}
                   </InlineBanner>
@@ -810,9 +658,9 @@ export function VehicleReceptionPage() {
                       color: advisorPalette.textMuted,
                       fontSize: 11,
                       fontWeight: 700,
-                      letterSpacing: "0.1em",
+                      letterSpacing: '0.1em',
                       marginBottom: 12,
-                      textTransform: "uppercase",
+                      textTransform: 'uppercase',
                     }}
                   >
                     Customer
@@ -821,13 +669,9 @@ export function VehicleReceptionPage() {
                     <Col span={12}>
                       <LabeledField label="Full name">
                         <Input
-                          onChange={(event) =>
-                            updateField("customerName", event.target.value)
-                          }
+                          onChange={(event) => updateField('customerName', event.target.value)}
                           placeholder="John Smith"
-                          status={
-                            fieldErrors.customerName ? "error" : undefined
-                          }
+                          status={fieldErrors.customerName ? 'error' : undefined}
                           value={form.customerName}
                         />
                         {fieldErrors.customerName ? (
@@ -848,11 +692,11 @@ export function VehicleReceptionPage() {
                         <Input
                           maxLength={10}
                           onChange={(event) => {
-                            const value = event.target.value.replace(/\D/g, "");
-                            updateField("phone", value);
+                            const value = event.target.value.replace(/\D/g, '')
+                            updateField('phone', value)
                           }}
                           placeholder="0909123456"
-                          status={fieldErrors.phone ? "error" : undefined}
+                          status={fieldErrors.phone ? 'error' : undefined}
                           value={form.phone}
                         />
                         {fieldErrors.phone ? (
@@ -872,9 +716,7 @@ export function VehicleReceptionPage() {
                     <Col span={12} style={{ marginTop: 16 }}>
                       <LabeledField label="Address">
                         <Input
-                          onChange={(event) =>
-                            updateField("address", event.target.value)
-                          }
+                          onChange={(event) => updateField('address', event.target.value)}
                           placeholder="123 Main Street"
                           value={form.address}
                         />
@@ -894,9 +736,9 @@ export function VehicleReceptionPage() {
                         color: advisorPalette.textMuted,
                         fontSize: 11,
                         fontWeight: 700,
-                        letterSpacing: "0.1em",
+                        letterSpacing: '0.1em',
                         marginBottom: 12,
-                        textTransform: "uppercase",
+                        textTransform: 'uppercase',
                       }}
                     >
                       Vehicle
@@ -905,9 +747,7 @@ export function VehicleReceptionPage() {
                       <Col span={16}>
                         <LabeledField label="Make / model">
                           <Input
-                            onChange={(event) =>
-                              updateField("model", event.target.value)
-                            }
+                            onChange={(event) => updateField('model', event.target.value)}
                             placeholder="Toyota Camry"
                             value={form.model}
                           />
@@ -918,11 +758,9 @@ export function VehicleReceptionPage() {
                           <InputNumber
                             max={new Date().getFullYear() + 1}
                             min={1980}
-                            onChange={(value) =>
-                              updateField("year", value ? String(value) : "")
-                            }
+                            onChange={(value) => updateField('year', value ? String(value) : '')}
                             placeholder="2020"
-                            style={{ width: "100%" }}
+                            style={{ width: '100%' }}
                             value={form.year ? Number(form.year) : undefined}
                           />
                         </LabeledField>
@@ -930,11 +768,9 @@ export function VehicleReceptionPage() {
                       <Col span={12} style={{ marginTop: 16 }}>
                         <LabeledField label="Current mileage">
                           <Input
-                            onChange={(event) =>
-                              updateField("mileage", event.target.value)
-                            }
+                            onChange={(event) => updateField('mileage', event.target.value)}
                             placeholder="24,500"
-                            status={fieldErrors.mileage ? "error" : undefined}
+                            status={fieldErrors.mileage ? 'error' : undefined}
                             value={form.mileage}
                           />
                           {fieldErrors.mileage ? (
@@ -955,13 +791,10 @@ export function VehicleReceptionPage() {
                           <Input
                             maxLength={17}
                             onChange={(event) =>
-                              updateField(
-                                "vin",
-                                event.target.value.toUpperCase(),
-                              )
+                              updateField('vin', event.target.value.toUpperCase())
                             }
                             placeholder="WBS33AZ08PCM44882"
-                            status={fieldErrors.vin ? "error" : undefined}
+                            status={fieldErrors.vin ? 'error' : undefined}
                             value={form.vin}
                           />
 
@@ -981,11 +814,9 @@ export function VehicleReceptionPage() {
                       <Col span={12} style={{ marginTop: 16 }}>
                         <LabeledField label="Engine number">
                           <Input
-                            onChange={(event) =>
-                              updateField("engineNo", event.target.value)
-                            }
+                            onChange={(event) => updateField('engineNo', event.target.value)}
                             placeholder="ENG-987654"
-                            status={fieldErrors.engineNo ? "error" : undefined}
+                            status={fieldErrors.engineNo ? 'error' : undefined}
                             value={form.engineNo}
                           />
 
@@ -1005,87 +836,6 @@ export function VehicleReceptionPage() {
                     </Row>
                   </div>
                 </Card>
-
-                <Card
-                  bordered={false}
-                  className="bo-card-hover bo-enter rounded-2xl"
-                  style={{
-                    background: advisorPalette.panel,
-                    boxShadow: advisorPalette.shadow,
-                    border: `1px solid ${advisorPalette.border}`,
-                  }}
-                  title="Walk-around intake"
-                >
-                  <Row gutter={16}>
-                    <Col span={24}>
-                      <LabeledField label="Fuel level">
-                        <Select
-                          allowClear
-                          onChange={setFuelLevel}
-                          options={fuelLevelOptions.map((level) => ({
-                            label: level,
-                            value: level,
-                          }))}
-                          style={{ width: "100%" }}
-                          value={fuelLevel}
-                        />
-                      </LabeledField>
-                    </Col>
-                    {/* "Vehicle arrived on a tow" is captured and saved on the
-                        repair order (isTowIn), but nothing downstream reads
-                        it yet (no road-test block, no display elsewhere) —
-                        hidden until a real use exists for it. State/submit
-                        wiring left in place so it's a one-line revert. */}
-                  </Row>
-
-                  <div style={{ marginTop: 20 }}>
-                    <LabeledField label="Photos">
-                      <Upload
-                        accept="image/*"
-                        beforeUpload={() => false}
-                        fileList={photoFiles}
-                        listType="picture-card"
-                        multiple
-                        onChange={({ fileList }) => setPhotoFiles(fileList)}
-                        onPreview={async (file) => {
-                          const src =
-                            file.url ||
-                            file.preview ||
-                            (file.originFileObj
-                              ? await fileToDataUrl(file.originFileObj as File)
-                              : "");
-                          if (!src) return;
-                          setPreviewImage(src);
-                          setPreviewOpen(true);
-                        }}
-                      >
-                        {photoFiles.length >= 10 ? null : (
-                          <div>
-                            <PlusOutlined />
-                            <div style={{ marginTop: 8 }}>Upload</div>
-                          </div>
-                        )}
-                      </Upload>
-                    </LabeledField>
-                  </div>
-
-                  <div style={{ marginTop: 20 }}>
-                    <LabeledField label="Customer signature">
-                      <SignaturePad onChange={setReceptionSignature} value={receptionSignature} width={320} />
-                    </LabeledField>
-                  </div>
-
-                  {previewImage ? (
-                    <Image
-                      preview={{
-                        onVisibleChange: setPreviewOpen,
-                        visible: previewOpen,
-                      }}
-                      src={previewImage}
-                      style={{ display: "none" }}
-                    />
-                  ) : null}
-                </Card>
               </div>
 
               <div className="lg:col-span-4">
@@ -1096,30 +846,24 @@ export function VehicleReceptionPage() {
                     background: advisorPalette.ink,
                     boxShadow: advisorPalette.shadow,
                   }}
-                  title={
-                    <span style={{ color: "white" }}>
-                      Request & appointment
-                    </span>
-                  }
+                  title={<span style={{ color: 'white' }}>Request & appointment</span>}
                 >
                   <div className="flex flex-col gap-5">
                     <div>
                       <div
                         style={{
-                          color: "rgba(255,255,255,0.7)",
+                          color: 'rgba(255,255,255,0.7)',
                           fontSize: 11,
                           fontWeight: 700,
-                          letterSpacing: "0.1em",
+                          letterSpacing: '0.1em',
                           marginBottom: 6,
-                          textTransform: "uppercase",
+                          textTransform: 'uppercase',
                         }}
                       >
                         Issue description / requested service
                       </div>
                       <TextArea
-                        onChange={(event) =>
-                          updateField("issueDescription", event.target.value)
-                        }
+                        onChange={(event) => updateField('issueDescription', event.target.value)}
                         placeholder="Describe the vehicle's condition or the requested service package..."
                         rows={7}
                         value={form.issueDescription}
@@ -1128,30 +872,26 @@ export function VehicleReceptionPage() {
                     <div>
                       <div
                         style={{
-                          color: "rgba(255,255,255,0.7)",
+                          color: 'rgba(255,255,255,0.7)',
                           fontSize: 11,
                           fontWeight: 700,
-                          letterSpacing: "0.1em",
+                          letterSpacing: '0.1em',
                           marginBottom: 6,
-                          textTransform: "uppercase",
+                          textTransform: 'uppercase',
                         }}
                       >
                         Promised return date
                       </div>
                       <input
                         min={todayIso()}
-                        onChange={(event) =>
-                          updateField("appointmentDate", event.target.value)
-                        }
+                        onChange={(event) => updateField('appointmentDate', event.target.value)}
                         style={{
-                          background: "rgba(255,255,255,0.1)",
-                          border: fieldErrors.appointmentDate
-                            ? "1px solid #ffb4ab"
-                            : 0,
+                          background: 'rgba(255,255,255,0.1)',
+                          border: fieldErrors.appointmentDate ? '1px solid #ffb4ab' : 0,
                           borderRadius: 8,
-                          color: "white",
-                          padding: "10px 12px",
-                          width: "100%",
+                          color: 'white',
+                          padding: '10px 12px',
+                          width: '100%',
                         }}
                         type="date"
                         value={form.appointmentDate}
@@ -1159,7 +899,7 @@ export function VehicleReceptionPage() {
                       {fieldErrors.appointmentDate ? (
                         <div
                           style={{
-                            color: "#ffb4ab",
+                            color: '#ffb4ab',
                             fontSize: 12,
                             marginTop: 4,
                           }}
@@ -1171,27 +911,25 @@ export function VehicleReceptionPage() {
                     <div>
                       <div
                         style={{
-                          color: "rgba(255,255,255,0.7)",
+                          color: 'rgba(255,255,255,0.7)',
                           fontSize: 11,
                           fontWeight: 700,
-                          letterSpacing: "0.1em",
+                          letterSpacing: '0.1em',
                           marginBottom: 6,
-                          textTransform: "uppercase",
+                          textTransform: 'uppercase',
                         }}
                       >
                         Promised return time
                       </div>
                       <input
-                        onChange={(event) =>
-                          updateField("appointmentTime", event.target.value)
-                        }
+                        onChange={(event) => updateField('appointmentTime', event.target.value)}
                         style={{
-                          background: "rgba(255,255,255,0.1)",
+                          background: 'rgba(255,255,255,0.1)',
                           border: 0,
                           borderRadius: 8,
-                          color: "white",
-                          padding: "10px 12px",
-                          width: "100%",
+                          color: 'white',
+                          padding: '10px 12px',
+                          width: '100%',
                         }}
                         type="time"
                         value={form.appointmentTime}
@@ -1206,7 +944,7 @@ export function VehicleReceptionPage() {
                     style={{ marginTop: 24 }}
                     type="primary"
                   >
-                    {saving ? "Saving..." : "Save reception form"}
+                    {saving ? 'Saving...' : 'Save reception form'}
                   </Button>
                 </Card>
               </div>
@@ -1215,5 +953,5 @@ export function VehicleReceptionPage() {
         </div>
       </form>
     </ServiceAdvisorShell>
-  );
+  )
 }
