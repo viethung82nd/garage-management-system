@@ -15,6 +15,8 @@ import { ApiError } from "../utils/apiError.js";
 import { ACTIVE_BOOKING_STATUSES, getSlotTimes, isValidSlot } from "../config/constants.js";
 import { todayUtc, slotStartInstant } from "../utils/date.js";
 import { createNotification, notifyRole } from "../utils/notify.js";
+import { sendEmail } from "../utils/mailer.js";
+import { renderEmailLayout, SITE_URL } from "../utils/emailTemplate.js";
 import { getSystemConfig } from "./config.service.js";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -887,6 +889,7 @@ export async function generateAppointmentReminders() {
       },
       { customerId: 1, bookingDate: 1, timeSlot: 1 }
     )
+    .populate("customerId", "email fullName")
     .lean();
 
   const seen = new Set(); // in-run dedupe guard, keyed by booking id
@@ -902,16 +905,36 @@ export async function generateAppointmentReminders() {
     if (slotStart <= now || slotStart > in24h) continue;
 
     seen.add(key);
+    const dateLabel = formatSlotDate(booking.bookingDate);
+    const message = `You have a service appointment at ${booking.timeSlot} on ${dateLabel}. Please arrive on time.`;
+
     await createNotification({
-      userId: booking.customerId,
+      userId: booking.customerId?._id,
       type: "appointmentReminder",
       title: "Upcoming appointment reminder",
-      message: `You have a service appointment at ${booking.timeSlot} on ${formatSlotDate(
-        booking.bookingDate
-      )}. Please arrive on time.`,
+      message,
       refId: booking._id,
       refModel: "Booking",
     });
+
+    if (booking.customerId?.email) {
+      // Fire-and-forget — see quotation.service.js's sendQuotation() for why
+      // this must not block the request on a slow/unreachable SMTP server.
+      void sendEmail({
+        to: booking.customerId.email,
+        subject: `Reminder: your appointment is at ${booking.timeSlot} tomorrow`,
+        html: renderEmailLayout({
+          preheader: message,
+          heading: "Upcoming appointment reminder",
+          bodyHtml: `
+            <p style="margin:0 0 8px;">Hi ${booking.customerId.fullName || "there"},</p>
+            <p style="margin:0;">${message}</p>
+          `,
+          button: { label: "View my appointments", url: `${SITE_URL}/customer/bookings` },
+        }),
+      }).catch(() => {});
+    }
+
     count += 1;
   }
 

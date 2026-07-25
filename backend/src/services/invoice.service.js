@@ -6,8 +6,7 @@ import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
-import { renderEmailLayout } from "../utils/emailTemplate.js";
-import { env } from "../config/env.js";
+import { renderEmailLayout, SITE_URL } from "../utils/emailTemplate.js";
 import { logAudit } from "../utils/audit.js";
 import { generateCode } from "../utils/sequence.js";
 import { PartModel } from "../models/index.js";
@@ -525,7 +524,7 @@ export async function sendInvoiceToCustomer(id, actorId) {
           },
           button: {
             label: "View invoice",
-            url: `${env.corsOrigin[0]}/customer/invoices`,
+            url: `${SITE_URL}/customer/invoices`,
           },
         }),
       }).catch(() => {});

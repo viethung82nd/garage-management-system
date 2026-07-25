@@ -12,6 +12,15 @@
 // inline styles, and a system-font stack rather than the app's own Tailwind
 // classes or Google Fonts.
 
+import { env } from "../config/env.js";
+
+// The deployed frontend's own origin — already the source of truth CORS
+// checks against, and it already serves everything under /kapa-auth/ as
+// static files, so the sidebar's real logo can be linked to directly
+// instead of hosting a separate copy of it anywhere.
+export const SITE_URL = env.corsOrigin[0];
+const LOGO_URL = `${SITE_URL}/kapa-auth/wp-content/uploads/2023/01/Kapa_Logo-1.svg`;
+
 const BRAND = {
   name: "Kapa Auto Care Center",
   navy: "#1e3a5f",
@@ -109,6 +118,14 @@ export function renderEmailLayout({ preheader = "", heading, bodyHtml, button, h
           <!-- Header -->
           <tr>
             <td style="background:${BRAND.navy};border-radius:12px 12px 0 0;padding:24px 32px;text-align:center;">
+              <!-- The logo is SVG — Outlook desktop's Word engine can't render
+                   that format at all, so it's hidden from mso and the text
+                   wordmark below stands alone there instead of a broken-image
+                   icon. Every other modern client shows the real logo. -->
+              <!--[if !mso]><!-->
+              <img src="${LOGO_URL}" alt="Kapa" width="56" height="42"
+                   style="display:block;margin:0 auto 8px;border:0;outline:none;height:auto;max-width:56px;" />
+              <!--<![endif]-->
               <div style="font-family:${FONT_STACK};font-size:22px;font-weight:800;letter-spacing:0.05em;color:#ffffff;">
                 KAPA
               </div>

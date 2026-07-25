@@ -5,8 +5,7 @@ import { userRepository } from "../repositories/user.repository.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
-import { renderEmailLayout } from "../utils/emailTemplate.js";
-import { env } from "../config/env.js";
+import { renderEmailLayout, SITE_URL } from "../utils/emailTemplate.js";
 import { runInTransaction } from "../utils/transaction.js";
 import { logAudit } from "../utils/audit.js";
 import { reserveStock } from "../utils/stock.js";
@@ -223,7 +222,7 @@ export async function sendQuotation(id) {
           },
           button: {
             label: "Review & approve quote",
-            url: `${env.corsOrigin[0]}/customer/bookings`,
+            url: `${SITE_URL}/customer/bookings`,
           },
         }),
       }).catch(() => {});

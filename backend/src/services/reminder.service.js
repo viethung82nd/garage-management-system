@@ -9,6 +9,8 @@ import {
 import { reminderRepository } from "../repositories/reminder.repository.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
+import { sendEmail } from "../utils/mailer.js";
+import { renderEmailLayout, SITE_URL } from "../utils/emailTemplate.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -301,8 +303,11 @@ export async function listReminders({ status, type, dueBefore } = {}) {
 
 /**
  * Mark a reminder sent, dismissed, or done.
- * - `sent` stamps sentAt and fires an in-app notification to the customer —
- *   this is the actual "nudge" leaving the building.
+ * - `sent` stamps sentAt, fires an in-app notification, and — if the
+ *   customer has an email on file — a real email too, using the reminder's
+ *   own title/message the engine already wrote (see generateReminders
+ *   above); this is the actual "nudge" leaving the building, not just a
+ *   badge in a panel the customer may never open.
  * - `dismissed`/`done` are terminal: once a reminder is dismissed or done it
  *   cannot be transitioned again (a fresh occurrence, if still relevant,
  *   comes from the next engine run instead).
@@ -332,6 +337,27 @@ export async function updateReminder(id, { status }) {
       title: reminder.title,
       message: reminder.message,
     });
+
+    const customer = reminder.customerId
+      ? await UserModel.findById(reminder.customerId).select("email fullName")
+      : null;
+    if (customer?.email) {
+      // Fire-and-forget — see quotation.service.js's sendQuotation() for why
+      // this must not block the request on a slow/unreachable SMTP server.
+      void sendEmail({
+        to: customer.email,
+        subject: reminder.title,
+        html: renderEmailLayout({
+          preheader: reminder.message || reminder.title,
+          heading: reminder.title,
+          bodyHtml: `
+            <p style="margin:0 0 8px;">Hi ${customer.fullName || "there"},</p>
+            <p style="margin:0;">${reminder.message || ""}</p>
+          `,
+          button: { label: "Book an appointment", url: `${SITE_URL}/appointment` },
+        }),
+      }).catch(() => {});
+    }
   }
   await reminder.save();
 

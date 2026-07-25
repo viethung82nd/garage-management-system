@@ -6,8 +6,7 @@ import { SERVICE_REQUEST_STATUSES } from "../models/service-request.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
-import { renderEmailLayout } from "../utils/emailTemplate.js";
-import { env } from "../config/env.js";
+import { renderEmailLayout, SITE_URL } from "../utils/emailTemplate.js";
 import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
 import { recordStatusChange } from "../utils/orderStatus.js";
 import { runInTransaction } from "../utils/transaction.js";
@@ -437,7 +436,7 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
             },
             button: {
               label: "Approve or decline",
-              url: `${env.corsOrigin[0]}/customer/bookings`,
+              url: `${SITE_URL}/customer/bookings`,
             },
           }),
         }).catch(() => {});
