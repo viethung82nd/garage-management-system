@@ -64,6 +64,19 @@ function formatSubmitMessage(bookingId: string, bookingDate: string, timeSlot: s
   return `Appointment request ${bookingId.slice(-6).toUpperCase()} was sent for ${bookingDate} at ${timeSlot}.`
 }
 
+// The cloned Contact Form 7 stylesheet keys .wpcf7-response-output's
+// visibility off the *form's own* state class — display:none while
+// form.init/form.submitting, shown (with a colored border) once the form
+// carries form.sent or form.failed/form.aborted. The real CF7 plugin swaps
+// this class after each submission; this custom form must do the same or
+// every success/error message renders in the DOM but stays invisible.
+const formStatusClass: Record<SubmitState['type'], string> = {
+  idle: 'init',
+  loading: 'submitting',
+  success: 'sent',
+  error: 'failed',
+}
+
 /** Field-by-field check with a specific message per field, instead of relying
  * solely on the browser's native `required` validation — that silently blocks
  * the submit handler from running at all, so our own success/error feedback
@@ -246,7 +259,12 @@ export default function AppointmentBookingForm({ user }: AppointmentBookingFormP
         <p role="status" aria-live="polite" aria-atomic="true" />
         <ul />
       </div>
-      <form className="wpcf7-form init appointment-booking-form" onSubmit={handleSubmit} aria-label="Appointment form" noValidate>
+      <form
+        className={`wpcf7-form ${formStatusClass[submitState.type]} appointment-booking-form`}
+        onSubmit={handleSubmit}
+        aria-label="Appointment form"
+        noValidate
+      >
         <div className="row">
           <div className="col-lg-6 col-md-6">
             <div className="form-group">
