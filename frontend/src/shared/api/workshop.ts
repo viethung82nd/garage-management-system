@@ -69,8 +69,11 @@ export type ApiRepairOrder = {
   totalCost?: number
   startedAt?: string
   completedAt?: string
+  deliveredAt?: string
   forwardedToAccountantAt?: string
   invoicedAt?: string
+  /** The ServiceQuote this order's confirmed services were copied from at approval — link back to it instead of re-listing every line here. */
+  quoteId?: string
   promisedAt?: string
   updatedAt?: string
   createdAt?: string
