@@ -42,7 +42,6 @@ import {
   unwrapArray,
   vehicleName,
   vehiclePlate,
-  APPROVAL_CHANNELS,
   JOB_TYPES,
   JOB_TYPE_LABELS,
   type ApiInspectionReport,
@@ -90,15 +89,6 @@ const kindOptions: Array<{ label: string; value: QuotationLineKind }> = [
   { label: "Labor", value: "labor" },
   { label: "Service", value: "service" },
 ];
-
-const CHANNEL_LABELS: Record<ApprovalChannel, string> = {
-  app: "App",
-  inPerson: "In person",
-  phone: "Phone",
-  zalo: "Zalo",
-  email: "Email",
-  sms: "SMS",
-};
 
 const jobTypeOptions: Array<{ label: string; value: JobType }> = JOB_TYPES.map(
   (type) => ({ label: JOB_TYPE_LABELS[type], value: type }),
@@ -534,11 +524,13 @@ export function QuotationPage() {
   // paired onChange (fired for the same selection) doesn't clear partId again.
   const lastPartSelection = useRef<Record<string, string>>({});
 
-  // Authorization modal — opens on Approve/Decline, captures signatures + channel.
+  // Authorization modal — opens on Approve/Decline, captures signatures.
   const [confirmModalOpen, setConfirmModalOpen] = useState(false);
   const [confirmIntent, setConfirmIntent] = useState(true);
-  const [confirmChannel, setConfirmChannel] =
-    useState<ApprovalChannel>("inPerson");
+  // Channel selection is hidden (see the modal below) — it only feeds an
+  // audit-trail field, not any branching logic, so "inPerson" (the correct
+  // default for an advisor confirming at the desk) is sent unconditionally.
+  const confirmChannel: ApprovalChannel = "inPerson";
   const [customerSignature, setCustomerSignature] = useState<string | undefined>();
   const [advisorSignature, setAdvisorSignature] = useState<string | undefined>();
 
@@ -1006,7 +998,6 @@ export function QuotationPage() {
   function openConfirmModal(approved: boolean) {
     if (!validateLines()) return;
     setConfirmIntent(approved);
-    setConfirmChannel("inPerson");
     setCustomerSignature(undefined);
     setAdvisorSignature(undefined);
     setConfirmModalOpen(true);
@@ -2036,29 +2027,6 @@ export function QuotationPage() {
             </div>
             <SignaturePad onChange={setAdvisorSignature} value={advisorSignature} width={280} />
           </div>
-        </div>
-
-        <div style={{ marginTop: 16 }}>
-          <div
-            style={{
-              color: advisorPalette.textMuted,
-              fontSize: 11,
-              fontWeight: 700,
-              marginBottom: 6,
-              textTransform: "uppercase",
-            }}
-          >
-            Channel
-          </div>
-          <Select
-            value={confirmChannel}
-            options={APPROVAL_CHANNELS.map((channel) => ({
-              label: CHANNEL_LABELS[channel],
-              value: channel,
-            }))}
-            onChange={setConfirmChannel}
-            style={{ width: "100%" }}
-          />
         </div>
       </Modal>
     </>
