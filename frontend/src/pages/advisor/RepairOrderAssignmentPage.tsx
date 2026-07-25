@@ -15,6 +15,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   deliverVehicleApi,
+  fetchQuotations,
   fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
   fetchWorkshopTechnicians,
@@ -25,6 +26,7 @@ import {
   updateWorkshopRepairOrder,
   vehicleName,
   vehiclePlate,
+  type ApiQuotation,
   type ApiRepairOrder,
   type ApiTechnician,
 } from '../../shared/api/workshop'
@@ -88,6 +90,16 @@ function statusColor(status?: string) {
   return status && status in orderStatusColors
     ? orderStatusColors[status as OrderStatusKey]
     : 'default'
+}
+
+/** For the read-only "View quotation" modal — a quote's own status is a
+ * separate lifecycle from the repair order's, so it gets its own labels. */
+const QUOTATION_STATUS_META: Record<string, { color: string; label: string }> = {
+  draft: { color: 'default', label: 'Drafting quotation' },
+  sent: { color: 'blue', label: 'Sent to customer' },
+  approved: { color: 'green', label: 'Customer approved' },
+  partiallyApproved: { color: 'gold', label: 'Partially approved' },
+  rejected: { color: 'red', label: 'Customer declined' },
 }
 
 /** Statuses the advisor can move an order into from here — each requires a reason, enforced by the backend. */
@@ -463,6 +475,13 @@ export function RepairOrderAssignmentPage() {
   const [deliverySignature, setDeliverySignature] = useState<string | undefined>()
   const [deliverSaving, setDeliverSaving] = useState(false)
 
+  // "View quotation" — a read-only preview in place, instead of navigating
+  // away from the work order to a whole separate page.
+  const [quotationModalOpen, setQuotationModalOpen] = useState(false)
+  const [quotationDetail, setQuotationDetail] = useState<ApiQuotation | null>(null)
+  const [quotationLoading, setQuotationLoading] = useState(false)
+  const [quotationError, setQuotationError] = useState('')
+
   useEffect(() => {
     if (!token || orderIdParam) return
     const authToken = token
@@ -623,6 +642,24 @@ export function RepairOrderAssignmentPage() {
     }
   }
 
+  async function openQuotationModal() {
+    if (!token || !orderIdParam) return
+    setQuotationModalOpen(true)
+    setQuotationLoading(true)
+    setQuotationError('')
+    setQuotationDetail(null)
+    try {
+      const response = await fetchQuotations(token, `?repairOrderId=${orderIdParam}`)
+      const quotes = unwrapArray<ApiQuotation>(response, ['quotations'])
+      // Sorted newest-first by the backend — the live quote for this order.
+      setQuotationDetail(quotes[0] ?? null)
+    } catch (err) {
+      setQuotationError(err instanceof Error ? err.message : 'Unable to load the quotation.')
+    } finally {
+      setQuotationLoading(false)
+    }
+  }
+
   const vehicle = order?.vehicleId || order?.vehicle
   // Completed/delivered/closed orders are immutable (BR-RO-06 — reopening
   // one is a manager-level action, out of scope here), so their detail view
@@ -757,10 +794,7 @@ export function RepairOrderAssignmentPage() {
                         </div>
                       </div>
                     </div>
-                    <Button
-                      size="small"
-                      onClick={() => navigate(`/advisor/quotations?orderId=${order._id || order.id}`)}
-                    >
+                    <Button size="small" onClick={() => void openQuotationModal()}>
                       View quotation
                     </Button>
                   </>
@@ -783,7 +817,7 @@ export function RepairOrderAssignmentPage() {
                 }}
                 title="Assign technician"
               >
-                <div className="flex flex-col gap-3">
+                <div className="flex flex-col gap-2">
                   {technicians.map((tech) => {
                     const selected = tech.id === selectedTechnicianId
                     const disabled = tech.status === 'offline'
@@ -793,61 +827,68 @@ export function RepairOrderAssignmentPage() {
                         key={tech.id}
                         onClick={() => setSelectedTechnicianId(tech.id)}
                         style={{
+                          alignItems: 'center',
                           background: selected ? '#fffafa' : advisorPalette.panelAlt,
                           border: `1px solid ${selected ? advisorPalette.red : advisorPalette.border}`,
-                          borderRadius: 12,
+                          borderRadius: 10,
                           cursor: disabled ? 'not-allowed' : 'pointer',
+                          display: 'flex',
+                          gap: 12,
+                          justifyContent: 'space-between',
                           opacity: disabled ? 0.5 : 1,
-                          padding: 16,
+                          padding: '10px 14px',
                           textAlign: 'left',
                         }}
                         type="button"
                       >
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
+                          <span
+                            style={{
+                              alignItems: 'center',
+                              background: selected ? advisorPalette.red : advisorPalette.panel,
+                              border: `1px solid ${advisorPalette.border}`,
+                              borderRadius: '50%',
+                              color: selected ? '#ffffff' : advisorPalette.ink,
+                              display: 'flex',
+                              flexShrink: 0,
+                              fontSize: 12,
+                              fontWeight: 700,
+                              height: 28,
+                              justifyContent: 'center',
+                              width: 28,
+                            }}
+                          >
+                            {tech.name.slice(0, 1).toUpperCase()}
+                          </span>
+                          <div className="flex items-baseline gap-2" style={{ minWidth: 0, overflow: 'hidden' }}>
                             <span
                               style={{
-                                alignItems: 'center',
-                                background: selected ? advisorPalette.red : advisorPalette.panel,
-                                border: `1px solid ${advisorPalette.border}`,
-                                borderRadius: '50%',
-                                color: selected ? '#ffffff' : advisorPalette.ink,
-                                display: 'flex',
-                                fontSize: 13,
+                                color: advisorPalette.ink,
                                 fontWeight: 700,
-                                height: 34,
-                                justifyContent: 'center',
-                                width: 34,
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                whiteSpace: 'nowrap',
                               }}
                             >
-                              {tech.name.slice(0, 1).toUpperCase()}
+                              {tech.name}
                             </span>
-                            <div>
-                              <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>
-                                {tech.name}
-                              </div>
-                              {tech.skill ? (
-                                <div
-                                  style={{
-                                    color: advisorPalette.textMuted,
-                                    fontSize: 13,
-                                    marginTop: 2,
-                                  }}
-                                >
-                                  {tech.skill}
-                                </div>
-                              ) : null}
-                            </div>
+                            {tech.skill ? (
+                              <span style={{ color: advisorPalette.textMuted, fontSize: 12, whiteSpace: 'nowrap' }}>
+                                {tech.skill}
+                              </span>
+                            ) : null}
                           </div>
-                          <Tag color={statusTag[tech.status].color}>
+                        </div>
+                        <div className="flex items-center gap-3" style={{ flexShrink: 0 }}>
+                          <span
+                            className="flex items-center gap-1"
+                            style={{ color: advisorPalette.textMuted, fontSize: 12 }}
+                          >
+                            <ProfileOutlined /> {tech.activeOrders} active
+                          </span>
+                          <Tag color={statusTag[tech.status].color} style={{ marginInlineEnd: 0 }}>
                             {statusTag[tech.status].label}
                           </Tag>
-                        </div>
-                        <div
-                          className="flex items-center gap-2"
-                          style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 10 }}
-                        >
-                          <ProfileOutlined /> {tech.activeOrders} active orders
                         </div>
                       </button>
                     )
@@ -1076,6 +1117,92 @@ export function RepairOrderAssignmentPage() {
           </div>
           <SignaturePad onChange={setDeliverySignature} value={deliverySignature} width={320} />
         </div>
+      </Modal>
+
+      <Modal
+        footer={null}
+        onCancel={() => setQuotationModalOpen(false)}
+        open={quotationModalOpen}
+        title="Quotation"
+        width={640}
+      >
+        {quotationLoading ? (
+          <Empty description="Loading quotation..." image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : quotationError ? (
+          <InlineBanner tone="error">{quotationError}</InlineBanner>
+        ) : !quotationDetail ? (
+          <Empty description="No quotation on file for this order." image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : (
+          <div className="flex flex-col gap-4">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
+              <span style={{ color: advisorPalette.ink, fontWeight: 700, fontSize: 15 }}>
+                {quotationDetail.code}
+              </span>
+              <Tag color={QUOTATION_STATUS_META[quotationDetail.status ?? 'draft'].color}>
+                {QUOTATION_STATUS_META[quotationDetail.status ?? 'draft'].label}
+              </Tag>
+            </div>
+
+            <div className="flex flex-col gap-2">
+              {(quotationDetail.lines ?? []).map((line, index) => (
+                <div
+                  key={line.id || index}
+                  className="flex items-center justify-between gap-3 rounded-xl px-3 py-2"
+                  style={{ background: advisorPalette.panelAlt, border: `1px solid ${advisorPalette.border}` }}
+                >
+                  <span style={{ color: advisorPalette.ink, fontWeight: 600 }}>
+                    {line.description}
+                    {line.quantity && line.quantity > 1 ? ` × ${line.quantity}` : ''}
+                  </span>
+                  <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>
+                    {formatMoney((line.unitPrice || 0) * (line.quantity || 1))}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex flex-col gap-1" style={{ borderTop: `1px solid ${advisorPalette.border}`, paddingTop: 12 }}>
+              {quotationDetail.discountPercent ? (
+                <div className="flex items-center justify-between" style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
+                  <span>Discount ({quotationDetail.discountPercent}%)</span>
+                </div>
+              ) : null}
+              {quotationDetail.taxPercent ? (
+                <div className="flex items-center justify-between" style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
+                  <span>Tax ({quotationDetail.taxPercent}%)</span>
+                </div>
+              ) : null}
+              <div className="flex items-center justify-between">
+                <span style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>
+                  Total
+                </span>
+                <span style={{ color: advisorPalette.red, fontSize: 18, fontWeight: 700 }}>
+                  {formatMoney(quotationDetail.totalEstimate || 0)}
+                </span>
+              </div>
+            </div>
+
+            {quotationDetail.approval?.customerSignature || quotationDetail.approval?.advisorSignature ? (
+              <div className="grid gap-4 sm:grid-cols-2" style={{ borderTop: `1px solid ${advisorPalette.border}`, paddingTop: 12 }}>
+                {(
+                  [
+                    { label: 'Customer', src: quotationDetail.approval?.customerSignature },
+                    { label: 'Advisor', src: quotationDetail.approval?.advisorSignature },
+                  ] as const
+                ).map((block) =>
+                  block.src ? (
+                    <div key={block.label} style={{ textAlign: 'center' }}>
+                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase', marginBottom: 6 }}>
+                        {block.label}
+                      </div>
+                      <img alt={`${block.label} signature`} src={block.src} style={{ maxHeight: 60, margin: '0 auto' }} />
+                    </div>
+                  ) : null,
+                )}
+              </div>
+            ) : null}
+          </div>
+        )}
       </Modal>
     </ServiceAdvisorShell>
   )
