@@ -6,6 +6,8 @@ import { SERVICE_REQUEST_STATUSES } from "../models/service-request.model.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
+import { renderEmailLayout } from "../utils/emailTemplate.js";
+import { env } from "../config/env.js";
 import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
 import { recordStatusChange } from "../utils/orderStatus.js";
 import { runInTransaction } from "../utils/transaction.js";
@@ -420,7 +422,24 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
         void sendEmail({
           to: customer.email,
           subject: `Additional service recommended: ${proposal.serviceName}`,
-          html: `<p>Hi ${customer.fullName || "there"},</p><p>While working on your vehicle, our technician recommended an additional service:</p><p><strong>${proposal.serviceName}</strong></p><p>${proposal.reason || ""}</p><p>Estimated cost: <strong>${((proposal.laborCost || 0) + (proposal.partsCost || 0)).toLocaleString("vi-VN")} ₫</strong>.</p><p>Please log in to your account to approve or decline it.</p>`,
+          html: renderEmailLayout({
+            preheader: `Our technician recommended an additional service: ${proposal.serviceName}.`,
+            heading: "Additional service recommended",
+            bodyHtml: `
+              <p style="margin:0 0 8px;">Hi ${customer.fullName || "there"},</p>
+              <p style="margin:0;">While working on your vehicle, our technician recommended an additional service:</p>
+              <p style="margin:12px 0 0;font-weight:700;">${proposal.serviceName}</p>
+              ${proposal.reason ? `<p style="margin:6px 0 0;color:#334155;">${proposal.reason}</p>` : ""}
+            `,
+            highlight: {
+              label: "Estimated cost",
+              value: `${((proposal.laborCost || 0) + (proposal.partsCost || 0)).toLocaleString("vi-VN")} ₫`,
+            },
+            button: {
+              label: "Approve or decline",
+              url: `${env.corsOrigin[0]}/customer/bookings`,
+            },
+          }),
         }).catch(() => {});
       }
     }

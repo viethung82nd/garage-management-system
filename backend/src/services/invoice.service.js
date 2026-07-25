@@ -6,6 +6,8 @@ import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
+import { renderEmailLayout } from "../utils/emailTemplate.js";
+import { env } from "../config/env.js";
 import { logAudit } from "../utils/audit.js";
 import { generateCode } from "../utils/sequence.js";
 import { PartModel } from "../models/index.js";
@@ -510,7 +512,22 @@ export async function sendInvoiceToCustomer(id, actorId) {
       void sendEmail({
         to: customer.email,
         subject: `Invoice ${formatDisplayId("INV", invoice._id)} — ${invoice.total.toLocaleString("vi-VN")} ₫`,
-        html: `<p>Hi ${customer.fullName || "there"},</p><p>Your invoice for <strong>${vehicle.brand || ""} ${vehicle.model || ""} (${vehicle.licensePlate || ""})</strong> is ready.</p><p>Total due: <strong>${invoice.total.toLocaleString("vi-VN")} ₫</strong></p><p>Please settle at the service desk or by bank transfer as agreed.</p>`,
+        html: renderEmailLayout({
+          preheader: `Your invoice is ready — total due ${invoice.total.toLocaleString("vi-VN")} ₫.`,
+          heading: "Your invoice is ready",
+          bodyHtml: `
+            <p style="margin:0 0 8px;">Hi ${customer.fullName || "there"},</p>
+            <p style="margin:0;">Your invoice for <strong>${[vehicle.brand, vehicle.model].filter(Boolean).join(" ") || "your vehicle"}</strong>${vehicle.licensePlate ? ` (${vehicle.licensePlate})` : ""} is ready. Please settle at the service desk or by bank transfer as agreed.</p>
+          `,
+          highlight: {
+            label: "Total due",
+            value: `${invoice.total.toLocaleString("vi-VN")} ₫`,
+          },
+          button: {
+            label: "View invoice",
+            url: `${env.corsOrigin[0]}/customer/invoices`,
+          },
+        }),
       }).catch(() => {});
     }
   }

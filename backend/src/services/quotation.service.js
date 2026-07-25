@@ -5,6 +5,8 @@ import { userRepository } from "../repositories/user.repository.js";
 import { ApiError } from "../utils/apiError.js";
 import { createNotification } from "../utils/notify.js";
 import { sendEmail } from "../utils/mailer.js";
+import { renderEmailLayout } from "../utils/emailTemplate.js";
+import { env } from "../config/env.js";
 import { runInTransaction } from "../utils/transaction.js";
 import { logAudit } from "../utils/audit.js";
 import { reserveStock } from "../utils/stock.js";
@@ -208,7 +210,22 @@ export async function sendQuotation(id) {
       void sendEmail({
         to: customer.email,
         subject: `Your repair quote ${quote.code} is ready`,
-        html: `<p>Hi ${customer.fullName || "there"},</p><p>Your quote for <strong>${quote.vehicleName || "your vehicle"}</strong> (${quote.vehiclePlate || ""}) is ready — total estimate <strong>${quote.totalEstimate?.toLocaleString("vi-VN")} ₫</strong>.</p><p>Please log in to your account to review and approve it.</p>`,
+        html: renderEmailLayout({
+          preheader: `Your quote ${quote.code} is ready to review — please approve before work begins.`,
+          heading: "Your repair quote is ready",
+          bodyHtml: `
+            <p style="margin:0 0 8px;">Hi ${customer.fullName || "there"},</p>
+            <p style="margin:0;">Your quote <strong>${quote.code}</strong> for <strong>${quote.vehicleName || "your vehicle"}</strong>${quote.vehiclePlate ? ` (${quote.vehiclePlate})` : ""} is ready. Please review and approve it before we begin work.</p>
+          `,
+          highlight: {
+            label: "Total estimate",
+            value: `${quote.totalEstimate?.toLocaleString("vi-VN")} ₫`,
+          },
+          button: {
+            label: "Review & approve quote",
+            url: `${env.corsOrigin[0]}/customer/bookings`,
+          },
+        }),
       }).catch(() => {});
     }
   }

@@ -1,5 +1,6 @@
 import crypto from "crypto";
 import { sendEmail } from "./mailer.js";
+import { renderEmailLayout, BRAND } from "./emailTemplate.js";
 
 /** How long a freshly issued OTP stays valid. */
 export const OTP_TTL_MS = 10 * 60 * 1000;
@@ -39,12 +40,20 @@ const PURPOSE_LABELS = {
  */
 export async function deliverOtp({ email, code, purpose }) {
   const label = PURPOSE_LABELS[purpose] ?? purpose;
-  const html = `
-    <p>Xin chào,</p>
-    <p>Mã xác thực (OTP) của bạn cho yêu cầu <strong>${label}</strong> là:</p>
-    <p style="font-size: 24px; font-weight: bold; letter-spacing: 4px;">${code}</p>
-    <p>Mã này có hiệu lực trong ${Math.round(OTP_TTL_MS / 60000)} phút. Vui lòng không chia sẻ mã này với bất kỳ ai.</p>
-    <p>Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này.</p>
-  `;
+  const minutes = Math.round(OTP_TTL_MS / 60000);
+
+  const html = renderEmailLayout({
+    preheader: `Mã xác thực của bạn: ${code}`,
+    heading: `Mã xác thực ${label}`,
+    bodyHtml: `
+      <p style="margin:0 0 8px;">Xin chào,</p>
+      <p style="margin:0;">Đây là mã xác thực (OTP) cho yêu cầu <strong>${label}</strong> của bạn. Mã có hiệu lực trong <strong>${minutes} phút</strong>.</p>
+      <div style="margin:20px 0 0;padding:12px 16px;background:#fffbeb;border-left:3px solid ${BRAND.amber};border-radius:6px;font-size:13px;color:${BRAND.ink};">
+        Không chia sẻ mã này với bất kỳ ai, kể cả nhân viên Kapa. Nếu bạn không yêu cầu mã này, vui lòng bỏ qua email này.
+      </div>
+    `,
+    highlight: { label: "Mã xác thực", value: code.split("").join("&nbsp;") },
+  });
+
   await sendEmail({ to: email, subject: `Mã OTP ${label} của bạn`, html });
 }
