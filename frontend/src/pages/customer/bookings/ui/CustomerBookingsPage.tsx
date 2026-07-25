@@ -11,8 +11,10 @@ import {
   CustomerSectionHeading,
   CustomerSelect,
   CustomerStatusBadge,
+  CustomerTextarea,
 } from '../../../../shared/ui/kapa-customer'
 import {
+  cancelCustomerBooking,
   fetchCustomerBookings,
   fetchCustomerInvoices,
   fetchCustomerRepairOrders,
@@ -95,6 +97,33 @@ function findMatchingBooking(order: CustomerRepairOrderApiRecord, bookings: Cust
   return bookings.find((booking) => booking.vehicleId?._id === order.vehicleId?._id) || null
 }
 
+function formatBookingDateOnly(value: string) {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) {
+    return value
+  }
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
+}
+
+function mapUpcomingStatus(status: string) {
+  if (status === 'confirmed' || status === 'rescheduled') {
+    return { statusLabel: status === 'rescheduled' ? 'Rescheduled' : 'Confirmed', statusTone: 'in-progress' as const }
+  }
+  return { statusLabel: 'Pending review', statusTone: 'pending' as const }
+}
+
+type UpcomingAppointmentRow = {
+  key: string
+  bookingId: string
+  dateLabel: string
+  timeSlot: string
+  vehicle: string
+  plate: string
+  service: string
+  statusLabel: string
+  statusTone: 'completed' | 'in-progress' | 'pending' | 'ready'
+}
+
 type BookingRow = {
   key: string
   orderId: string
@@ -126,6 +155,10 @@ export default function CustomerBookingsPage() {
   const [bookings, setBookings] = useState<CustomerBookingApiRecord[]>([])
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
   const [requestError, setRequestError] = useState('')
+  const [cancelTargetId, setCancelTargetId] = useState<string | null>(null)
+  const [cancelReason, setCancelReason] = useState('')
+  const [cancelSubmitting, setCancelSubmitting] = useState(false)
+  const [cancelError, setCancelError] = useState('')
 
   useEffect(() => {
     if (!token) {
@@ -198,6 +231,67 @@ export default function CustomerBookingsPage() {
       }
     })
   }, [bookings, invoices, repairOrders])
+
+  // Bookings still awaiting reception — once a service advisor receives the
+  // vehicle, repairOrderId is set and it moves into Booking history above
+  // instead (it's no longer something the customer can self-cancel).
+  const upcomingAppointments = useMemo<UpcomingAppointmentRow[]>(() => {
+    return bookings
+      .filter(
+        (booking) =>
+          ['pending', 'confirmed', 'rescheduled'].includes(booking.status) && !booking.repairOrderId,
+      )
+      .slice()
+      .sort((a, b) =>
+        a.bookingDate === b.bookingDate
+          ? a.timeSlot.localeCompare(b.timeSlot)
+          : a.bookingDate.localeCompare(b.bookingDate),
+      )
+      .map((booking) => {
+        const visualStatus = mapUpcomingStatus(booking.status)
+        return {
+          key: booking._id,
+          bookingId: booking._id,
+          dateLabel: formatBookingDateOnly(booking.bookingDate),
+          timeSlot: booking.timeSlot,
+          vehicle: [booking.vehicleId?.brand, booking.vehicleId?.model].filter(Boolean).join(' ') || 'Vehicle updating',
+          plate: booking.vehicleId?.licensePlate || 'Not recorded',
+          service: booking.serviceId?.name || 'Service to be discussed',
+          statusLabel: visualStatus.statusLabel,
+          statusTone: visualStatus.statusTone,
+        }
+      })
+  }, [bookings])
+
+  function openCancelModal(bookingId: string) {
+    setCancelTargetId(bookingId)
+    setCancelReason('')
+    setCancelError('')
+  }
+
+  function closeCancelModal() {
+    if (cancelSubmitting) return
+    setCancelTargetId(null)
+    setCancelReason('')
+    setCancelError('')
+  }
+
+  async function confirmCancelBooking() {
+    if (!token || !cancelTargetId || cancelSubmitting) return
+
+    setCancelSubmitting(true)
+    setCancelError('')
+    try {
+      const response = await cancelCustomerBooking(token, cancelTargetId, cancelReason.trim() || undefined)
+      setBookings((current) => current.map((item) => (item._id === cancelTargetId ? response.booking : item)))
+      setCancelTargetId(null)
+      setCancelReason('')
+    } catch (error) {
+      setCancelError(error instanceof Error ? error.message : 'Unable to cancel this appointment.')
+    } finally {
+      setCancelSubmitting(false)
+    }
+  }
 
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -302,6 +396,58 @@ export default function CustomerBookingsPage() {
       </section>
 
       <section className="customer-section">
+        <CustomerSectionHeading
+          eyebrow="Upcoming"
+          title="Upcoming appointments"
+          description="Appointments awaiting confirmation or already on the calendar."
+          compact
+          centered
+        />
+
+        {upcomingAppointments.length === 0 ? (
+          <CustomerEmptyState title="No upcoming appointments" description="Book a new appointment any time from the homepage." />
+        ) : (
+          <div className="customer-bookings-table-wrap">
+            <div className="customer-bookings-table-scroll">
+              <table className="customer-bookings-table">
+                <thead>
+                  <tr>
+                    <th>Date</th>
+                    <th>Time</th>
+                    <th>Vehicle</th>
+                    <th>Service</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {upcomingAppointments.map((appointment) => (
+                    <tr key={appointment.key}>
+                      <td>{appointment.dateLabel}</td>
+                      <td>{appointment.timeSlot}</td>
+                      <td>
+                        <strong>{appointment.vehicle}</strong>
+                        <span>{appointment.plate}</span>
+                      </td>
+                      <td>{appointment.service}</td>
+                      <td>
+                        <CustomerStatusBadge tone={appointment.statusTone}>{appointment.statusLabel}</CustomerStatusBadge>
+                      </td>
+                      <td>
+                        <button type="button" className="customer-table-link" onClick={() => openCancelModal(appointment.bookingId)}>
+                          Cancel
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </section>
+
+      <section className="customer-section">
         {filteredBookings.length === 0 ? (
           <CustomerEmptyState title="No booking found" description="Try another keyword or reset the status filter." />
         ) : (
@@ -384,6 +530,65 @@ export default function CustomerBookingsPage() {
               <div className="customer-modal__footer">
                 <button type="button" className="default-btn customer-primary-btn customer-primary-btn--ghost" onClick={closeBookingDetail}>
                   Close
+                  <span />
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {cancelTargetId ? (
+        <div className="customer-modal-backdrop" role="presentation" onClick={closeCancelModal}>
+          <div
+            className="customer-modal customer-modal--tracking"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="cancel-appointment-title"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <button type="button" className="customer-modal__close" aria-label="Close" onClick={closeCancelModal}>
+              ×
+            </button>
+
+            <div className="customer-modal__content customer-modal__content--tracking">
+              <div className="customer-modal__header">
+                <div>
+                  <span className="customer-booking-card__eyebrow">Cancel appointment</span>
+                  <h3 id="cancel-appointment-title">Cancel this appointment?</h3>
+                  <p>This can't be undone — you'll need to book a new appointment if you change your mind.</p>
+                </div>
+              </div>
+
+              <CustomerFormField id="cancel-reason" label="Reason (optional)">
+                <CustomerTextarea
+                  id="cancel-reason"
+                  name="cancel-reason"
+                  value={cancelReason}
+                  onChange={(event) => setCancelReason(event.target.value)}
+                  placeholder="Let us know why, if you'd like."
+                />
+              </CustomerFormField>
+
+              {cancelError ? <CustomerPanel className="customer-panel--error">{cancelError}</CustomerPanel> : null}
+
+              <div className="customer-modal__footer">
+                <button
+                  type="button"
+                  className="default-btn customer-primary-btn customer-primary-btn--ghost"
+                  onClick={closeCancelModal}
+                  disabled={cancelSubmitting}
+                >
+                  Keep appointment
+                  <span />
+                </button>
+                <button
+                  type="button"
+                  className="default-btn customer-primary-btn"
+                  onClick={() => void confirmCancelBooking()}
+                  disabled={cancelSubmitting}
+                >
+                  {cancelSubmitting ? 'Cancelling...' : 'Cancel appointment'}
                   <span />
                 </button>
               </div>

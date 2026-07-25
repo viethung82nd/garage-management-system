@@ -8,6 +8,10 @@ export type CustomerBookingApiRecord = {
   source: string
   status: string
   note?: string
+  // Set once a service advisor has received this booking's vehicle — at
+  // that point it's a repair order, not an outstanding appointment, and
+  // can no longer be self-cancelled.
+  repairOrderId?: string
   customerId?: {
     _id: string
     fullName: string
@@ -174,6 +178,14 @@ export function fetchCustomerBookings(token: string) {
   return apiRequest<{ bookings: CustomerBookingApiRecord[] }>('/api/bookings/mine', {
     method: 'GET',
     token,
+  })
+}
+
+export function cancelCustomerBooking(token: string, id: string, reason?: string) {
+  return apiRequest<{ booking: CustomerBookingApiRecord }>(`/api/bookings/${id}/cancel`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ reason }),
   })
 }
 
