@@ -1422,75 +1422,6 @@ export function QuotationPage() {
                 ))}
               </div>
             </Card>
-
-            <Card
-              bordered={false}
-              className="bo-card-hover bo-enter rounded-2xl"
-              style={{
-                background: advisorPalette.panel,
-                boxShadow: advisorPalette.shadow,
-                border: `1px solid ${advisorPalette.border}`,
-              }}
-              title="Quotation history"
-            >
-              {versionsLoading ? (
-                <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
-                  Loading...
-                </span>
-              ) : versions.length ? (
-                <div className="flex flex-col gap-3">
-                  {versions.map((version) => (
-                    <div
-                      key={version._id ?? version.version}
-                      style={{
-                        borderBottom: `1px solid ${advisorPalette.border}`,
-                        paddingBottom: 10,
-                      }}
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <span
-                          style={{
-                            color: advisorPalette.ink,
-                            fontWeight: 700,
-                            fontSize: 13,
-                          }}
-                        >
-                          Version {version.version}
-                        </span>
-                        <span
-                          style={{
-                            color: advisorPalette.ink,
-                            fontWeight: 700,
-                            fontSize: 13,
-                          }}
-                        >
-                          {money(version.totalEstimate || 0)} ₫
-                        </span>
-                      </div>
-                      <div
-                        style={{
-                          color: advisorPalette.textMuted,
-                          fontSize: 12,
-                          marginTop: 2,
-                        }}
-                      >
-                        {formatDateTime(version.snapshotAt)}
-                        {typeof version.snapshotBy === "object" &&
-                        version.snapshotBy?.fullName
-                          ? ` · ${version.snapshotBy.fullName}`
-                          : ""}
-                        {version.reason ? ` · ${version.reason}` : ""}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
-                  No revisions yet — a version is archived every time a saved
-                  draft is edited again.
-                </span>
-              )}
-            </Card>
           </div>
 
           {/* Sticky actions / totals */}
@@ -1671,6 +1602,78 @@ export function QuotationPage() {
                   Print / Export quotation
                 </Button>
               </div>
+            </Card>
+
+            <Card
+              bordered={false}
+              className="bo-card-hover bo-enter rounded-2xl"
+              style={{
+                background: advisorPalette.panel,
+                boxShadow: advisorPalette.shadow,
+                border: `1px solid ${advisorPalette.border}`,
+              }}
+              title="Quotation history"
+            >
+              {versionsLoading ? (
+                <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
+                  Loading...
+                </span>
+              ) : versions.length ? (
+                <div
+                  className="flex flex-col gap-3"
+                  style={{ maxHeight: 260, overflowY: "auto", paddingRight: 4 }}
+                >
+                  {versions.map((version) => (
+                    <div
+                      key={version._id ?? version.version}
+                      style={{
+                        borderBottom: `1px solid ${advisorPalette.border}`,
+                        paddingBottom: 10,
+                      }}
+                    >
+                      <div className="flex items-center justify-between gap-3">
+                        <span
+                          style={{
+                            color: advisorPalette.ink,
+                            fontWeight: 700,
+                            fontSize: 13,
+                          }}
+                        >
+                          Version {version.version}
+                        </span>
+                        <span
+                          style={{
+                            color: advisorPalette.ink,
+                            fontWeight: 700,
+                            fontSize: 13,
+                          }}
+                        >
+                          {money(version.totalEstimate || 0)} ₫
+                        </span>
+                      </div>
+                      <div
+                        style={{
+                          color: advisorPalette.textMuted,
+                          fontSize: 12,
+                          marginTop: 2,
+                        }}
+                      >
+                        {formatDateTime(version.snapshotAt)}
+                        {typeof version.snapshotBy === "object" &&
+                        version.snapshotBy?.fullName
+                          ? ` · ${version.snapshotBy.fullName}`
+                          : ""}
+                        {version.reason ? ` · ${version.reason}` : ""}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <span style={{ color: advisorPalette.textMuted, fontSize: 13 }}>
+                  No revisions yet — a version is archived every time a saved
+                  draft is edited again.
+                </span>
+              )}
             </Card>
           </div>
         </div>
