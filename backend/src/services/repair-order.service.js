@@ -240,6 +240,27 @@ export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorI
     if (status === "completed" && !order.completedAt) {
       order.completedAt = new Date();
     }
+
+    // clockOn already refuses to open a time log while an order sits in a
+    // WAITING_STATUS (see the comment above it) — but nothing stopped an SA
+    // moving an order into one of these states from here while a technician
+    // already had a span open on it, leaving that span running indefinitely
+    // uncounted against a job that's supposedly paused. Closing it here is
+    // the other half of that same guarantee: a waiting order can never have
+    // an open time log, regardless of which side caused the transition.
+    if (WAITING_STATUSES.includes(status)) {
+      const openTimeLog = await TimeLogModel.findOne({ repairOrderId: order._id, endedAt: null });
+      if (openTimeLog) {
+        const endedAt = new Date();
+        openTimeLog.endedAt = endedAt;
+        openTimeLog.durationMinutes = Math.max(
+          0,
+          Math.round((endedAt - openTimeLog.startedAt) / 60000),
+        );
+        openTimeLog.pauseReason = reason?.trim() || `Order moved to ${status}`;
+        await openTimeLog.save();
+      }
+    }
   }
 
   if (normalizedServiceAdvisorId !== undefined) {
