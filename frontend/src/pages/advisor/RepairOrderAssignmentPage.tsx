@@ -52,17 +52,17 @@ type OrderStatusKey =
   | 'cancelled'
 
 const orderStatusLabels: Record<OrderStatusKey, string> = {
-  pending: 'Chờ xử lý',
-  inProgress: 'Đang sửa chữa',
-  waitingParts: 'Chờ phụ tùng',
-  waitingCustomer: 'Chờ khách',
-  onHold: 'Tạm dừng',
-  completed: 'Hoàn thành',
-  reworkRequired: 'Cần làm lại',
-  readyForDelivery: 'Sẵn sàng bàn giao',
-  delivered: 'Đã bàn giao',
-  closed: 'Đã đóng',
-  cancelled: 'Đã hủy',
+  pending: 'Pending',
+  inProgress: 'In progress',
+  waitingParts: 'Waiting on parts',
+  waitingCustomer: 'Waiting on customer',
+  onHold: 'On hold',
+  completed: 'Completed',
+  reworkRequired: 'Rework required',
+  readyForDelivery: 'Ready for delivery',
+  delivered: 'Delivered',
+  closed: 'Closed',
+  cancelled: 'Cancelled',
 }
 
 const orderStatusColors: Record<OrderStatusKey, string> = {
@@ -283,7 +283,7 @@ export function RepairOrderAssignmentPage() {
   async function confirmStatusChange() {
     if (!token || !orderIdParam || !statusTarget) return
     if (!statusReason.trim()) {
-      setStatusReasonError('Vui lòng nhập lý do.')
+      setStatusReasonError('Please enter a reason.')
       return
     }
     setStatusSaving(true)
@@ -291,7 +291,7 @@ export function RepairOrderAssignmentPage() {
     try {
       const updated = await updateRepairOrderStatus(token, orderIdParam, statusTarget, statusReason.trim())
       setOrder(updated)
-      showSuccess('Đã cập nhật trạng thái đơn hàng.')
+      showSuccess('Order status updated.')
       setStatusTarget(null)
       setStatusReason('')
     } catch (err) {
@@ -316,7 +316,7 @@ export function RepairOrderAssignmentPage() {
       const signature = file ? file.url || (file.originFileObj ? await fileToDataUrl(file.originFileObj as File) : undefined) : undefined
       const updated = await deliverVehicleApi(token, orderIdParam, { oldPartsReturned, signature })
       setOrder(updated)
-      showSuccess('Đã bàn giao xe cho khách.')
+      showSuccess('Vehicle delivered to customer.')
       setDeliverOpen(false)
     } catch (err) {
       showError(err instanceof Error ? err.message : 'Unable to deliver the vehicle')
@@ -350,7 +350,7 @@ export function RepairOrderAssignmentPage() {
                 <div className="flex items-center gap-2">
                   {order.status === 'readyForDelivery' ? (
                     <Button icon={<CarOutlined />} onClick={openDeliverModal} size="small" type="primary">
-                      Bàn giao xe
+                      Deliver vehicle
                     </Button>
                   ) : null}
                   <Dropdown
@@ -358,7 +358,7 @@ export function RepairOrderAssignmentPage() {
                     trigger={['click']}
                   >
                     <Button size="small">
-                      Chuyển trạng thái <DownOutlined />
+                      Change status <DownOutlined />
                     </Button>
                   </Dropdown>
                 </div>
@@ -486,16 +486,16 @@ export function RepairOrderAssignmentPage() {
       )}
 
       <Modal
-        cancelText="Hủy"
+        cancelText="Cancel"
         confirmLoading={statusSaving}
-        okText="Xác nhận"
+        okText="Confirm"
         onCancel={() => setStatusTarget(null)}
         onOk={confirmStatusChange}
         open={Boolean(statusTarget)}
-        title={statusTarget ? `Chuyển trạng thái sang: ${statusLabel(statusTarget)}` : ''}
+        title={statusTarget ? `Change status to: ${statusLabel(statusTarget)}` : ''}
       >
         <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
-          Lý do *
+          Reason *
         </div>
         <Input.TextArea
           autoSize={{ minRows: 2, maxRows: 4 }}
@@ -510,20 +510,20 @@ export function RepairOrderAssignmentPage() {
       </Modal>
 
       <Modal
-        cancelText="Hủy"
+        cancelText="Cancel"
         confirmLoading={deliverSaving}
-        okText="Xác nhận bàn giao"
+        okText="Confirm delivery"
         onCancel={() => setDeliverOpen(false)}
         onOk={confirmDeliver}
         open={deliverOpen}
-        title="Bàn giao xe"
+        title="Deliver vehicle"
       >
         <Checkbox checked={oldPartsReturned} onChange={(event) => setOldPartsReturned(event.target.checked)}>
-          Đã trả phụ tùng cũ cho khách
+          Old parts returned to customer
         </Checkbox>
         <div style={{ marginTop: 16 }}>
           <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
-            Chữ ký khách hàng
+            Customer signature
           </div>
           <Upload
             accept="image/*"

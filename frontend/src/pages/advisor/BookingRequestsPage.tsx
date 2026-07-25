@@ -4,6 +4,7 @@ import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
+  fetchDaySlots,
   fetchNoShowBookings,
   fetchWorkshopBookings,
   formatApiDate,
@@ -15,9 +16,10 @@ import {
   vehicleName,
   vehiclePlate,
   type ApiBooking,
+  type ApiTimeBucket,
 } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
-import { InlineBanner, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
+import { InlineBanner, StatCard, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
 type BookingStatus = 'pending' | 'confirmed' | 'rejected' | 'noShow'
@@ -91,6 +93,16 @@ const serviceMatchTerms: Record<string, string[]> = {
   maintenance: ['maintenance', 'oil'],
 }
 
+/** This page has no per-day view of its own (bookings are listed across all
+ *  dates), so the capacity glance below is scoped to today. */
+function todayIsoDate() {
+  const now = new Date()
+  const yyyy = now.getFullYear()
+  const mm = String(now.getMonth() + 1).padStart(2, '0')
+  const dd = String(now.getDate()).padStart(2, '0')
+  return `${yyyy}-${mm}-${dd}`
+}
+
 export function BookingRequestsPage() {
   const { token } = useAuth()
   const navigate = useNavigate()
@@ -106,6 +118,7 @@ export function BookingRequestsPage() {
   const [query, setQuery] = useState('')
   const [service, setService] = useState('all')
   const [activeTab, setActiveTab] = useState<'pending' | 'processed' | 'noshow'>('pending')
+  const [timeBucket, setTimeBucket] = useState<ApiTimeBucket>()
 
   useEffect(() => {
     if (!token) return
@@ -163,6 +176,29 @@ export function BookingRequestsPage() {
       cancelled = true
     }
   }, [token, activeTab, noShowLoaded])
+
+  // Read-only glance at today's technician capacity — day-level only, since
+  // technician rostering isn't tracked at sub-day granularity.
+  useEffect(() => {
+    if (!token) return
+    const authToken = token
+    let cancelled = false
+
+    async function loadCapacity() {
+      try {
+        const response = await fetchDaySlots(authToken, todayIsoDate())
+        if (!cancelled) setTimeBucket(response.timeBucket)
+      } catch {
+        // Non-critical glance indicator — leave it hidden on failure.
+      }
+    }
+
+    void loadCapacity()
+
+    return () => {
+      cancelled = true
+    }
+  }, [token])
 
   const filteredBookings = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase()
@@ -320,7 +356,7 @@ export function BookingRequestsPage() {
               icon={<UserDeleteOutlined />}
               onClick={() => markNoShowRequest(booking.id)}
             >
-              Đánh dấu vắng mặt
+              Mark no-show
             </Button>
           </div>
         )
@@ -380,13 +416,21 @@ export function BookingRequestsPage() {
     <ServiceAdvisorShell title="Booking requests">
       {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
+      {timeBucket ? (
+        <div className="flex flex-wrap gap-4">
+          <StatCard label="Technicians" palette={advisorPalette} tone="blue" value={timeBucket.technicianCount} />
+          <StatCard label="Available hours" palette={advisorPalette} tone="emerald" value={`${(timeBucket.availableMinutes / 60).toFixed(1)}h`} />
+          <StatCard label="Utilization" palette={advisorPalette} tone="amber" value={`${timeBucket.utilizationPercent}%`} />
+        </div>
+      ) : null}
+
       <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
         <Tabs
           activeKey={activeTab}
           onChange={(key) => setActiveTab(key as 'pending' | 'processed' | 'noshow')}
           tabBarExtraContent={
             <Button icon={<BellOutlined />} loading={reminderSending} onClick={sendReminders}>
-              Gửi nhắc lịch 24h
+              Send 24h reminders
             </Button>
           }
           items={[

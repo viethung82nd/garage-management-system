@@ -6,8 +6,20 @@ import {
   PlusOutlined,
   PrinterOutlined,
 } from "@ant-design/icons";
-import { Button, Card, Empty, Input, InputNumber, Select, Tag } from "antd";
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  AutoComplete,
+  Button,
+  Card,
+  Empty,
+  Input,
+  InputNumber,
+  Modal,
+  Select,
+  Tag,
+  Upload,
+} from "antd";
+import type { UploadFile } from "antd/es/upload/interface";
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   confirmQuotation,
@@ -19,18 +31,22 @@ import {
   fetchWorkshopServices,
   orderId as formatOrderId,
   personName,
+  searchParts,
   updateQuotation,
   unwrapArray,
   vehicleName,
   vehiclePlate,
+  APPROVAL_CHANNELS,
   JOB_TYPES,
   JOB_TYPE_LABELS,
   type ApiInspectionReport,
+  type ApiPartOption,
   type ApiQuotation,
   type ApiRecommendedService,
   type ApiRepairOrder,
   type ApiService,
   type ApiServiceCategory,
+  type ApprovalChannel,
   type JobType,
   type QuotationLineKind,
 } from "../../shared/api/workshop";
@@ -52,6 +68,9 @@ const GARAGE_CONTACT =
 type QuotationLine = {
   id: string;
   serviceId?: string;
+  /** Set when this "part" line was picked from the parts catalogue rather
+   *  than hand-typed. Mirrors ApiQuotationLine.partId. */
+  partId?: string;
   description: string;
   kind: QuotationLineKind;
   jobType: JobType;
@@ -64,6 +83,27 @@ const kindOptions: Array<{ label: string; value: QuotationLineKind }> = [
   { label: "Labor", value: "labor" },
   { label: "Service", value: "service" },
 ];
+
+const CHANNEL_LABELS: Record<ApprovalChannel, string> = {
+  app: "App",
+  inPerson: "In person",
+  phone: "Phone",
+  zalo: "Zalo",
+  email: "Email",
+  sms: "SMS",
+};
+
+// Signatures are captured locally as a data URL (same pattern used by the
+// delivery dialog in RepairOrderAssignmentPage) rather than uploaded to a
+// separate endpoint — the confirm call is a single JSON POST.
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 const jobTypeOptions: Array<{ label: string; value: JobType }> = JOB_TYPES.map(
   (type) => ({ label: JOB_TYPE_LABELS[type], value: type }),
@@ -110,6 +150,7 @@ function makeLine(partial: Partial<QuotationLine> = {}): QuotationLine {
     jobType: partial.jobType ?? "customerPay",
     quantity: partial.quantity ?? 1,
     serviceId: partial.serviceId,
+    partId: partial.partId,
     unitPrice: partial.unitPrice ?? 0,
   };
 }
@@ -263,6 +304,31 @@ export function QuotationPage() {
   >("draft");
   const [saving, setSaving] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [approvalRecord, setApprovalRecord] =
+    useState<ApiQuotation["approval"]>(null);
+
+  // Part-catalogue search results per line id, for the "part" line picker.
+  const [partOptions, setPartOptions] = useState<
+    Record<string, ApiPartOption[]>
+  >({});
+  const partSearchTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>(
+    {},
+  );
+  // Tracks the value just set by picking a catalogue part, so the AutoComplete's
+  // paired onChange (fired for the same selection) doesn't clear partId again.
+  const lastPartSelection = useRef<Record<string, string>>({});
+
+  // Authorization modal — opens on Approve/Decline, captures signatures + channel.
+  const [confirmModalOpen, setConfirmModalOpen] = useState(false);
+  const [confirmIntent, setConfirmIntent] = useState(true);
+  const [confirmChannel, setConfirmChannel] =
+    useState<ApprovalChannel>("inPerson");
+  const [customerSignatureFile, setCustomerSignatureFile] = useState<
+    UploadFile[]
+  >([]);
+  const [advisorSignatureFile, setAdvisorSignatureFile] = useState<
+    UploadFile[]
+  >([]);
 
   // No ?orderId= yet — offer real pending orders to pick from.
   useEffect(() => {
@@ -413,6 +479,41 @@ export function QuotationPage() {
     setLines((current) => [...current, makeLine({ kind })]);
   }
 
+  // Debounced parts-catalogue lookup for a single "part" line's picker.
+  function searchPartsForLine(lineId: string, query: string) {
+    if (!token) return;
+    if (partSearchTimers.current[lineId]) {
+      clearTimeout(partSearchTimers.current[lineId]);
+    }
+    partSearchTimers.current[lineId] = setTimeout(async () => {
+      try {
+        const response = await searchParts(token, query);
+        const results = unwrapArray<ApiPartOption>(response, ["parts"]);
+        setPartOptions((current) => ({ ...current, [lineId]: results }));
+      } catch {
+        // Search picker degrades to free text on failure — not a hard error.
+      }
+    }, 300);
+  }
+
+  function pickPart(lineId: string, part: ApiPartOption) {
+    lastPartSelection.current[lineId] = part.name;
+    updateLine(lineId, {
+      partId: part._id,
+      description: part.name,
+      unitPrice: part.unitPrice,
+    });
+  }
+
+  function editPartDescription(lineId: string, value: string) {
+    if (lastPartSelection.current[lineId] === value) {
+      delete lastPartSelection.current[lineId];
+      updateLine(lineId, { description: value });
+      return;
+    }
+    updateLine(lineId, { description: value, partId: undefined });
+  }
+
   function addServiceLine() {
     const service = services.find(
       (item) => (item._id || item.id) === pickedServiceId,
@@ -489,6 +590,7 @@ export function QuotationPage() {
       discountPercent,
       lines: lines.map((line) => ({
         serviceId: line.serviceId,
+        partId: line.partId,
         description: line.description,
         kind: line.kind,
         jobType: line.jobType,
@@ -534,17 +636,48 @@ export function QuotationPage() {
 
   // Walk-in flow: the customer is right there, so the SA records their decision
   // directly — no "send to customer" round-trip. Approving is what copies these
-  // lines onto the repair order.
-  async function handleConfirm(approved: boolean) {
+  // lines onto the repair order. Opens the signature/channel modal; the actual
+  // confirm call happens in submitConfirm() once the SA confirms there.
+  function openConfirmModal(approved: boolean) {
     if (!validateLines()) return;
+    setConfirmIntent(approved);
+    setConfirmChannel("inPerson");
+    setCustomerSignatureFile([]);
+    setAdvisorSignatureFile([]);
+    setConfirmModalOpen(true);
+  }
+
+  async function submitConfirm() {
+    if (!token) return;
     setConfirming(true);
     clearApiMessage();
     try {
       const id = await ensureSaved();
       if (!id) throw new Error("Unable to create the quotation.");
-      await confirmQuotation(token!, id, approved);
-      setStatus(approved ? "approved" : "rejected");
-      if (approved) {
+      const customerFile = customerSignatureFile[0];
+      const advisorFile = advisorSignatureFile[0];
+      const customerSignature = customerFile
+        ? customerFile.url ||
+          (customerFile.originFileObj
+            ? await fileToDataUrl(customerFile.originFileObj as File)
+            : undefined)
+        : undefined;
+      const advisorSignature = advisorFile
+        ? advisorFile.url ||
+          (advisorFile.originFileObj
+            ? await fileToDataUrl(advisorFile.originFileObj as File)
+            : undefined)
+        : undefined;
+      const confirmed = await confirmQuotation(token, id, {
+        approved: confirmIntent,
+        channel: confirmChannel,
+        customerSignature,
+        advisorSignature,
+      });
+      setApprovalRecord(confirmed?.approval ?? null);
+      setStatus(confirmIntent ? "approved" : "rejected");
+      setConfirmModalOpen(false);
+      if (confirmIntent) {
         navigate(`/advisor/work-orders?orderId=${orderIdParam}`);
       } else {
         showSuccess(
@@ -567,6 +700,7 @@ export function QuotationPage() {
     setQuotationId(undefined);
     setStatus("draft");
     setInspectionLinesAdded(false);
+    setApprovalRecord(null);
     clearApiMessage();
   }
 
@@ -871,16 +1005,52 @@ export function QuotationPage() {
                                 <td style={cellStyle}>
                                   {editable ? (
                                     <div className="flex flex-col gap-1">
-                                      <Input
-                                        size="small"
-                                        value={line.description}
-                                        placeholder="Job / part name"
-                                        onChange={(event) =>
-                                          updateLine(line.id, {
-                                            description: event.target.value,
-                                          })
-                                        }
-                                      />
+                                      {line.kind === "part" ? (
+                                        <AutoComplete
+                                          size="small"
+                                          value={line.description}
+                                          options={(
+                                            partOptions[line.id] || []
+                                          ).map((part) => ({
+                                            value: part.name,
+                                            label: `${part.name} — ${part.sku} (${money(part.unitPrice)})`,
+                                            part,
+                                          }))}
+                                          filterOption={false}
+                                          onSearch={(value) =>
+                                            searchPartsForLine(line.id, value)
+                                          }
+                                          onSelect={(_value, option) =>
+                                            pickPart(
+                                              line.id,
+                                              (
+                                                option as unknown as {
+                                                  part: ApiPartOption;
+                                                }
+                                              ).part,
+                                            )
+                                          }
+                                          onChange={(value) =>
+                                            editPartDescription(
+                                              line.id,
+                                              value,
+                                            )
+                                          }
+                                          placeholder="Part name / SKU"
+                                          style={{ width: "100%" }}
+                                        />
+                                      ) : (
+                                        <Input
+                                          size="small"
+                                          value={line.description}
+                                          placeholder="Job / part name"
+                                          onChange={(event) =>
+                                            updateLine(line.id, {
+                                              description: event.target.value,
+                                            })
+                                          }
+                                        />
+                                      )}
                                       <Select
                                         size="small"
                                         value={line.kind}
@@ -899,6 +1069,19 @@ export function QuotationPage() {
                                       }}
                                     >
                                       {line.description}
+                                      {line.kind === "part" && line.partId ? (
+                                        <Tag
+                                          color={advisorPalette.teal}
+                                          style={{
+                                            marginLeft: 6,
+                                            fontSize: 10,
+                                            lineHeight: "16px",
+                                            padding: "0 4px",
+                                          }}
+                                        >
+                                          Kho
+                                        </Tag>
+                                      ) : null}
                                     </span>
                                   )}
                                 </td>
@@ -1111,6 +1294,64 @@ export function QuotationPage() {
                 value={note}
                 placeholder="Terms, warranty, additional notes..."
               />
+
+              <div
+                style={{
+                  color: advisorPalette.ink,
+                  fontWeight: 700,
+                  fontSize: 13,
+                  margin: "20px 0 10px",
+                  textTransform: "uppercase",
+                }}
+              >
+                Authorization
+              </div>
+              <div className="grid gap-6 sm:grid-cols-2">
+                {(
+                  [
+                    {
+                      key: "customer",
+                      label: "Customer",
+                      src: approvalRecord?.customerSignature,
+                    },
+                    {
+                      key: "advisor",
+                      label: "Service advisor",
+                      src: approvalRecord?.advisorSignature,
+                    },
+                  ] as const
+                ).map((block) => (
+                  <div key={block.key} style={{ textAlign: "center" }}>
+                    {block.src ? (
+                      <img
+                        alt={block.label}
+                        src={block.src}
+                        style={{
+                          maxHeight: 80,
+                          margin: "0 auto",
+                          display: "block",
+                        }}
+                      />
+                    ) : (
+                      <div
+                        style={{
+                          borderBottom: `1px solid ${advisorPalette.ink}`,
+                          height: 60,
+                        }}
+                      />
+                    )}
+                    <div
+                      style={{
+                        marginTop: 6,
+                        fontSize: 12,
+                        color: advisorPalette.textMuted,
+                      }}
+                    >
+                      {block.label}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </Card>
           </div>
 
@@ -1145,7 +1386,7 @@ export function QuotationPage() {
                   marginTop: 4,
                 }}
               >
-                Chỉ tính dòng Khách trả
+                Customer-pay lines only
               </div>
               <div
                 className="mt-4 flex flex-col gap-3"
@@ -1255,7 +1496,7 @@ export function QuotationPage() {
                       icon={<CheckOutlined />}
                       loading={confirming}
                       disabled={!lines.length}
-                      onClick={() => handleConfirm(true)}
+                      onClick={() => openConfirmModal(true)}
                     >
                       Customer approves
                     </Button>
@@ -1265,7 +1506,7 @@ export function QuotationPage() {
                       icon={<CloseOutlined />}
                       loading={confirming}
                       disabled={!lines.length}
-                      onClick={() => handleConfirm(false)}
+                      onClick={() => openConfirmModal(false)}
                     >
                       Customer declines
                     </Button>
@@ -1296,6 +1537,103 @@ export function QuotationPage() {
           </div>
         </div>
       )}
+
+      <Modal
+        cancelText="Cancel"
+        confirmLoading={confirming}
+        okButtonProps={{ danger: !confirmIntent }}
+        okText="Confirm"
+        onCancel={() => setConfirmModalOpen(false)}
+        onOk={submitConfirm}
+        open={confirmModalOpen}
+        title="Confirm & sign"
+      >
+        <Tag color={confirmIntent ? "green" : "red"}>
+          {confirmIntent ? "Customer approves quote" : "Customer declines quote"}
+        </Tag>
+
+        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+          <div>
+            <div
+              style={{
+                color: advisorPalette.textMuted,
+                fontSize: 11,
+                fontWeight: 700,
+                marginBottom: 6,
+                textTransform: "uppercase",
+              }}
+            >
+              Customer signature
+            </div>
+            <Upload
+              accept="image/*"
+              beforeUpload={() => false}
+              fileList={customerSignatureFile}
+              listType="picture-card"
+              maxCount={1}
+              onChange={({ fileList }) => setCustomerSignatureFile(fileList)}
+            >
+              {customerSignatureFile.length >= 1 ? null : (
+                <div>
+                  <PlusOutlined />
+                  <div style={{ marginTop: 8 }}>Upload</div>
+                </div>
+              )}
+            </Upload>
+          </div>
+          <div>
+            <div
+              style={{
+                color: advisorPalette.textMuted,
+                fontSize: 11,
+                fontWeight: 700,
+                marginBottom: 6,
+                textTransform: "uppercase",
+              }}
+            >
+              Advisor signature
+            </div>
+            <Upload
+              accept="image/*"
+              beforeUpload={() => false}
+              fileList={advisorSignatureFile}
+              listType="picture-card"
+              maxCount={1}
+              onChange={({ fileList }) => setAdvisorSignatureFile(fileList)}
+            >
+              {advisorSignatureFile.length >= 1 ? null : (
+                <div>
+                  <PlusOutlined />
+                  <div style={{ marginTop: 8 }}>Upload</div>
+                </div>
+              )}
+            </Upload>
+          </div>
+        </div>
+
+        <div style={{ marginTop: 16 }}>
+          <div
+            style={{
+              color: advisorPalette.textMuted,
+              fontSize: 11,
+              fontWeight: 700,
+              marginBottom: 6,
+              textTransform: "uppercase",
+            }}
+          >
+            Channel
+          </div>
+          <Select
+            value={confirmChannel}
+            options={APPROVAL_CHANNELS.map((channel) => ({
+              label: CHANNEL_LABELS[channel],
+              value: channel,
+            }))}
+            onChange={setConfirmChannel}
+            style={{ width: "100%" }}
+          />
+        </div>
+      </Modal>
     </ServiceAdvisorShell>
   );
 }

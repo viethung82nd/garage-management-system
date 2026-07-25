@@ -114,21 +114,44 @@ export const JOB_TYPES = ['customerPay', 'warranty', 'internal', 'insurance', 'g
 export type JobType = (typeof JOB_TYPES)[number]
 
 export const JOB_TYPE_LABELS: Record<JobType, string> = {
-  customerPay: 'Khách trả',
-  warranty: 'Bảo hành hãng',
-  internal: 'Nội bộ (gara chịu)',
-  insurance: 'Bảo hiểm',
-  goodwill: 'Thiện chí',
+  customerPay: 'Customer pay',
+  warranty: 'Warranty',
+  internal: 'Internal (shop-absorbed)',
+  insurance: 'Insurance',
+  goodwill: 'Goodwill',
 }
 
 export type ApiQuotationLine = {
   id?: string
   serviceId?: string
+  /** Set when a "part" line is picked from the parts catalogue rather than
+   *  hand-typed — this is what lets an approved quote reserve real stock. */
+  partId?: string
   description?: string
   kind?: QuotationLineKind
   jobType?: JobType
   quantity?: number
   unitPrice?: number
+}
+
+/** A row from the parts catalogue, for the quote line picker. Mirrors the
+ *  fields `GET /api/admin/parts` returns (see PartModel). */
+export type ApiPartOption = {
+  _id: string
+  name: string
+  sku: string
+  unitPrice: number
+  condition?: string
+  stockQuantity?: number
+  reservedQuantity?: number
+  availableQuantity?: number
+}
+
+/** Searches the parts catalogue by name/SKU — used to pick a real part for a
+ *  quote line. Read access for serviceAdvisor was opened in Phase 3. */
+export function searchParts(token: string, q: string) {
+  const query = q.trim() ? `?q=${encodeURIComponent(q.trim())}` : ''
+  return apiRequest<{ parts?: ApiPartOption[] } | ApiPartOption[]>(`/api/admin/parts${query}`, { token })
 }
 
 export type ApiQuotation = {
@@ -147,10 +170,35 @@ export type ApiQuotation = {
   totalEstimate?: number
   note?: string
   validUntil?: string
-  status?: 'draft' | 'sent' | 'approved' | 'rejected'
+  status?: 'draft' | 'sent' | 'approved' | 'partiallyApproved' | 'rejected'
   createdAt?: string
   /** Only set on the response to sendQuotation() — whether the customer had an email on file to actually send to. */
   hasEmailOnFile?: boolean
+  /** The authorisation record left once a decision is taken — who, when,
+   *  through which channel, and (for an in-person decision) both signatures. */
+  approval?: {
+    decidedByName?: string
+    decidedAt?: string
+    channel?: ApprovalChannel
+    contactValue?: string
+    approvedTotal?: number
+    customerSignature?: string
+    advisorSignature?: string
+  } | null
+}
+
+/** Payload for recording a customer's decision on a quotation. `approved`
+ *  decides every line at once; `lineDecisions` allows a per-line mix
+ *  (partial approval). Signatures are data-URL images. */
+export type ConfirmQuotationPayload = {
+  approved?: boolean
+  lineDecisions?: Array<{ index: number; approved: boolean; declineReason?: string }>
+  channel?: ApprovalChannel
+  contactValue?: string
+  decidedByName?: string
+  note?: string
+  customerSignature?: string
+  advisorSignature?: string
 }
 
 export type ApiDashboardSummary = {
@@ -287,6 +335,80 @@ export function sendAppointmentReminders(token: string) {
     token,
     body: JSON.stringify({}),
   })
+}
+
+/** A day's real capacity signal — labour-minutes, not just seats. See
+ *  computeTimeBucket in booking.service.js. */
+export type ApiTimeBucket = {
+  technicianCount: number
+  capacityMinutes: number
+  bookedMinutes: number
+  availableMinutes: number
+  utilizationPercent: number
+}
+
+export type ApiDaySlot = {
+  timeSlot: string
+  capacity: number
+  booked: number
+  available: boolean
+}
+
+export type ApiSlotsResponse = {
+  date: string
+  capacity: number
+  slots: ApiDaySlot[]
+  timeBucket?: ApiTimeBucket
+}
+
+/** Staff-facing day availability: seats per slot AND the labour-hour time
+ *  bucket, together — a seat can be free while the shop is out of
+ *  technician-hours, or the reverse. */
+export function fetchDaySlots(token: string, date: string) {
+  return apiRequest<ApiSlotsResponse>(`/api/bookings/slots?date=${encodeURIComponent(date)}`, { token })
+}
+
+// ===== Resources: bays / lifts / paint booths (capacity planning) =====
+
+export const RESOURCE_TYPES = ['bay', 'lift', 'paintBooth', 'mobile'] as const
+export type ResourceType = (typeof RESOURCE_TYPES)[number]
+export const RESOURCE_TYPE_LABELS: Record<ResourceType, string> = {
+  bay: 'Bay',
+  lift: 'Lift',
+  paintBooth: 'Paint booth',
+  mobile: 'Mobile',
+}
+
+export type ApiResource = {
+  _id: string
+  name: string
+  type: ResourceType
+  isActive?: boolean
+  notes?: string
+}
+
+export function fetchResources(token: string, params: { type?: ResourceType; includeInactive?: boolean } = {}) {
+  const query = new URLSearchParams()
+  if (params.type) query.set('type', params.type)
+  if (params.includeInactive) query.set('includeInactive', 'true')
+  const qs = query.toString()
+  return apiRequest<{ resources?: ApiResource[] }>(`/api/resources${qs ? `?${qs}` : ''}`, { token })
+}
+
+export function createResource(token: string, payload: { name: string; type: ResourceType; notes?: string }) {
+  return apiRequest<{ resource: ApiResource }>('/api/resources', { method: 'POST', token, body: JSON.stringify(payload) })
+}
+
+export function updateResource(
+  token: string,
+  id: string,
+  payload: Partial<{ name: string; type: ResourceType; notes: string; isActive: boolean }>,
+) {
+  return apiRequest<{ resource: ApiResource }>(`/api/resources/${id}`, { method: 'PUT', token, body: JSON.stringify(payload) })
+}
+
+export function deleteResource(token: string, id: string) {
+  return apiRequest<{ message: string }>(`/api/resources/${id}`, { method: 'DELETE', token })
 }
 
 export function createWorkshopRepairOrder(token: string, payload: unknown) {
@@ -532,11 +654,13 @@ export function sendQuotation(token: string, id: string) {
 }
 
 /** Records the SA's log of what the customer decided — approving syncs the quotation's lines into the linked RepairOrder. */
-export function confirmQuotation(token: string, id: string, approved: boolean) {
+/** An advisor records the customer's decision — approve/reject/partial, with
+ *  the authorisation evidence (channel + optional signatures). */
+export function confirmQuotation(token: string, id: string, payload: ConfirmQuotationPayload) {
   return apiRequest<ApiQuotation>(`/api/quotations/${id}/confirm`, {
     method: 'PATCH',
     token,
-    body: JSON.stringify({ approved }),
+    body: JSON.stringify(payload),
   })
 }
 

@@ -72,6 +72,14 @@ const bookingSchema = new Schema(
       type: Number,
       min: 1,
     },
+    // Optional physical-resource assignment (a specific bay/lift/paint booth) —
+    // separate from seatNo, which only guarantees a customer slot exists. Not
+    // required: most bookings don't need a named resource pinned in advance,
+    // but a job that does (an alignment rack, a paint booth) can be tied to one.
+    resourceId: {
+      type: Schema.Types.ObjectId,
+      ref: "Resource",
+    },
     occupiesSlot: {
       type: Boolean,
       default: true,

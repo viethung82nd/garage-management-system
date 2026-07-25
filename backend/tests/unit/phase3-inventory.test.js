@@ -119,7 +119,7 @@ describe("Phase 3 — approving a quote reserves stock", () => {
     const history = await RepairOrderStatusHistoryModel.find({ repairOrderId: order._id });
     const waiting = history.find((h) => h.to === "waitingParts");
     expect(waiting).toBeTruthy();
-    expect(waiting.reason).toMatch(/thiếu 3/);
+    expect(waiting.reason).toMatch(/short 3/);
   });
 
   it("leaves the order alone when stock covers the whole line", async () => {

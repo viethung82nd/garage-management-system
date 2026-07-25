@@ -264,6 +264,11 @@ function normaliseDecision(payload, lineCount) {
     contactValue: raw.contactValue?.trim(),
     decidedByName: raw.decidedByName?.trim(),
     note: raw.note?.trim(),
+    // Signature images (data URLs) — see approval.schema.js. Not trimmed:
+    // trimming a data URL string is harmless but pointless: any leading/
+    // trailing whitespace would already break the "data:" prefix.
+    customerSignature: typeof raw.customerSignature === "string" ? raw.customerSignature : undefined,
+    advisorSignature: typeof raw.advisorSignature === "string" ? raw.advisorSignature : undefined,
   };
 }
 
@@ -303,10 +308,8 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
     );
   }
 
-  const { decisions, channel, contactValue, decidedByName, note } = normaliseDecision(
-    payload,
-    quote.lines.length,
-  );
+  const { decisions, channel, contactValue, decidedByName, note, customerSignature, advisorSignature } =
+    normaliseDecision(payload, quote.lines.length);
 
   const isSelfService = CUSTOMER_ROLES.includes(actorRole);
   // An advisor confirming the initial estimate is, in the overwhelming
@@ -354,6 +357,11 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
       recordedBy: isSelfService ? undefined : actorId,
       note,
       approvedTotal: quote.totalEstimate,
+      customerSignature,
+      // In the self-service (app) path there is no advisor physically present
+      // to countersign — only a relayed, in-person/phone decision carries an
+      // advisor's own signature.
+      advisorSignature: isSelfService ? undefined : advisorSignature,
     };
     await quote.save({ session });
 
@@ -410,7 +418,7 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
             session,
           );
           if (shortfall > 0) {
-            shortages.push(`${name || "part"} (thiếu ${shortfall})`);
+            shortages.push(`${name || "part"} (short ${shortfall})`);
           }
         }
       }
@@ -470,7 +478,7 @@ export async function confirmQuotation(id, payload, actorId, actorRole) {
       from: previousOrderStatus,
       to: "waitingParts",
       changedBy: actorId,
-      reason: `Chờ phụ tùng: ${shortages.join(", ")}`,
+      reason: `Waiting on parts: ${shortages.join(", ")}`,
     });
   }
 

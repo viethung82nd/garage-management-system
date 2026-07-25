@@ -69,6 +69,22 @@ export function createApprovalSchema() {
       approvedTotal: {
         type: Number,
       },
+      // Signature images (data URLs), captured at the moment of decision — the
+      // physical-counter equivalent of the "customer signature" line every
+      // printed estimate ends with. Both are optional: a self-service approval
+      // in the app has no pen-and-paper signature to capture, and an advisor
+      // relaying a phone decision has no customer present to sign either — the
+      // rest of the approval record (channel, contact, timestamp) already
+      // stands as evidence in those cases.
+      customerSignature: {
+        type: String,
+      },
+      // The advisor who prepared/countersigns the estimate. Recorded alongside
+      // the customer's mark so the document reads as a jointly-authorised
+      // agreement, not just a customer checkbox.
+      advisorSignature: {
+        type: String,
+      },
     },
     { _id: false },
   );

@@ -44,6 +44,7 @@ import {
   OdometerLogModel,
   ReminderModel,
   FollowUpModel,
+  ResourceModel,
 } from "../src/models/index.js";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -103,6 +104,7 @@ async function clearCollections() {
     OdometerLogModel.deleteMany({}),
     ReminderModel.deleteMany({}),
     FollowUpModel.deleteMany({}),
+    ResourceModel.deleteMany({}),
   ]);
   console.log("[seed] cleared existing collections");
 }
@@ -1000,6 +1002,19 @@ async function seedParts() {
   return parts;
 }
 
+async function seedResources() {
+  const resources = await ResourceModel.insertMany([
+    { name: "Khoang 1", type: "bay" },
+    { name: "Khoang 2", type: "bay" },
+    { name: "Khoang 3", type: "bay" },
+    { name: "Cầu nâng A", type: "lift" },
+    { name: "Cầu nâng B", type: "lift" },
+    { name: "Buồng sơn 1", type: "paintBooth" },
+  ]);
+  console.log(`[seed] resources: ${resources.length}`);
+  return resources;
+}
+
 async function seedNotificationsReviews({ customers, advisors, technicians, order1, order2, bookings }) {
   const notifications = await NotificationModel.insertMany([
     { userId: customers[1]._id, type: "bookingConfirmed", title: "Appointment confirmed", message: "Your appointment for Full Brake System Inspection has been confirmed.", refId: bookings[1]._id, refModel: "Booking", isRead: false },
@@ -1153,6 +1168,7 @@ async function main() {
   await seedInvoicesPayments({ order1, order2, order4, accountants, customers, walkIns });
   const parts = await seedParts();
   await seedTransformationData({ vehicles, parts, repairOrders, customers, walkIns, technicians });
+  await seedResources();
   await seedNotificationsReviews({ customers, advisors, technicians, order1, order2, bookings });
 
   console.log("\n[seed] done. Login with any seeded account, password: Password123!");

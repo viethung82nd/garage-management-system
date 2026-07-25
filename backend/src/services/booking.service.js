@@ -8,13 +8,19 @@ import {
 } from "../repositories/service.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
+import { resourceRepository } from "../repositories/resource.repository.js";
 import { BOOKING_STATUSES } from "../models/booking.model.js";
+import { ScheduleModel } from "../models/schedule.model.js";
 import { ApiError } from "../utils/apiError.js";
 import {
   SLOT_CAPACITY,
   ACTIVE_BOOKING_STATUSES,
   getSlotTimes,
   isValidSlot,
+  TECH_SHIFT_HOURS,
+  CAPACITY_EFFICIENCY,
+  CAPACITY_RESERVE_RATIO,
+  DEFAULT_JOB_MINUTES,
 } from "../config/constants.js";
 import { todayUtc } from "../utils/date.js";
 import { createNotification, notifyRole } from "../utils/notify.js";
@@ -86,8 +92,69 @@ async function takenSeats(bookingDate, timeSlot) {
 }
 
 /**
+ * The real capacity question a seat count can't answer: how many labour-
+ * minutes can the shop actually sell today, and how many are already spoken
+ * for. Computed for the whole day (technician rostering isn't tracked at
+ * sub-day granularity today), not per slot — additive to, not a replacement
+ * for, the seat-based booking limit that actually enforces overbooking safety.
+ */
+async function computeTimeBucket(bookingDate) {
+  // Technician headcount for the day: prefer an actual roster (Schedule) for
+  // that date; if none was entered, fall back to every active technician on
+  // staff — a reasonable default rather than reporting zero capacity.
+  const rosteredCount = await ScheduleModel.countDocuments({
+    date: bookingDate,
+    isAvailable: true,
+  });
+  const technicianCount =
+    rosteredCount > 0
+      ? rosteredCount
+      : await userRepository.model.countDocuments({ role: "technician", isActive: { $ne: false } });
+
+  const capacityMinutes = Math.round(
+    technicianCount * TECH_SHIFT_HOURS * 60 * CAPACITY_EFFICIENCY * (1 - CAPACITY_RESERVE_RATIO),
+  );
+
+  // Sum the estimated duration of every active booking that day, falling back
+  // to a default estimate for a booking with no linked service (or a service
+  // with no estimatedDuration on file) so the total is never understated.
+  const minuteRows = await bookingRepository.aggregate([
+    { $match: { bookingDate, status: { $in: ACTIVE_BOOKING_STATUSES } } },
+    {
+      $lookup: {
+        from: "services",
+        localField: "serviceId",
+        foreignField: "_id",
+        as: "service",
+      },
+    },
+    {
+      $addFields: {
+        durationMinutes: {
+          $ifNull: [{ $arrayElemAt: ["$service.estimatedDuration", 0] }, DEFAULT_JOB_MINUTES],
+        },
+      },
+    },
+    { $group: { _id: null, totalMinutes: { $sum: "$durationMinutes" } } },
+  ]);
+  const bookedMinutes = minuteRows[0]?.totalMinutes || 0;
+
+  return {
+    technicianCount,
+    capacityMinutes,
+    bookedMinutes,
+    availableMinutes: Math.max(0, capacityMinutes - bookedMinutes),
+    utilizationPercent:
+      capacityMinutes > 0 ? Math.round((bookedMinutes / capacityMinutes) * 100) : 0,
+  };
+}
+
+/**
  * Public availability for a single day. Returns every configured slot with its
- * capacity, current booked count, and whether it can still take a booking.
+ * seat capacity/booked count, plus the day's labour-hour time bucket — the
+ * two capacity signals together, since neither alone answers "can we take
+ * this job" (a day can have a free seat and no technician-hours left, or the
+ * reverse).
  */
 export async function getSlots(dateParam) {
   const bookingDate = parseBookingDate(dateParam);
@@ -112,7 +179,9 @@ export async function getSlots(dateParam) {
     };
   });
 
-  return { date: dateParam, capacity: SLOT_CAPACITY, slots };
+  const timeBucket = await computeTimeBucket(bookingDate);
+
+  return { date: dateParam, capacity: SLOT_CAPACITY, slots, timeBucket };
 }
 
 /** Finds a user by phone, or creates a walk-in customer record for them. */
@@ -271,6 +340,9 @@ export async function createBooking({
   bookingDate,
   timeSlot,
   note,
+  // Optional pin to a specific bay/lift/paint booth — most bookings don't need
+  // one, but a job that does (e.g. an alignment rack) can reserve it up front.
+  resourceId,
 }) {
   if (!customer?.fullName?.trim() || !customer?.phone?.trim()) {
     throw new ApiError(
@@ -324,6 +396,30 @@ export async function createBooking({
     throw new ApiError(409, "the requested slot is fully booked");
   }
 
+  let resolvedResourceId;
+  if (resourceId) {
+    if (!OID_RE.test(String(resourceId))) {
+      throw new ApiError(400, "Invalid resourceId format");
+    }
+    const resource = await resourceRepository.findOne({ _id: resourceId, isActive: { $ne: false } });
+    if (!resource) {
+      throw new ApiError(404, "Resource not found or inactive");
+    }
+    // A resource can only back one active booking in a given slot — the same
+    // exclusivity guarantee seats get, checked here rather than via a unique
+    // index since a null resourceId (the common case) must not collide.
+    const clash = await bookingRepository.findOne({
+      bookingDate: day,
+      timeSlot,
+      resourceId,
+      status: { $in: ACTIVE_BOOKING_STATUSES },
+    });
+    if (clash) {
+      throw new ApiError(409, "This resource is already booked for that slot");
+    }
+    resolvedResourceId = resource._id;
+  }
+
   const customerDoc = await resolveCustomer(customer);
   const vehicleDoc = await resolveVehicle(vehicle, customerDoc._id);
 
@@ -346,6 +442,7 @@ export async function createBooking({
         status: "pending",
         note,
         seatNo,
+        resourceId: resolvedResourceId,
       });
       break;
     } catch (err) {
@@ -696,8 +793,8 @@ export async function listNoShows() {
   return { bookings };
 }
 
-/** Zero-pads a UTC-midnight bookingDate into a Vietnamese-style dd/mm/yyyy string. */
-function formatVnDate(date) {
+/** Zero-pads a UTC-midnight bookingDate into a dd/mm/yyyy string. */
+function formatSlotDate(date) {
   const d = String(date.getUTCDate()).padStart(2, "0");
   const m = String(date.getUTCMonth() + 1).padStart(2, "0");
   const y = date.getUTCFullYear();
@@ -746,10 +843,10 @@ export async function generateAppointmentReminders() {
     await createNotification({
       userId: booking.customerId,
       type: "appointmentReminder",
-      title: "Nhắc lịch hẹn sắp tới",
-      message: `Bạn có lịch hẹn dịch vụ vào lúc ${booking.timeSlot} ngày ${formatVnDate(
+      title: "Upcoming appointment reminder",
+      message: `You have a service appointment at ${booking.timeSlot} on ${formatSlotDate(
         booking.bookingDate
-      )}. Vui lòng đến đúng giờ.`,
+      )}. Please arrive on time.`,
       refId: booking._id,
       refModel: "Booking",
     });
