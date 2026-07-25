@@ -68,11 +68,15 @@ const orderStatusColors: Record<OrderStatusKey, string> = {
 }
 
 function statusLabel(status?: string) {
-  return status && status in orderStatusLabels ? orderStatusLabels[status as OrderStatusKey] : status || 'Unknown'
+  return status && status in orderStatusLabels
+    ? orderStatusLabels[status as OrderStatusKey]
+    : status || 'Unknown'
 }
 
 function statusColor(status?: string) {
-  return status && status in orderStatusColors ? orderStatusColors[status as OrderStatusKey] : 'default'
+  return status && status in orderStatusColors
+    ? orderStatusColors[status as OrderStatusKey]
+    : 'default'
 }
 
 /** Statuses the advisor can move an order into from here — each requires a reason, enforced by the backend. */
@@ -96,7 +100,12 @@ function mapTechnician(technician: ApiTechnician): Technician {
     id: technician._id || technician.id || crypto.randomUUID(),
     name: technician.fullName || technician.email || 'Technician',
     skill: technician.skill || undefined,
-    status: technician.status === 'busy' ? 'busy' : technician.status === 'off' || technician.status === 'offline' ? 'offline' : 'available',
+    status:
+      technician.status === 'busy'
+        ? 'busy'
+        : technician.status === 'off' || technician.status === 'offline'
+          ? 'offline'
+          : 'available',
   }
 }
 
@@ -156,10 +165,18 @@ function promiseState(promisedAt: string | undefined, now: number) {
   const hours = Math.floor(absMinutes / 60)
   const minutes = absMinutes % 60
   const duration = hours > 0 ? `${hours}h${String(minutes).padStart(2, '0')}` : `${minutes}p`
-  return { label: late ? `Trễ hẹn · ${duration}` : `Còn ${duration}`, late }
+  return { label: late ? `${duration} late` : `${duration} remaining`, late }
 }
 
-function BoardCardItem({ card, now, onClick }: { card: BoardCard; now: number; onClick: () => void }) {
+function BoardCardItem({
+  card,
+  now,
+  onClick,
+}: {
+  card: BoardCard
+  now: number
+  onClick: () => void
+}) {
   const promise = promiseState(card.promisedAt, now)
 
   return (
@@ -176,15 +193,21 @@ function BoardCardItem({ card, now, onClick }: { card: BoardCard; now: number; o
       styles={{ body: { padding: 12 } }}
     >
       <div className="flex items-center justify-between gap-2">
-        <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>{card.code}</span>
+        <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>
+          {card.code}
+        </span>
         {card.isComeback ? (
           <Tag color={advisorPalette.amber} style={{ marginInlineEnd: 0 }}>
             Comeback
           </Tag>
         ) : null}
       </div>
-      <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 4 }}>{card.plate}</div>
-      <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 2 }}>{card.technician}</div>
+      <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 4 }}>
+        {card.plate}
+      </div>
+      <div style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 2 }}>
+        {card.technician}
+      </div>
       <Tag color={promise.late ? 'red' : 'default'} style={{ marginInlineEnd: 0, marginTop: 8 }}>
         {promise.label}
       </Tag>
@@ -195,10 +218,23 @@ function BoardCardItem({ card, now, onClick }: { card: BoardCard; now: number; o
 /** Shown when the page arrives with no ?orderId= — every order, grouped by
  * status. Doubles as both the shop-floor overview and the entry point into
  * the assign/status/deliver actions below (click a card to drill in). */
-function ProductionBoard({ orders, now, onPick }: { orders: ApiRepairOrder[]; now: number; onPick: (id: string) => void }) {
+function ProductionBoard({
+  orders,
+  now,
+  onPick,
+}: {
+  orders: ApiRepairOrder[]
+  now: number
+  onPick: (id: string) => void
+}) {
   const cardsByColumn = useMemo(() => {
     const cards = orders.map(mapBoardCard)
-    const grouped: Record<BoardColumnKey, BoardCard[]> = { inProgress: [], pending: [], ready: [], waiting: [] }
+    const grouped: Record<BoardColumnKey, BoardCard[]> = {
+      inProgress: [],
+      pending: [],
+      ready: [],
+      waiting: [],
+    }
     BOARD_COLUMNS.forEach((column) => {
       grouped[column.key] = cards.filter((card) => column.statuses.includes(card.status))
     })
@@ -215,15 +251,37 @@ function ProductionBoard({ orders, now, onPick }: { orders: ApiRepairOrder[]; no
         const cards = cardsByColumn[column.key]
         return (
           <div className="flex flex-col gap-3" key={column.key}>
-            <div className="flex items-center justify-between gap-2 rounded-xl px-3 py-2" style={{ background: advisorPalette.panelAlt }}>
-              <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>{column.title}</span>
+            <div
+              className="flex items-center justify-between gap-2 rounded-xl px-3 py-2"
+              style={{ background: advisorPalette.panelAlt }}
+            >
+              <span style={{ color: advisorPalette.ink, fontSize: 13, fontWeight: 700 }}>
+                {column.title}
+              </span>
               <Tag style={{ marginInlineEnd: 0 }}>{cards.length}</Tag>
             </div>
-            <div className="flex flex-col gap-2" style={{ maxHeight: 640, overflowY: 'auto', paddingRight: 2 }}>
+            <div
+              className="flex flex-col gap-2"
+              style={{ maxHeight: 640, overflowY: 'auto', paddingRight: 2 }}
+            >
               {cards.length ? (
-                cards.map((card) => <BoardCardItem card={card} key={card.id} now={now} onClick={() => onPick(card.id)} />)
+                cards.map((card) => (
+                  <BoardCardItem
+                    card={card}
+                    key={card.id}
+                    now={now}
+                    onClick={() => onPick(card.id)}
+                  />
+                ))
               ) : (
-                <Card bordered={false} size="small" style={{ background: advisorPalette.panel, border: `1px dashed ${advisorPalette.border}` }}>
+                <Card
+                  bordered={false}
+                  size="small"
+                  style={{
+                    background: advisorPalette.panel,
+                    border: `1px dashed ${advisorPalette.border}`,
+                  }}
+                >
                   <Empty description="No orders" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                 </Card>
               )}
@@ -246,7 +304,13 @@ export function RepairOrderAssignmentPage() {
   const [boardNow, setBoardNow] = useState(() => Date.now())
   const [technicians, setTechnicians] = useState<Technician[]>([])
   const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
-  const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
+  const {
+    message: apiMessage,
+    tone: apiTone,
+    showError,
+    showSuccess,
+    clear: clearApiMessage,
+  } = useApiMessage()
   const [saving, setSaving] = useState(false)
   const [saved, setSaved] = useState(false)
 
@@ -273,7 +337,10 @@ export function RepairOrderAssignmentPage() {
         if (cancelled) return
         setBoardOrders(unwrapArray<ApiRepairOrder>(response, ['repairOrders', 'orders']))
       } catch (err) {
-        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load repair orders from the API')
+        if (!cancelled)
+          showError(
+            err instanceof Error ? err.message : 'Unable to load repair orders from the API',
+          )
       }
     }
 
@@ -302,10 +369,12 @@ export function RepairOrderAssignmentPage() {
         const loadedOrder = await fetchWorkshopRepairOrderById(authToken, orderIdParam!)
         if (cancelled) return
         setOrder(loadedOrder)
-        const existingTechId = loadedOrder.technicianId?._id || (loadedOrder.technicianId as unknown as string)
+        const existingTechId =
+          loadedOrder.technicianId?._id || (loadedOrder.technicianId as unknown as string)
         if (existingTechId) setSelectedTechnicianId(String(existingTechId))
       } catch (err) {
-        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load this repair order')
+        if (!cancelled)
+          showError(err instanceof Error ? err.message : 'Unable to load this repair order')
       }
     }
 
@@ -325,7 +394,8 @@ export function RepairOrderAssignmentPage() {
         const technicianList = await fetchWorkshopTechnicians(authToken)
         if (!cancelled) setTechnicians(technicianList.map(mapTechnician))
       } catch (err) {
-        if (!cancelled) showError(err instanceof Error ? err.message : 'Unable to load technicians from the API')
+        if (!cancelled)
+          showError(err instanceof Error ? err.message : 'Unable to load technicians from the API')
       }
     }
 
@@ -337,7 +407,9 @@ export function RepairOrderAssignmentPage() {
 
   const selectedTechnician = technicians.find((tech) => tech.id === selectedTechnicianId)
   const services = order?.services || []
-  const totalCost = order?.totalCost || services.reduce((sum, service) => sum + (service.priceAtTime || 0) * (service.quantity || 1), 0)
+  const totalCost =
+    order?.totalCost ||
+    services.reduce((sum, service) => sum + (service.priceAtTime || 0) * (service.quantity || 1), 0)
 
   async function assignAndContinue() {
     if (!token || !orderIdParam || !selectedTechnicianId) return
@@ -372,7 +444,12 @@ export function RepairOrderAssignmentPage() {
     setStatusSaving(true)
     clearApiMessage()
     try {
-      const updated = await updateRepairOrderStatus(token, orderIdParam, statusTarget, statusReason.trim())
+      const updated = await updateRepairOrderStatus(
+        token,
+        orderIdParam,
+        statusTarget,
+        statusReason.trim(),
+      )
       setOrder(updated)
       showSuccess('Order status updated.')
       setStatusTarget(null)
@@ -395,7 +472,10 @@ export function RepairOrderAssignmentPage() {
     setDeliverSaving(true)
     clearApiMessage()
     try {
-      const updated = await deliverVehicleApi(token, orderIdParam, { oldPartsReturned, signature: deliverySignature })
+      const updated = await deliverVehicleApi(token, orderIdParam, {
+        oldPartsReturned,
+        signature: deliverySignature,
+      })
       setOrder(updated)
       showSuccess('Vehicle delivered to customer.')
       setDeliverOpen(false)
@@ -413,29 +493,67 @@ export function RepairOrderAssignmentPage() {
       {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
       {!orderIdParam ? (
-        <ProductionBoard orders={boardOrders} now={boardNow} onPick={(id) => navigate(`/advisor/work-orders?orderId=${id}`)} />
+        <ProductionBoard
+          orders={boardOrders}
+          now={boardNow}
+          onPick={(id) => navigate(`/advisor/work-orders?orderId=${id}`)}
+        />
       ) : !order ? (
-        <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}>
+        <Card
+          bordered={false}
+          className="bo-card-hover bo-enter rounded-2xl"
+          style={{
+            background: advisorPalette.panel,
+            boxShadow: advisorPalette.shadow,
+            border: `1px solid ${advisorPalette.border}`,
+          }}
+        >
           <Empty description="Loading repair order..." />
         </Card>
       ) : (
         <div className="grid items-start gap-5 *:min-w-0 xl:grid-cols-[minmax(0,1fr)_360px]">
           <div className="flex flex-col gap-5">
-            <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Customer & vehicle">
+            <Card
+              bordered={false}
+              className="bo-card-hover bo-enter rounded-2xl"
+              style={{
+                background: advisorPalette.panel,
+                boxShadow: advisorPalette.shadow,
+                border: `1px solid ${advisorPalette.border}`,
+              }}
+              title="Customer & vehicle"
+            >
               <div className="flex items-center justify-between gap-3 flex-wrap">
                 <div className="flex items-center gap-2 flex-wrap">
-                  <span style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>{formatOrderId(order)}</span>
+                  <span
+                    style={{
+                      color: advisorPalette.textMuted,
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
+                    }}
+                  >
+                    {formatOrderId(order)}
+                  </span>
                   <Tag color={statusColor(order.status)}>{statusLabel(order.status)}</Tag>
                   {order.isComeback ? <Tag color={advisorPalette.amber}>Comeback</Tag> : null}
                 </div>
                 <div className="flex items-center gap-2">
                   {order.status === 'readyForDelivery' ? (
-                    <Button icon={<CarOutlined />} onClick={openDeliverModal} size="small" type="primary">
+                    <Button
+                      icon={<CarOutlined />}
+                      onClick={openDeliverModal}
+                      size="small"
+                      type="primary"
+                    >
                       Deliver vehicle
                     </Button>
                   ) : null}
                   <Dropdown
-                    menu={{ items: WAITING_STATUS_MENU_ITEMS, onClick: ({ key }) => openStatusModal(key) }}
+                    menu={{
+                      items: WAITING_STATUS_MENU_ITEMS,
+                      onClick: ({ key }) => openStatusModal(key),
+                    }}
                     trigger={['click']}
                   >
                     <Button size="small">
@@ -447,7 +565,12 @@ export function RepairOrderAssignmentPage() {
               <Row gutter={[16, 4]} style={{ marginTop: 12 }}>
                 <Col span={12}>
                   <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>Customer</div>
-                  <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>{personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer')}</div>
+                  <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>
+                    {personName(
+                      order.customer || vehicle?.customerId || vehicle?.customer,
+                      'Customer',
+                    )}
+                  </div>
                 </Col>
                 <Col span={12}>
                   <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>Vehicle</div>
@@ -461,22 +584,47 @@ export function RepairOrderAssignmentPage() {
             <Card
               bordered={false}
               className="bo-card-hover bo-enter rounded-2xl"
-              style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}
+              style={{
+                background: advisorPalette.panel,
+                boxShadow: advisorPalette.shadow,
+                border: `1px solid ${advisorPalette.border}`,
+              }}
               title="Confirmed services"
             >
               {services.length ? (
                 <div className="flex flex-col gap-2">
                   {services.map((service, index) => (
-                    <div key={index} className="flex items-center justify-between gap-3 rounded-xl px-3 py-2" style={{ background: advisorPalette.panelAlt }}>
+                    <div
+                      key={index}
+                      className="flex items-center justify-between gap-3 rounded-xl px-3 py-2"
+                      style={{ background: advisorPalette.panelAlt }}
+                    >
                       <span style={{ color: advisorPalette.ink, fontWeight: 600 }}>
-                        {service.name} {service.quantity && service.quantity > 1 ? `× ${service.quantity}` : ''}
+                        {service.name}{' '}
+                        {service.quantity && service.quantity > 1 ? `× ${service.quantity}` : ''}
                       </span>
-                      <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>{formatMoney((service.priceAtTime || 0) * (service.quantity || 1))}</span>
+                      <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>
+                        {formatMoney((service.priceAtTime || 0) * (service.quantity || 1))}
+                      </span>
                     </div>
                   ))}
-                  <div className="flex items-center justify-between px-3 pt-2" style={{ borderTop: `1px solid ${advisorPalette.border}` }}>
-                    <span style={{ color: advisorPalette.textMuted, fontSize: 13, fontWeight: 700, textTransform: 'uppercase' }}>Total</span>
-                    <span style={{ color: advisorPalette.red, fontSize: 18, fontWeight: 700 }}>{formatMoney(totalCost)}</span>
+                  <div
+                    className="flex items-center justify-between px-3 pt-2"
+                    style={{ borderTop: `1px solid ${advisorPalette.border}` }}
+                  >
+                    <span
+                      style={{
+                        color: advisorPalette.textMuted,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Total
+                    </span>
+                    <span style={{ color: advisorPalette.red, fontSize: 18, fontWeight: 700 }}>
+                      {formatMoney(totalCost)}
+                    </span>
                   </div>
                 </div>
               ) : (
@@ -484,7 +632,16 @@ export function RepairOrderAssignmentPage() {
               )}
             </Card>
 
-            <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }} title="Assign technician">
+            <Card
+              bordered={false}
+              className="bo-card-hover bo-enter rounded-2xl"
+              style={{
+                background: advisorPalette.panel,
+                boxShadow: advisorPalette.shadow,
+                border: `1px solid ${advisorPalette.border}`,
+              }}
+              title="Assign technician"
+            >
               <div className="flex flex-col gap-3">
                 {technicians.map((tech) => {
                   const selected = tech.id === selectedTechnicianId
@@ -507,12 +664,29 @@ export function RepairOrderAssignmentPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div>
-                          <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>{tech.name}</div>
-                          {tech.skill ? <div style={{ color: advisorPalette.textMuted, fontSize: 13, marginTop: 2 }}>{tech.skill}</div> : null}
+                          <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>
+                            {tech.name}
+                          </div>
+                          {tech.skill ? (
+                            <div
+                              style={{
+                                color: advisorPalette.textMuted,
+                                fontSize: 13,
+                                marginTop: 2,
+                              }}
+                            >
+                              {tech.skill}
+                            </div>
+                          ) : null}
                         </div>
-                        <Tag color={statusTag[tech.status].color}>{statusTag[tech.status].label}</Tag>
+                        <Tag color={statusTag[tech.status].color}>
+                          {statusTag[tech.status].label}
+                        </Tag>
                       </div>
-                      <div className="flex items-center gap-2" style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 10 }}>
+                      <div
+                        className="flex items-center gap-2"
+                        style={{ color: advisorPalette.textMuted, fontSize: 12, marginTop: 10 }}
+                      >
                         <ProfileOutlined /> {tech.activeOrders} active orders
                       </div>
                     </button>
@@ -523,31 +697,92 @@ export function RepairOrderAssignmentPage() {
           </div>
 
           <div className="flex flex-col gap-5" style={{ position: 'sticky', top: 96 }}>
-            <Card bordered={false} className="bo-card-hover bo-enter rounded-2xl" style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}>
-              <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase' }}>
+            <Card
+              bordered={false}
+              className="bo-card-hover bo-enter rounded-2xl"
+              style={{ background: advisorPalette.ink, boxShadow: advisorPalette.shadow }}
+            >
+              <div
+                style={{
+                  color: 'rgba(255,255,255,0.6)',
+                  fontSize: 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.1em',
+                  textTransform: 'uppercase',
+                }}
+              >
                 Work order
               </div>
-              <div style={{ color: 'white', fontSize: 22, fontWeight: 700, marginTop: 8 }}>{formatOrderId(order)}</div>
+              <div style={{ color: 'white', fontSize: 22, fontWeight: 700, marginTop: 8 }}>
+                {formatOrderId(order)}
+              </div>
               <Tag color={saved ? 'green' : 'default'} style={{ marginTop: 8 }}>
-                {saved ? 'Assigned' : order.technicianId ? 'Previously assigned' : 'Awaiting assignment'}
+                {saved
+                  ? 'Assigned'
+                  : order.technicianId
+                    ? 'Previously assigned'
+                    : 'Awaiting assignment'}
               </Tag>
               <Row gutter={12} style={{ marginTop: 16 }}>
                 <Col span={12}>
-                  <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 12 }}>
-                    <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Services</div>
-                    <div style={{ color: 'white', fontSize: 22, fontWeight: 700, marginTop: 6 }}>{String(services.length).padStart(2, '0')}</div>
+                  <div
+                    style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 12 }}
+                  >
+                    <div
+                      style={{
+                        color: 'rgba(255,255,255,0.6)',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Services
+                    </div>
+                    <div style={{ color: 'white', fontSize: 22, fontWeight: 700, marginTop: 6 }}>
+                      {String(services.length).padStart(2, '0')}
+                    </div>
                   </div>
                 </Col>
                 <Col span={12}>
-                  <div style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 12 }}>
-                    <div style={{ color: 'rgba(255,255,255,0.6)', fontSize: 10, fontWeight: 700, textTransform: 'uppercase' }}>Total</div>
-                    <div style={{ color: 'white', fontSize: 16, fontWeight: 700, marginTop: 6 }}>{formatMoney(totalCost)}</div>
+                  <div
+                    style={{ background: 'rgba(255,255,255,0.1)', borderRadius: 12, padding: 12 }}
+                  >
+                    <div
+                      style={{
+                        color: 'rgba(255,255,255,0.6)',
+                        fontSize: 10,
+                        fontWeight: 700,
+                        textTransform: 'uppercase',
+                      }}
+                    >
+                      Total
+                    </div>
+                    <div style={{ color: 'white', fontSize: 16, fontWeight: 700, marginTop: 6 }}>
+                      {formatMoney(totalCost)}
+                    </div>
                   </div>
                 </Col>
               </Row>
-              <div style={{ borderTop: '1px solid rgba(255,255,255,0.1)', marginTop: 20, paddingTop: 20 }}>
-                <div style={{ color: 'rgba(255,255,255,0.55)', fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Assigning to</div>
-                <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 8 }}>{selectedTechnician?.name ?? 'No technician selected'}</div>
+              <div
+                style={{
+                  borderTop: '1px solid rgba(255,255,255,0.1)',
+                  marginTop: 20,
+                  paddingTop: 20,
+                }}
+              >
+                <div
+                  style={{
+                    color: 'rgba(255,255,255,0.55)',
+                    fontSize: 11,
+                    fontWeight: 700,
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Assigning to
+                </div>
+                <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 8 }}>
+                  {selectedTechnician?.name ?? 'No technician selected'}
+                </div>
               </div>
               <Button
                 block
@@ -575,7 +810,15 @@ export function RepairOrderAssignmentPage() {
         open={Boolean(statusTarget)}
         title={statusTarget ? `Change status to: ${statusLabel(statusTarget)}` : ''}
       >
-        <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
+        <div
+          style={{
+            color: advisorPalette.textMuted,
+            fontSize: 11,
+            fontWeight: 700,
+            marginBottom: 6,
+            textTransform: 'uppercase',
+          }}
+        >
           Reason *
         </div>
         <Input.TextArea
@@ -587,7 +830,11 @@ export function RepairOrderAssignmentPage() {
           status={statusReasonError ? 'error' : undefined}
           value={statusReason}
         />
-        {statusReasonError ? <div style={{ color: advisorPalette.red, fontSize: 12, marginTop: 4 }}>{statusReasonError}</div> : null}
+        {statusReasonError ? (
+          <div style={{ color: advisorPalette.red, fontSize: 12, marginTop: 4 }}>
+            {statusReasonError}
+          </div>
+        ) : null}
       </Modal>
 
       <Modal
@@ -599,11 +846,22 @@ export function RepairOrderAssignmentPage() {
         open={deliverOpen}
         title="Deliver vehicle"
       >
-        <Checkbox checked={oldPartsReturned} onChange={(event) => setOldPartsReturned(event.target.checked)}>
+        <Checkbox
+          checked={oldPartsReturned}
+          onChange={(event) => setOldPartsReturned(event.target.checked)}
+        >
           Old parts returned to customer
         </Checkbox>
         <div style={{ marginTop: 16 }}>
-          <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 6, textTransform: 'uppercase' }}>
+          <div
+            style={{
+              color: advisorPalette.textMuted,
+              fontSize: 11,
+              fontWeight: 700,
+              marginBottom: 6,
+              textTransform: 'uppercase',
+            }}
+          >
             Customer signature
           </div>
           <SignaturePad onChange={setDeliverySignature} value={deliverySignature} width={320} />
