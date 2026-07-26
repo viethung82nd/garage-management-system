@@ -1,21 +1,51 @@
 import nodemailer from "nodemailer";
+import dns from "node:dns/promises";
 
-let cachedTransporter;
 let warnedMissingConfig = false;
 
-function getTransporter() {
-  if (cachedTransporter !== undefined) {
-    return cachedTransporter;
-  }
+const IPV4_LITERAL = /^\d{1,3}(\.\d{1,3}){3}$/;
 
+/**
+ * Resolves the SMTP host to an IPv4 address, or returns null if that isn't
+ * possible.
+ *
+ * Nodemailer does its own DNS work: it calls dns.resolve4() and dns.resolve6()
+ * directly and concatenates the results, so whenever the IPv4 branch comes back
+ * empty (or errors) it hands net.connect an IPv6 address. Render's containers
+ * have no outbound IPv6 route, so that connection dies instantly with
+ * ENETUNREACH and every email silently fails. Because nodemailer bypasses
+ * dns.lookup(), neither --dns-result-order nor dns.setDefaultResultOrder()
+ * influences it — pinning the address ourselves is the only reliable fix.
+ */
+async function resolveIpv4(hostname) {
+  if (IPV4_LITERAL.test(hostname)) return hostname;
+  try {
+    const [address] = await dns.resolve4(hostname);
+    return address || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Built per send rather than cached: creating a transport opens no socket, and
+ * re-resolving each time avoids pinning a single provider IP for the lifetime
+ * of the process.
+ */
+async function createTransporter() {
   const { SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS } = process.env;
   if (!SMTP_HOST || !SMTP_USER || !SMTP_PASS) {
-    cachedTransporter = null;
-    return cachedTransporter;
+    return null;
   }
 
-  cachedTransporter = nodemailer.createTransport({
-    host: SMTP_HOST,
+  const ipv4 = await resolveIpv4(SMTP_HOST);
+
+  return nodemailer.createTransport({
+    // Connect straight to the IPv4 address, but keep the real hostname as the
+    // TLS servername so SNI and certificate validation still match.
+    host: ipv4 || SMTP_HOST,
+    servername: SMTP_HOST,
+    family: 4,
     port: Number(SMTP_PORT) || 587,
     secure: Number(SMTP_PORT) === 465,
     auth: { user: SMTP_USER, pass: SMTP_PASS },
@@ -25,8 +55,6 @@ function getTransporter() {
     greetingTimeout: 10_000,
     socketTimeout: 10_000,
   });
-
-  return cachedTransporter;
 }
 
 /**
@@ -41,7 +69,7 @@ function getTransporter() {
 export async function sendEmail({ to, subject, html, attachments }) {
   if (!to) return false;
 
-  const transporter = getTransporter();
+  const transporter = await createTransporter();
   if (!transporter) {
     if (!warnedMissingConfig) {
       console.warn(
