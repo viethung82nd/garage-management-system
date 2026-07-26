@@ -17,7 +17,6 @@ const transferRequestSchema = new Schema(
     toTechnicianId: {
       type: Schema.Types.ObjectId,
       ref: "User",
-      required: true,
     },
     reason: {
       type: String,

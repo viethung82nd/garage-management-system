@@ -1,7 +1,7 @@
 import mongoose from "mongoose";
 import { vehicleRepository } from "../repositories/vehicle.repository.js";
 import { userRepository } from "../repositories/user.repository.js";
-import { OdometerLogModel } from "../models/index.js";
+import { InspectionReportModel, OdometerLogModel } from "../models/index.js";
 import { ApiError } from "../utils/apiError.js";
 
 const CUSTOMER_ROLES = ["onlineCustomer", "walkInCustomer"];
@@ -132,6 +132,38 @@ export async function updateVehicleProfile(id, body) {
 
   await vehicle.save();
   return vehicle;
+}
+
+/**
+ * Returns all vehicles belonging to a customer, each enriched with the
+ * first photo from its most recent inspection report. Used by the customer
+ * profile page to display every vehicle the customer owns.
+ */
+export async function getMyVehicles(customerId) {
+  const vehicles = await vehicleRepository.model
+    .find({ customerId })
+    .select("-__v")
+    .sort({ createdAt: -1 });
+
+  // Attach the latest inspection photo per vehicle
+  const enriched = await Promise.all(
+    vehicles.map(async (vehicle) => {
+      const latestReport = await InspectionReportModel.findOne(
+        { vehicleId: vehicle._id, photos: { $exists: true, $not: { $size: 0 } } },
+      )
+        .sort({ inspectedAt: -1 })
+        .select("photos inspectedAt")
+        .lean();
+
+      return {
+        ...vehicle.toObject(),
+        photo: latestReport?.photos?.[0] || null,
+        lastInspectedAt: latestReport?.inspectedAt || null,
+      };
+    }),
+  );
+
+  return enriched;
 }
 
 /** The dated odometer history for a vehicle, newest first. */

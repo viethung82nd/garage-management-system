@@ -33,19 +33,13 @@ export async function listTransferRequests({ status, repairOrderId }) {
   return { transferRequests };
 }
 
-export async function createTransferRequest({ repairOrderId, toTechnicianId, reason }, fromTechnicianId) {
+export async function createTransferRequest({ repairOrderId, reason }, fromTechnicianId) {
   if (!repairOrderId) {
     throw new ApiError(400, "repairOrderId is required");
-  }
-  if (!toTechnicianId) {
-    throw new ApiError(400, "toTechnicianId is required");
   }
 
   if (!repairOrderId.match(/^[0-9a-fA-F]{24}$/)) {
     throw new ApiError(400, "Invalid repairOrderId format");
-  }
-  if (!toTechnicianId.match(/^[0-9a-fA-F]{24}$/)) {
-    throw new ApiError(400, "Invalid toTechnicianId format");
   }
 
   const repairOrder = await repairOrderRepository.findById(repairOrderId);
@@ -61,26 +55,19 @@ export async function createTransferRequest({ repairOrderId, toTechnicianId, rea
     throw new ApiError(409, `Cannot request a transfer for a ${repairOrder.status} repair order`);
   }
 
-  const toTechnician = await userRepository.findById(toTechnicianId);
-  if (!toTechnician || toTechnician.role !== "technician") {
-    throw new ApiError(404, "Target technician not found");
-  }
-
   const existingRequest = await transferRequestRepository.findOne({
     repairOrderId,
     fromTechnicianId,
-    toTechnicianId,
     status: "pending",
   });
 
   if (existingRequest) {
-    throw new ApiError(409, "A pending transfer request to this technician already exists for this repair order");
+    throw new ApiError(409, "A pending transfer request already exists for this repair order");
   }
 
   const transferRequest = new transferRequestRepository.model({
     repairOrderId,
     fromTechnicianId,
-    toTechnicianId,
     reason: reason?.trim(),
     status: "pending",
   });
@@ -92,7 +79,7 @@ export async function createTransferRequest({ repairOrderId, toTechnicianId, rea
       userId: repairOrder.advisorId,
       type: "transferRequested",
       title: "Technician transfer requested",
-      message: `A technician requested to hand this repair order off to ${toTechnician.fullName || "another technician"}.`,
+      message: `A technician requested to hand off repair order ${repairOrder.code || repairOrder._id}.`,
       refId: repairOrder._id,
       refModel: "RepairOrder",
     });
@@ -101,7 +88,7 @@ export async function createTransferRequest({ repairOrderId, toTechnicianId, rea
   return transferRequest;
 }
 
-async function resolveTransferRequest(id, resolveNote, resolvedBy, newStatus) {
+async function resolveTransferRequest(id, resolveNote, resolvedBy, newStatus, toTechnicianId) {
   if (!id.match(/^[0-9a-fA-F]{24}$/)) {
     throw new ApiError(400, "Invalid transfer request ID format");
   }
@@ -125,7 +112,19 @@ async function resolveTransferRequest(id, resolveNote, resolvedBy, newStatus) {
   }
 
   if (newStatus === "approved") {
-    repairOrder.technicianId = transferRequest.toTechnicianId;
+    if (!toTechnicianId) {
+      throw new ApiError(400, "toTechnicianId is required to approve a transfer");
+    }
+    if (!toTechnicianId.match(/^[0-9a-fA-F]{24}$/)) {
+      throw new ApiError(400, "Invalid toTechnicianId format");
+    }
+    const toTechnician = await userRepository.findById(toTechnicianId);
+    if (!toTechnician || toTechnician.role !== "technician") {
+      throw new ApiError(404, "Target technician not found");
+    }
+
+    transferRequest.toTechnicianId = toTechnicianId;
+    repairOrder.technicianId = toTechnicianId;
     await repairOrder.save();
   }
 
@@ -161,8 +160,8 @@ async function resolveTransferRequest(id, resolveNote, resolvedBy, newStatus) {
   return transferRequest;
 }
 
-export async function approveTransferRequest(id, resolveNote, resolvedBy) {
-  return resolveTransferRequest(id, resolveNote, resolvedBy, "approved");
+export async function approveTransferRequest(id, resolveNote, resolvedBy, toTechnicianId) {
+  return resolveTransferRequest(id, resolveNote, resolvedBy, "approved", toTechnicianId);
 }
 
 export async function rejectTransferRequest(id, resolveNote, resolvedBy) {

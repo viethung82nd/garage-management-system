@@ -23,8 +23,8 @@ export async function createReview({ repairOrderId, rating, comment }, customerI
   if (!order) {
     throw new ApiError(404, "Repair order not found");
   }
-  if (order.status !== "completed") {
-    throw new ApiError(409, "You can only review a completed repair order");
+  if (!["completed", "readyForDelivery", "delivered"].includes(order.status)) {
+    throw new ApiError(409, "You can only review a completed or delivered repair order");
   }
 
   const ownerId = order.vehicleId?.customerId;

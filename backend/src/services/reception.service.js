@@ -29,6 +29,7 @@ export async function createReception(
     customerEmail,
     plate,
     model,
+    year,
     vin,
     engineNo,
     mileage,
@@ -103,6 +104,14 @@ export async function createReception(
 
   if (!engineNo?.trim()) {
     throw new ApiError(400, "Engine number is required");
+  }
+
+  if (year != null && year !== "") {
+    const parsedYear = Number(year);
+    const maxYear = new Date().getFullYear() + 1;
+    if (!Number.isInteger(parsedYear) || parsedYear < 1900 || parsedYear > maxYear) {
+      throw new ApiError(400, `Year must be an integer between 1900 and ${maxYear}`);
+    }
   }
 
   if (mileage == null || String(mileage).trim() === "") {
@@ -201,6 +210,7 @@ export async function createReception(
       {
         licensePlate: plate.trim(),
         model: model.trim(),
+        year: year != null ? Number(year) : undefined,
       },
       customer._id,
       session,
