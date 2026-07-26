@@ -50,6 +50,9 @@ type OrderView = {
   /** Photos the technician attached to their step notes — evidence of the
    * actual repair work, distinct from the advisor's pre-repair inspection photos. */
   stepPhotos: string[]
+  /** Each line's 3C record (Cause/Correction) — captured as mandatory when the
+   * technician completes the step, otherwise never shown to anyone again. */
+  workPerformed: Array<{ title: string; isPart: boolean; cause: string; correction: string }>
 }
 
 const checklistSeed = [
@@ -100,6 +103,14 @@ function mapOrder(order: ApiRepairOrder): OrderView {
     technician: personName(order.technicianId || order.technician, 'Unassigned'),
     vehicle: vehicleName(vehicle),
     stepPhotos: (order.stepNotes || []).flatMap((note) => note.photos || []),
+    workPerformed: (order.services || [])
+      .filter((service) => service.cause || service.correction)
+      .map((service) => ({
+        title: (typeof service.serviceId === 'object' ? service.serviceId?.name : undefined) || service.name || 'Repair item',
+        isPart: service.kind === 'part',
+        cause: service.cause || '',
+        correction: service.correction || '',
+      })),
   }
 }
 
@@ -505,6 +516,42 @@ export function QualityVerificationPage() {
                 </div>
               </div>
             </Card>
+
+            {selectedOrder.workPerformed.length ? (
+              <Card
+                bordered={false}
+                className="bo-card-hover bo-enter rounded-2xl"
+                style={{
+                  background: advisorPalette.panel,
+                  boxShadow: advisorPalette.shadow,
+                  border: `1px solid ${advisorPalette.border}`,
+                }}
+                title="Work performed"
+              >
+                <div className="flex flex-col gap-3">
+                  {selectedOrder.workPerformed.map((line, index) => (
+                    <div key={`${line.title}-${index}`} style={{ background: advisorPalette.panelAlt, borderRadius: 12, padding: '12px 14px' }}>
+                      <div className="flex items-center gap-2">
+                        <span style={{ color: advisorPalette.ink, fontSize: 14, fontWeight: 700 }}>{line.title}</span>
+                        {line.isPart ? <Tag>Part</Tag> : null}
+                      </div>
+                      {line.cause ? (
+                        <p style={{ color: advisorPalette.inkSoft, fontSize: 13, margin: '6px 0 0' }}>
+                          <span style={{ color: advisorPalette.textMuted, fontWeight: 700 }}>Cause · </span>
+                          {line.cause}
+                        </p>
+                      ) : null}
+                      {line.correction ? (
+                        <p style={{ color: advisorPalette.inkSoft, fontSize: 13, margin: '4px 0 0' }}>
+                          <span style={{ color: advisorPalette.textMuted, fontWeight: 700 }}>Correction · </span>
+                          {line.correction}
+                        </p>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              </Card>
+            ) : null}
 
             <Card
               bordered={false}

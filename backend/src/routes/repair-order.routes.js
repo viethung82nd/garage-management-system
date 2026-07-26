@@ -154,10 +154,12 @@ repairOrderRouter.post(
 );
 
 // The parts desk issues reserved stock to the technician working this order.
+// Technicians may also pull their own order's parts directly (BR-JOB-01:
+// only the assigned technician, enforced in the service layer).
 repairOrderRouter.post(
   "/:id/issue-parts",
   requireAuth,
-  requireRole("partsStaff", "serviceAdvisor", "admin"),
+  requireRole("partsStaff", "serviceAdvisor", "admin", "technician"),
   catchAsync(issuePartsForOrder),
 );
 

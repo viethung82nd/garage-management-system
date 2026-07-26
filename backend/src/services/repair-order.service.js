@@ -947,7 +947,7 @@ export async function deliverVehicle(id, { note, signature, oldPartsReturned }, 
  * worked, not when the customer collects the car, and it gives the parts desk
  * an explicit action rather than making stock a silent side effect.
  */
-export async function issuePartsForOrder(id, actorId) {
+export async function issuePartsForOrder(id, actorId, actorRole) {
   if (!id.match(OID_RE)) {
     throw new ApiError(400, "Invalid repair order ID format");
   }
@@ -958,6 +958,13 @@ export async function issuePartsForOrder(id, actorId) {
   }
   if (TERMINAL_ORDER_STATUSES.includes(order.status)) {
     throw new ApiError(409, `Cannot issue parts for a ${order.status} repair order`);
+  }
+
+  // BR-JOB-01, same rule as clockOn: a technician can only act on the order
+  // assigned to them. The parts desk / advisor / admin roles are trusted more
+  // broadly and skip this check.
+  if (actorRole === "technician" && String(order.technicianId) !== String(actorId)) {
+    throw new ApiError(403, "Only the technician assigned to this repair order can issue its parts");
   }
 
   const result = await runInTransaction(async (session) =>

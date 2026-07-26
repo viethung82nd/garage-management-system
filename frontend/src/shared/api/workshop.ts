@@ -63,7 +63,7 @@ export type ApiRepairOrder = {
   issueDescription?: string
   /** Service category the customer chose when booking, carried from the booking at Reception. Drives the inspection checklist. */
   serviceCategory?: string
-  services?: Array<{ serviceId?: ApiService | string; name?: string; quantity?: number; priceAtTime?: number; status?: 'pending' | 'inProgress' | 'completed' }>
+  services?: Array<{ serviceId?: ApiService | string; partId?: string; kind?: 'service' | 'part' | 'labor'; name?: string; quantity?: number; priceAtTime?: number; status?: 'pending' | 'inProgress' | 'completed'; cause?: string; correction?: string }>
   stepNotes?: Array<{ content?: string; technicianId?: AuthUser | string; stepIndex?: number; photos?: string[]; createdAt?: string }>
   status?: string
   totalCost?: number
@@ -424,6 +424,16 @@ export function updateWorkshopRepairOrder(token: string, id: string, payload: un
 
 export function updateWorkshopRepairProgress(token: string, id: string, payload: unknown) {
   return apiRequest<{ order?: ApiRepairOrder } | ApiRepairOrder>(`/api/repair-orders/${id}/progress`, { method: 'PATCH', token, body: JSON.stringify(payload) })
+}
+
+/** POST /api/repair-orders/:id/issue-parts — pulls this order's reserved
+ * parts from the shelf, dropping stockQuantity for real (see BR-INV-02).
+ * Distinct from completing a repair step, which never touches inventory. */
+export function issueWorkshopRepairOrderParts(token: string, id: string) {
+  return apiRequest<{ message?: string; issued?: Array<{ partId: string; quantity: number; unitCost: number }> }>(
+    `/api/repair-orders/${id}/issue-parts`,
+    { method: 'POST', token },
+  )
 }
 
 export type AddStepNotePayload = {

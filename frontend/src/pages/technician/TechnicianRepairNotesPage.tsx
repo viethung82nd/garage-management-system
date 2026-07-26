@@ -1,5 +1,5 @@
-import { ArrowLeftOutlined, CheckOutlined, PictureOutlined, PlusOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
-import { Button, Card, Empty, Image, Input, InputNumber, Select, Steps, Tag, Upload } from 'antd'
+import { ArrowLeftOutlined, CheckOutlined, InboxOutlined, PictureOutlined, PlusOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Image, Input, InputNumber, Popconfirm, Select, Steps, Tag, Upload } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
@@ -14,6 +14,7 @@ import {
   fetchWorkshopRepairOrders,
   fetchWorkshopServices,
   fetchWorkshopTechnicians,
+  issueWorkshopRepairOrderParts,
   orderId,
   personName,
   unwrapArray,
@@ -39,6 +40,9 @@ type RepairStep = {
   summary: string
   photos: string[]
   title: string
+  isPart: boolean
+  cause: string
+  correction: string
 }
 
 function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
@@ -59,6 +63,12 @@ function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
       summary: latestNote?.content || '',
       photos: latestNote?.photos || [],
       title: apiService?.name || service.name || 'Repair item',
+      // Part lines (kind === 'part') are physical stock, not labor — kept in
+      // their own list so the technician isn't hunting for them in a flat
+      // mix of service/labor rows.
+      isPart: service.kind === 'part',
+      cause: service.cause || '',
+      correction: service.correction || '',
     }
   })
 }
@@ -99,6 +109,67 @@ function LabeledField({ label, children }: { label: string; children: React.Reac
   )
 }
 
+/** Read-only recap of the mandatory 3C record (Cause/Correction) once a step
+ * is complete — otherwise it's captured on completion and never shown again,
+ * to the technician or anyone reviewing the order afterwards. */
+function CauseCorrection({ cause, correction }: { cause: string; correction: string }) {
+  if (!cause && !correction) return null
+  return (
+    <div className="flex flex-col gap-3">
+      {cause ? (
+        <div>
+          <div style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4, textTransform: 'uppercase' }}>Cause</div>
+          <p style={{ color: technicianPalette.inkSoft, fontSize: 13, margin: 0 }}>{cause}</p>
+        </div>
+      ) : null}
+      {correction ? (
+        <div>
+          <div style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 4, textTransform: 'uppercase' }}>Correction</div>
+          <p style={{ color: technicianPalette.inkSoft, fontSize: 13, margin: 0 }}>{correction}</p>
+        </div>
+      ) : null}
+    </div>
+  )
+}
+
+/** One labeled vertical Steps list — used twice (services, parts) so the two
+ * kinds never sit interleaved in a single flat list. */
+function StepGroup({
+  label,
+  steps,
+  selectedStepIndex,
+  onSelect,
+}: {
+  label: string
+  steps: RepairStep[]
+  selectedStepIndex: number | null
+  onSelect: (stepIndex: number) => void
+}) {
+  if (!steps.length) return null
+  return (
+    <div>
+      <div style={{ color: technicianPalette.textMuted, fontSize: 11, fontWeight: 700, letterSpacing: '0.1em', marginBottom: 10, textTransform: 'uppercase' }}>
+        {label} ({steps.length})
+      </div>
+      <Steps
+        current={steps.findIndex((step) => step.stepIndex === selectedStepIndex)}
+        direction="vertical"
+        items={steps.map((step) => ({
+          description: (
+            <span style={{ color: technicianPalette.textMuted, fontSize: 12 }}>{step.summary || `${step.estimate} · not started`}</span>
+          ),
+          status: antStepStatus[step.status],
+          title: <span style={{ color: technicianPalette.ink, fontWeight: step.stepIndex === selectedStepIndex ? 700 : 600 }}>{step.title}</span>,
+        }))}
+        onChange={(index) => {
+          const target = steps[index]
+          if (target) onSelect(target.stepIndex)
+        }}
+      />
+    </div>
+  )
+}
+
 export function TechnicianRepairNotesPage() {
   const { token, user } = useAuth()
   const navigate = useNavigate()
@@ -134,6 +205,9 @@ export function TechnicianRepairNotesPage() {
   const [proposalPhotos, setProposalPhotos] = useState<UploadFile[]>([])
   const [proposalErrors, setProposalErrors] = useState<Record<string, string>>({})
   const [submittingProposal, setSubmittingProposal] = useState(false)
+
+  // Secondary: issue parts
+  const [issuingParts, setIssuingParts] = useState(false)
 
   // Secondary: transfer
   const [transferOpen, setTransferOpen] = useState(false)
@@ -253,6 +327,9 @@ export function TechnicianRepairNotesPage() {
   }, [token, proposalOpen, services.length])
 
   const selectedStep = steps.find((step) => step.stepIndex === selectedStepIndex)
+  const serviceSteps = steps.filter((step) => !step.isPart)
+  const partSteps = steps.filter((step) => step.isPart)
+  const hasPartLines = partSteps.length > 0
   const completedCount = steps.filter((step) => step.status === 'completed').length
   const progressPct = steps.length ? Math.round((completedCount / steps.length) * 100) : 0
   const vehicle = repairOrder?.vehicleId || repairOrder?.vehicle
@@ -443,6 +520,21 @@ export function TechnicianRepairNotesPage() {
     }
   }
 
+  async function issueParts() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !token) return
+    setIssuingParts(true)
+    clearApiMessage()
+    try {
+      const result = await issueWorkshopRepairOrderParts(token, repairOrderId)
+      showSuccess(result.message || 'Parts issued.')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to issue parts for this order')
+    } finally {
+      setIssuingParts(false)
+    }
+  }
+
   async function submitTransfer() {
     const repairOrderId = repairOrder?._id || repairOrder?.id
     if (!repairOrderId || !token) return
@@ -538,21 +630,11 @@ export function TechnicianRepairNotesPage() {
               {/* Steps */}
               <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Repair steps">
                 {steps.length && selectedStep ? (
-                  <Steps
-                    current={steps.findIndex((step) => step.stepIndex === selectedStep.stepIndex)}
-                    direction="vertical"
-                    items={steps.map((step) => ({
-                      description: (
-                        <span style={{ color: technicianPalette.textMuted, fontSize: 12 }}>{step.summary || `${step.estimate} · not started`}</span>
-                      ),
-                      status: antStepStatus[step.status],
-                      title: <span style={{ color: technicianPalette.ink, fontWeight: step.stepIndex === selectedStep.stepIndex ? 700 : 600 }}>{step.title}</span>,
-                    }))}
-                    onChange={(index) => {
-                      const target = steps[index]
-                      if (target) selectStep(target.stepIndex)
-                    }}
-                  />
+                  <div className="flex flex-col gap-5">
+                    <StepGroup label="Services" steps={serviceSteps} selectedStepIndex={selectedStepIndex} onSelect={selectStep} />
+                    {serviceSteps.length && partSteps.length ? <div style={{ borderTop: `1px solid ${technicianPalette.border}` }} /> : null}
+                    <StepGroup label="Parts" steps={partSteps} selectedStepIndex={selectedStepIndex} onSelect={selectStep} />
+                  </div>
                 ) : (
                   <Empty description="No repair steps on this order." image={Empty.PRESENTED_IMAGE_SIMPLE} />
                 )}
@@ -655,8 +737,9 @@ export function TechnicianRepairNotesPage() {
 
                 {orderIsTerminal ? (
                   <div className="mt-4 flex flex-col gap-3">
+                    <CauseCorrection cause={selectedStep.cause} correction={selectedStep.correction} />
                     <div style={{ background: technicianPalette.panelAlt, borderRadius: 12, color: technicianPalette.inkSoft, fontSize: 13, padding: 14 }}>
-                      {selectedStep.summary || 'No note was recorded for this step.'}
+                      {selectedStep.summary || 'No additional note was recorded for this step.'}
                     </div>
                     {selectedStep.photos.length ? (
                       <Image.PreviewGroup>
@@ -670,6 +753,7 @@ export function TechnicianRepairNotesPage() {
                   </div>
                 ) : selectedStep.status === 'completed' ? (
                   <div className="mt-4 flex flex-col gap-3">
+                    <CauseCorrection cause={selectedStep.cause} correction={selectedStep.correction} />
                     <div style={{ background: technicianPalette.panelAlt, borderRadius: 12, color: technicianPalette.inkSoft, fontSize: 13, padding: 14 }}>
                       {selectedStep.summary || 'This step is marked complete.'}
                     </div>
@@ -767,7 +851,24 @@ export function TechnicianRepairNotesPage() {
 
           {/* Secondary actions — clearly de-emphasised below the main work */}
           {!orderIsTerminal ? (
-            <div className="grid gap-5 md:grid-cols-2">
+            <div className="grid gap-5 md:grid-cols-2 xl:grid-cols-3">
+              {hasPartLines ? (
+                <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Parts to issue?">
+                  <div className="flex items-center justify-between gap-3">
+                    <p style={{ color: technicianPalette.textMuted, fontSize: 13, margin: 0 }}>Pull this order's reserved parts from the shelf — this is what actually drops stock.</p>
+                    <Popconfirm
+                      cancelText="Cancel"
+                      okText="Issue"
+                      onConfirm={issueParts}
+                      title="Issue this order's parts?"
+                      description="Stock drops for real once you confirm — only do this after you've actually pulled the parts."
+                    >
+                      <Button icon={<InboxOutlined />} loading={issuingParts}>Issue parts</Button>
+                    </Popconfirm>
+                  </div>
+                </Card>
+              ) : null}
+
               <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Found extra work?">
                 {proposalOpen ? (
                   <div className="flex flex-col gap-3">

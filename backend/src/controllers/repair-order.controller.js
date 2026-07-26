@@ -143,7 +143,7 @@ export async function deliverVehicle(req, res) {
  * stock actually leaves the shelf.
  */
 export async function issuePartsForOrder(req, res) {
-  const result = await repairOrderService.issuePartsForOrder(req.params.id, req.user.sub);
+  const result = await repairOrderService.issuePartsForOrder(req.params.id, req.user.sub, req.user.role);
   res.json(result);
 }
 
