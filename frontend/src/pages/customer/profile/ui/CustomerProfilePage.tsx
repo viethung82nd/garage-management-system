@@ -26,6 +26,7 @@ import {
 } from '../../api/customerApi'
 
 const GARAGE_NAME = 'Kapa Auto Care Center'
+const PRIMARY_VEHICLE_IMAGE = '/wp-content/uploads/2022/11/choose.webp'
 const EMAIL_RE = /^\S+@\S+\.\S+$/
 
 function formatMemberSince(value?: string) {
@@ -94,6 +95,18 @@ function scrollVehicles(dir: 'left' | 'right', ref: React.RefObject<HTMLDivEleme
   ref.current?.scrollBy({ left: dir === 'left' ? -340 : 340, behavior: 'smooth' })
 }
 
+function pickPrimaryVehicle(
+  repairOrders: CustomerRepairOrderApiRecord[],
+  bookings: CustomerBookingApiRecord[],
+) {
+  const latestRepairVehicle = repairOrders.find((order) => order.vehicleId)?.vehicleId
+  if (latestRepairVehicle) {
+    return latestRepairVehicle
+  }
+
+  return bookings.find((booking) => booking.vehicleId)?.vehicleId || null
+}
+
 function findUpcomingBooking(bookings: CustomerBookingApiRecord[]) {
   const now = Date.now()
 
@@ -129,6 +142,7 @@ export default function CustomerProfilePage() {
   const [invoices, setInvoices] = useState<CustomerInvoiceApiRecord[]>([])
   const [vehicles, setVehicles] = useState<CustomerVehicleRecord[]>([])
   const vehiclesScrollRef = useRef<HTMLDivElement>(null)
+  const primaryVehicle = pickPrimaryVehicle(repairOrders, bookings)
   const [requestError, setRequestError] = useState('')
   const [profileForm, setProfileForm] = useState({
     fullName: '',
@@ -226,6 +240,23 @@ export default function CustomerProfilePage() {
       activeStatus: activeRepair
         ? mapRepairStatus(activeRepair.status)
         : 'All current repairs completed',
+      primaryVehicle: {
+        label: 'Primary Vehicle',
+        vehicle: [primaryVehicle?.brand, primaryVehicle?.model, primaryVehicle?.year].filter(Boolean).join(' ') || 'Vehicle updating',
+        plate: primaryVehicle?.licensePlate || 'Not recorded',
+        vin: primaryVehicle?.chassisNumber || primaryVehicle?.engineNumber || 'Not recorded',
+        mileage:
+          primaryVehicle?.lastKnownMileage != null
+            ? `${new Intl.NumberFormat('vi-VN').format(primaryVehicle.lastKnownMileage)} km`
+            : 'Not recorded',
+        lastService:
+          repairOrders[0]?.completedAt
+            ? formatVisitDate(repairOrders[0].completedAt)
+            : bookings[0]
+              ? formatVisitDate(bookings[0].bookingDate, bookings[0].timeSlot)
+              : 'No service recorded',
+        image: PRIMARY_VEHICLE_IMAGE,
+      },
       stats: [
         { label: 'Appointments', value: String(bookings.length).padStart(2, '0') },
         { label: 'Repair Orders', value: String(repairOrders.length).padStart(2, '0') },
@@ -530,6 +561,37 @@ export default function CustomerProfilePage() {
             </CustomerInfoCard>
           </div>
         </div>
+      </section>
+
+      <section className="customer-section">
+        <CustomerSectionHeading eyebrow="Primary Vehicle" title="Your main vehicle" compact />
+
+        <CustomerInfoCard eyebrow={profileView.primaryVehicle.label} title={profileView.primaryVehicle.vehicle} className="customer-vehicle-card">
+          <div className="customer-vehicle-card__layout">
+            <div className="customer-vehicle-card__media">
+              <img src={asset(profileView.primaryVehicle.image)} alt={profileView.primaryVehicle.vehicle} />
+            </div>
+
+            <div className="customer-vehicle-card__grid">
+              <div>
+                <span className="customer-booking-card__label">License plate</span>
+                <strong>{profileView.primaryVehicle.plate}</strong>
+              </div>
+              <div>
+                <span className="customer-booking-card__label">Mileage</span>
+                <strong>{profileView.primaryVehicle.mileage}</strong>
+              </div>
+              <div>
+                <span className="customer-booking-card__label">Last service</span>
+                <strong>{profileView.primaryVehicle.lastService}</strong>
+              </div>
+              <div>
+                <span className="customer-booking-card__label">VIN</span>
+                <strong>{profileView.primaryVehicle.vin}</strong>
+              </div>
+            </div>
+          </div>
+        </CustomerInfoCard>
       </section>
 
       <section className="customer-section">
