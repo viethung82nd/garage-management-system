@@ -385,11 +385,25 @@ const QUOTATION_STATUS_META: Record<string, { color: string; label: string }> = 
   rejected: { color: 'red', label: 'Customer declined' },
 }
 
-/** Statuses the advisor can move an order into from here — each requires a reason, enforced by the backend. */
+/** Statuses in which an order is parked on something outside the workshop —
+ * mirrors the backend's WAITING_STATUSES (repair-order.model.js). */
+const CLIENT_WAITING_STATUSES = ['waitingParts', 'waitingCustomer', 'onHold']
+
+/** Pause options offered while an order is actively being worked. Each requires a reason, enforced by the backend. */
 const WAITING_STATUS_MENU_ITEMS = [
   { key: 'waitingParts', label: orderStatusLabels.waitingParts },
   { key: 'waitingCustomer', label: orderStatusLabels.waitingCustomer },
   { key: 'onHold', label: orderStatusLabels.onHold },
+]
+
+/** Resume options offered once an order is parked in a waiting status — the
+ * backend allows either target from any waiting status, so the advisor picks
+ * whichever is actually true (still needs work vs. already QC-passed before
+ * the pause). Without this, waitingParts/waitingCustomer/onHold was a
+ * one-way door: nothing ever offered a way back out. */
+const RESUME_STATUS_MENU_ITEMS = [
+  { key: 'inProgress', label: `Resume — ${orderStatusLabels.inProgress}` },
+  { key: 'readyForDelivery', label: `Resume — ${orderStatusLabels.readyForDelivery}` },
 ]
 
 type Technician = {
@@ -1025,13 +1039,15 @@ export function RepairOrderAssignmentPage() {
                     ) : null}
                     <Dropdown
                       menu={{
-                        items: WAITING_STATUS_MENU_ITEMS,
+                        items: CLIENT_WAITING_STATUSES.includes(order.status ?? '')
+                          ? RESUME_STATUS_MENU_ITEMS
+                          : WAITING_STATUS_MENU_ITEMS,
                         onClick: ({ key }) => openStatusModal(key),
                       }}
                       trigger={['click']}
                     >
-                      <Button size="small">
-                        Change status <DownOutlined />
+                      <Button size="small" type={CLIENT_WAITING_STATUSES.includes(order.status ?? '') ? 'primary' : 'default'}>
+                        {CLIENT_WAITING_STATUSES.includes(order.status ?? '') ? 'Resume' : 'Change status'} <DownOutlined />
                       </Button>
                     </Dropdown>
                   </div>
