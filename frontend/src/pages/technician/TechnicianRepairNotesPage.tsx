@@ -156,7 +156,9 @@ function StepGroup({
         direction="vertical"
         items={steps.map((step) => ({
           description: (
-            <span style={{ color: technicianPalette.textMuted, fontSize: 12 }}>{step.summary || `${step.estimate} · not started`}</span>
+            <span style={{ color: technicianPalette.textMuted, fontSize: 12 }}>
+              {step.summary || `${step.estimate} · ${stepTag[step.status].label.toLowerCase()}`}
+            </span>
           ),
           status: antStepStatus[step.status],
           title: <span style={{ color: technicianPalette.ink, fontWeight: step.stepIndex === selectedStepIndex ? 700 : 600 }}>{step.title}</span>,
