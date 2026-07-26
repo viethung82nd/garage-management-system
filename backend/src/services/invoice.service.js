@@ -217,9 +217,17 @@ async function getLatestPayments(invoiceIds) {
   return paymentMap;
 }
 
-export async function listInvoices() {
+export async function listInvoices({ repairOrderId } = {}) {
+  const filter = {};
+  if (repairOrderId) {
+    if (!mongoose.isValidObjectId(repairOrderId)) {
+      throw new ApiError(400, "repairOrderId is not a valid id");
+    }
+    filter.repairOrderId = repairOrderId;
+  }
+
   const invoices = await invoiceRepository.model
-    .find()
+    .find(filter)
     .populate(invoicePopulate)
     .sort({ issuedAt: -1 });
 

@@ -689,6 +689,52 @@ export function fetchQuotations(token: string, query = '') {
   return apiRequest<{ quotations?: ApiQuotation[] } | ApiQuotation[]>(`/api/quotations${query}`, { token })
 }
 
+export type ApiInvoiceLineItem = {
+  id: string
+  description: string
+  quantity: number
+  unitPrice: number
+  lineTotal: number
+  kind: 'service' | 'part' | 'labor'
+  source: 'quote' | 'additionalService'
+}
+
+export type ApiInvoice = {
+  id: string
+  displayId: string
+  status: string
+  issuedAt: string
+  subtotal: number
+  discount: number
+  taxAmount: number
+  total: number
+  amountPaid: number
+  balanceDue: number
+  lineItems: ApiInvoiceLineItem[]
+  repairOrder: { id: string; displayId: string; completedAt?: string | null } | null
+  customer: { id: string; fullName: string; phone?: string; email?: string } | null
+  vehicle: {
+    id: string
+    licensePlate: string
+    brand?: string
+    model?: string
+    year?: number | null
+    chassisNumber?: string
+    engineNumber?: string
+    lastKnownMileage?: number | null
+  } | null
+}
+
+/** GET /api/invoices?repairOrderId=X — a service advisor is scoped to one
+ * order's invoice only (see invoice.controller.js#listInvoices), never the
+ * full ledger, which stays accountant/admin. */
+export function fetchInvoicesForRepairOrder(token: string, repairOrderId: string) {
+  return apiRequest<{ invoices?: ApiInvoice[] }>(
+    `/api/invoices?repairOrderId=${encodeURIComponent(repairOrderId)}`,
+    { token },
+  )
+}
+
 /** An immutable snapshot of a quotation's state just before an edit overwrote it. */
 export type ApiQuoteVersion = {
   _id?: string

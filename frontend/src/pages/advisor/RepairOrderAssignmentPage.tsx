@@ -10,11 +10,13 @@ import {
   SendOutlined,
   ToolOutlined,
 } from '@ant-design/icons'
-import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Tag } from 'antd'
+import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Table, Tabs, Tag } from 'antd'
+import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
   deliverVehicleApi,
+  fetchInvoicesForRepairOrder,
   fetchQuotations,
   fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
@@ -27,12 +29,14 @@ import {
   vehicleName,
   vehiclePlate,
   JOB_TYPE_LABELS,
+  type ApiInvoice,
   type ApiQuotation,
   type ApiQuotationLine,
   type ApiRepairOrder,
   type ApiTechnician,
 } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
+import { InvoiceDocument, type InvoiceDocumentStatusTone } from '../../shared/ui/invoice/InvoiceDocument'
 import { SignaturePad } from '../../shared/ui/SignaturePad'
 import { InlineBanner, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
@@ -322,6 +326,74 @@ function QuotationPrintPreview({ order, quotation }: { order: ApiRepairOrder; qu
   )
 }
 
+// ============= "View invoice" — read-only, wraps the canonical shared
+// InvoiceDocument template so this looks identical to what the customer and
+// accountant see, rather than a thinner one-off render just for advisors. =============
+
+function invoiceStatusLabel(status: string) {
+  switch (status) {
+    case 'paid':
+      return 'Paid'
+    case 'partiallyPaid':
+      return 'Partially paid'
+    case 'cancelled':
+      return 'Cancelled'
+    default:
+      return 'Unpaid'
+  }
+}
+
+function invoiceStatusTone(status: string): InvoiceDocumentStatusTone {
+  switch (status) {
+    case 'paid':
+      return 'completed'
+    case 'partiallyPaid':
+      return 'in-progress'
+    case 'cancelled':
+      return 'ready'
+    default:
+      return 'pending'
+  }
+}
+
+function InvoicePrintPreview({ invoice }: { invoice: ApiInvoice }) {
+  return (
+    <InvoiceDocument
+      invoiceId={invoice.displayId}
+      statusLabel={invoiceStatusLabel(invoice.status)}
+      statusTone={invoiceStatusTone(invoice.status)}
+      issuedAt={printDateTime(invoice.issuedAt)}
+      serviceDate={invoice.repairOrder?.completedAt ? printDateTime(invoice.repairOrder.completedAt) : undefined}
+      repairOrderId={invoice.repairOrder?.displayId || '—'}
+      paymentMethod={invoice.amountPaid > 0 ? 'Recorded at desk' : 'Not yet paid'}
+      customerName={invoice.customer?.fullName || 'Customer'}
+      customerPhone={invoice.customer?.phone}
+      customerEmail={invoice.customer?.email}
+      vehicle={[invoice.vehicle?.brand, invoice.vehicle?.model, invoice.vehicle?.year].filter(Boolean).join(' ') || 'Not recorded'}
+      plate={invoice.vehicle?.licensePlate || 'Not recorded'}
+      vin={invoice.vehicle?.chassisNumber || invoice.vehicle?.engineNumber || 'Not recorded'}
+      mileage={invoice.vehicle?.lastKnownMileage != null ? `${new Intl.NumberFormat('vi-VN').format(invoice.vehicle.lastKnownMileage)} km` : 'Not recorded'}
+      items={invoice.lineItems.map((item, index) => ({
+        key: item.id,
+        code: String(index + 1),
+        label: item.description,
+        kindLabel: item.kind === 'part' ? 'Part' : item.kind === 'labor' ? 'Labor' : 'Service',
+        addedMidRepair: item.source === 'additionalService',
+        quantity: item.quantity,
+        unitPrice: formatMoney(item.unitPrice),
+        lineTotal: formatMoney(item.lineTotal),
+      }))}
+      subtotal={formatMoney(invoice.subtotal)}
+      discount={formatMoney(invoice.discount)}
+      tax={formatMoney(invoice.taxAmount)}
+      total={formatMoney(invoice.total)}
+      showAmountPaid={invoice.amountPaid > 0}
+      amountPaid={formatMoney(invoice.amountPaid)}
+      balanceDue={formatMoney(invoice.balanceDue)}
+    />
+  )
+}
+
 type OrderStatusKey =
   | 'pending'
   | 'inProgress'
@@ -438,11 +510,13 @@ const statusTag: Record<Technician['status'], { color: string; label: string }> 
 // ============= PRODUCTION BOARD (merged in — this doubles as the "pick an
 // order" landing view when the page arrives with no ?orderId=) =============
 
-type BoardColumnKey = 'pending' | 'inProgress' | 'waiting' | 'ready' | 'finished'
+type BoardColumnKey = 'pending' | 'inProgress' | 'waiting' | 'ready'
 
 // Terminal statuses — an order here is done, closed out, immutable per
 // BR-RO-06 (reopening one needs manager-level access, out of scope for this
-// board). The "Finished" column lists them read-only, newest first.
+// board). These live in their own searchable "Finished orders" tab (below),
+// not the live board — that column only ever grows and would eventually
+// dwarf every column that actually needs attention.
 const HISTORY_STATUSES = ['completed', 'delivered', 'closed']
 
 /** Reuses the same status→color mapping the detail view's tags use
@@ -482,13 +556,6 @@ const BOARD_COLUMNS: {
     title: 'Ready for delivery',
     icon: <SendOutlined />,
     accent: advisorPalette.green,
-  },
-  {
-    key: 'finished',
-    statuses: HISTORY_STATUSES,
-    title: 'Finished',
-    icon: <HistoryOutlined />,
-    accent: advisorPalette.navy,
   },
 ]
 
@@ -546,21 +613,16 @@ function BoardCardItem({
   now,
   accent,
   icon,
-  finished,
   onClick,
 }: {
   card: BoardCard
   now: number
   accent: string
   icon: React.ReactNode
-  finished?: boolean
   onClick: () => void
 }) {
   const promise = promiseState(card.promisedAt, now)
-  // A finished order can't be "late" any more — that countdown only means
-  // something for work still in flight, so it's replaced with a plain
-  // finished-date tag instead of a stale/misleading urgency signal.
-  const lineColor = finished ? accent : promise.late ? advisorPalette.red : accent
+  const lineColor = promise.late ? advisorPalette.red : accent
 
   return (
     <Card
@@ -568,8 +630,8 @@ function BoardCardItem({
       onClick={onClick}
       size="small"
       style={{
-        background: !finished && promise.late ? '#fff5f4' : advisorPalette.panel,
-        border: `1px solid ${!finished && promise.late ? advisorPalette.red : advisorPalette.border}`,
+        background: promise.late ? '#fff5f4' : advisorPalette.panel,
+        border: `1px solid ${promise.late ? advisorPalette.red : advisorPalette.border}`,
         borderLeft: `4px solid ${lineColor}`,
         borderRadius: 12,
         cursor: 'pointer',
@@ -614,20 +676,13 @@ function BoardCardItem({
         <ProfileOutlined style={{ fontSize: 11 }} /> {card.technician}
       </div>
 
-      {finished ? (
-        <Tag color={statusColor(card.status)} style={{ marginInlineEnd: 0, marginTop: 10 }}>
-          {statusLabel(card.status)}
-          {card.finishedAt ? ` · ${new Date(card.finishedAt).toLocaleDateString('vi-VN')}` : ''}
-        </Tag>
-      ) : (
-        <Tag
-          color={promise.late ? 'red' : 'default'}
-          icon={<ClockCircleOutlined />}
-          style={{ marginInlineEnd: 0, marginTop: 10 }}
-        >
-          {promise.label}
-        </Tag>
-      )}
+      <Tag
+        color={promise.late ? 'red' : 'default'}
+        icon={<ClockCircleOutlined />}
+        style={{ marginInlineEnd: 0, marginTop: 10 }}
+      >
+        {promise.label}
+      </Tag>
     </Card>
   )
 }
@@ -647,7 +702,6 @@ function ProductionBoard({
   const cardsByColumn = useMemo(() => {
     const cards = orders.map(mapBoardCard)
     const grouped: Record<BoardColumnKey, BoardCard[]> = {
-      finished: [],
       inProgress: [],
       pending: [],
       ready: [],
@@ -660,16 +714,11 @@ function ProductionBoard({
     // customer still has to be billed first. Showing it as "ready" here
     // would be misleading, so it stays off the board entirely until invoiced.
     grouped.ready = grouped.ready.filter((card) => Boolean(card.invoicedAt))
-    // Most-recently-finished first — matches how the other columns read
-    // (newest thing needing attention on top).
-    grouped.finished = grouped.finished
-      .slice()
-      .sort((a, b) => (b.finishedAt || '').localeCompare(a.finishedAt || ''))
     return grouped
   }, [orders])
 
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
+    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
       {BOARD_COLUMNS.map((column) => {
         const cards = cardsByColumn[column.key]
         return (
@@ -712,7 +761,6 @@ function ProductionBoard({
                   <BoardCardItem
                     accent={column.accent}
                     card={card}
-                    finished={column.key === 'finished'}
                     icon={column.icon}
                     key={card.id}
                     now={now}
@@ -735,6 +783,125 @@ function ProductionBoard({
           </div>
         )
       })}
+    </div>
+  )
+}
+
+// ============= FINISHED ORDERS — a searchable table instead of a board
+// column, since this list only ever grows and would eventually dwarf every
+// column that actually needs attention. =============
+
+type FinishedOrderRow = BoardCard & { raw: ApiRepairOrder }
+
+function FinishedOrdersTable({
+  orders,
+  onOpenQuotation,
+  onOpenInvoice,
+  onOpenOrder,
+}: {
+  orders: ApiRepairOrder[]
+  onOpenQuotation: (order: ApiRepairOrder) => void
+  onOpenInvoice: (order: ApiRepairOrder) => void
+  onOpenOrder: (id: string) => void
+}) {
+  const [search, setSearch] = useState('')
+
+  const rows: FinishedOrderRow[] = useMemo(
+    () =>
+      orders
+        .filter((order) => HISTORY_STATUSES.includes(order.status || ''))
+        .map((order) => ({ ...mapBoardCard(order), raw: order }))
+        .sort((a, b) => (b.finishedAt || '').localeCompare(a.finishedAt || '')),
+    [orders],
+  )
+
+  const filteredRows = useMemo(() => {
+    const query = search.trim().toLowerCase()
+    if (!query) return rows
+    return rows.filter((row) =>
+      [row.code, row.plate, row.vehicleLabel, row.customer, row.technician].some((field) =>
+        field.toLowerCase().includes(query),
+      ),
+    )
+  }, [rows, search])
+
+  const columns: ColumnsType<FinishedOrderRow> = [
+    {
+      key: 'code',
+      title: 'Order',
+      render: (_, row) => <span style={{ color: advisorPalette.ink, fontWeight: 700 }}>{row.code}</span>,
+    },
+    {
+      key: 'vehicle',
+      title: 'Vehicle',
+      render: (_, row) => (
+        <div>
+          <div style={{ color: advisorPalette.ink, fontWeight: 600 }}>{row.plate}</div>
+          <div style={{ color: advisorPalette.textMuted, fontSize: 12 }}>{row.vehicleLabel}</div>
+        </div>
+      ),
+    },
+    { key: 'customer', title: 'Customer', dataIndex: 'customer' },
+    { key: 'technician', title: 'Technician', dataIndex: 'technician' },
+    {
+      key: 'status',
+      title: 'Status',
+      render: (_, row) => <Tag color={statusColor(row.status)}>{statusLabel(row.status)}</Tag>,
+    },
+    {
+      key: 'finishedAt',
+      title: 'Finished',
+      render: (_, row) => (row.finishedAt ? new Date(row.finishedAt).toLocaleDateString('vi-VN') : '—'),
+    },
+    {
+      align: 'right',
+      key: 'total',
+      title: 'Total',
+      render: (_, row) => <span style={{ color: advisorPalette.red, fontWeight: 700 }}>{formatMoney(row.totalCost)}</span>,
+    },
+    {
+      key: 'actions',
+      title: 'Actions',
+      render: (_, row) => (
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => onOpenQuotation(row.raw)} size="small">
+            View quotation
+          </Button>
+          <Button onClick={() => onOpenInvoice(row.raw)} size="small">
+            View invoice
+          </Button>
+          <Button onClick={() => onOpenOrder(row.id)} size="small" type="link">
+            Open
+          </Button>
+        </div>
+      ),
+    },
+  ]
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Input.Search
+        allowClear
+        onChange={(event) => setSearch(event.target.value)}
+        placeholder="Search by order code, plate, customer, or technician..."
+        style={{ maxWidth: 420 }}
+        value={search}
+      />
+      <Card
+        bordered={false}
+        className="bo-card-hover bo-enter rounded-2xl"
+        style={{ background: advisorPalette.panel, boxShadow: advisorPalette.shadow, border: `1px solid ${advisorPalette.border}` }}
+        styles={{ body: { padding: 0 } }}
+      >
+        <Table
+          columns={columns}
+          dataSource={filteredRows}
+          pagination={{ pageSize: 10, showSizeChanger: false }}
+          rowKey="id"
+          scroll={{ x: 900 }}
+          size="small"
+        />
+      </Card>
     </div>
   )
 }
@@ -775,9 +942,16 @@ export function RepairOrderAssignmentPage() {
   // "View quotation" — a read-only preview in place, instead of navigating
   // away from the work order to a whole separate page.
   const [quotationModalOpen, setQuotationModalOpen] = useState(false)
+  const [quotationModalOrder, setQuotationModalOrder] = useState<ApiRepairOrder | null>(null)
   const [quotationDetail, setQuotationDetail] = useState<ApiQuotation | null>(null)
   const [quotationLoading, setQuotationLoading] = useState(false)
   const [quotationError, setQuotationError] = useState('')
+
+  const [invoiceModalOpen, setInvoiceModalOpen] = useState(false)
+  const [invoiceModalOrder, setInvoiceModalOrder] = useState<ApiRepairOrder | null>(null)
+  const [invoiceDetail, setInvoiceDetail] = useState<ApiInvoice | null>(null)
+  const [invoiceLoading, setInvoiceLoading] = useState(false)
+  const [invoiceError, setInvoiceError] = useState('')
 
   useEffect(() => {
     if (!token || orderIdParam) return
@@ -939,14 +1113,16 @@ export function RepairOrderAssignmentPage() {
     }
   }
 
-  async function openQuotationModal() {
-    if (!token || !orderIdParam) return
+  async function openQuotationModal(targetOrder: ApiRepairOrder) {
+    const targetId = targetOrder._id || targetOrder.id
+    if (!token || !targetId) return
+    setQuotationModalOrder(targetOrder)
     setQuotationModalOpen(true)
     setQuotationLoading(true)
     setQuotationError('')
     setQuotationDetail(null)
     try {
-      const response = await fetchQuotations(token, `?repairOrderId=${orderIdParam}`)
+      const response = await fetchQuotations(token, `?repairOrderId=${targetId}`)
       const quotes = unwrapArray<ApiQuotation>(response, ['quotations'])
       // Sorted newest-first by the backend — the live quote for this order.
       setQuotationDetail(quotes[0] ?? null)
@@ -954,6 +1130,24 @@ export function RepairOrderAssignmentPage() {
       setQuotationError(err instanceof Error ? err.message : 'Unable to load the quotation.')
     } finally {
       setQuotationLoading(false)
+    }
+  }
+
+  async function openInvoiceModal(targetOrder: ApiRepairOrder) {
+    const targetId = targetOrder._id || targetOrder.id
+    if (!token || !targetId) return
+    setInvoiceModalOrder(targetOrder)
+    setInvoiceModalOpen(true)
+    setInvoiceLoading(true)
+    setInvoiceError('')
+    setInvoiceDetail(null)
+    try {
+      const response = await fetchInvoicesForRepairOrder(token, targetId)
+      setInvoiceDetail(response.invoices?.[0] ?? null)
+    } catch (err) {
+      setInvoiceError(err instanceof Error ? err.message : 'Unable to load the invoice.')
+    } finally {
+      setInvoiceLoading(false)
     }
   }
 
@@ -980,10 +1174,36 @@ export function RepairOrderAssignmentPage() {
       {apiMessage ? <InlineBanner tone={apiTone}>{apiMessage}</InlineBanner> : null}
 
       {!orderIdParam ? (
-        <ProductionBoard
-          orders={boardOrders}
-          now={boardNow}
-          onPick={(id) => navigate(`/advisor/work-orders?orderId=${id}`)}
+        <Tabs
+          items={[
+            {
+              children: (
+                <ProductionBoard
+                  orders={boardOrders}
+                  now={boardNow}
+                  onPick={(id) => navigate(`/advisor/work-orders?orderId=${id}`)}
+                />
+              ),
+              key: 'board',
+              label: 'Board',
+            },
+            {
+              children: (
+                <FinishedOrdersTable
+                  onOpenInvoice={(target) => void openInvoiceModal(target)}
+                  onOpenOrder={(id) => navigate(`/advisor/work-orders?orderId=${id}`)}
+                  onOpenQuotation={(target) => void openQuotationModal(target)}
+                  orders={boardOrders}
+                />
+              ),
+              key: 'finished',
+              label: (
+                <span>
+                  <HistoryOutlined /> Finished orders
+                </span>
+              ),
+            },
+          ]}
         />
       ) : !order ? (
         <Card
@@ -1093,7 +1313,7 @@ export function RepairOrderAssignmentPage() {
                         </div>
                       </div>
                     </div>
-                    <Button size="small" onClick={() => void openQuotationModal()}>
+                    <Button size="small" onClick={() => void openQuotationModal(order)}>
                       View quotation
                     </Button>
                   </>
@@ -1429,10 +1649,31 @@ export function RepairOrderAssignmentPage() {
           <Empty description="Loading quotation..." image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : quotationError ? (
           <InlineBanner tone="error">{quotationError}</InlineBanner>
-        ) : !quotationDetail || !order ? (
+        ) : !quotationDetail || !quotationModalOrder ? (
           <Empty description="No quotation on file for this order." image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
-          <QuotationPrintPreview order={order} quotation={quotationDetail} />
+          <QuotationPrintPreview order={quotationModalOrder} quotation={quotationDetail} />
+        )}
+      </Modal>
+
+      <Modal
+        footer={null}
+        onCancel={() => setInvoiceModalOpen(false)}
+        open={invoiceModalOpen}
+        title={null}
+        width={820}
+      >
+        {invoiceLoading ? (
+          <Empty description="Loading invoice..." image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : invoiceError ? (
+          <InlineBanner tone="error">{invoiceError}</InlineBanner>
+        ) : !invoiceDetail ? (
+          <Empty
+            description={`${invoiceModalOrder ? formatOrderId(invoiceModalOrder) : 'This order'} hasn't been invoiced yet.`}
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
+        ) : (
+          <InvoicePrintPreview invoice={invoiceDetail} />
         )}
       </Modal>
     </ServiceAdvisorShell>

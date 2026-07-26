@@ -1,7 +1,13 @@
 import * as invoiceService from "../services/invoice.service.js";
+import { ApiError } from "../utils/apiError.js";
 
-export async function listInvoices(_req, res) {
-  const result = await invoiceService.listInvoices();
+export async function listInvoices(req, res) {
+  // A service advisor may only look up one order's own invoice — never the
+  // whole ledger, which stays accountant/admin-only.
+  if (req.user.role === "serviceAdvisor" && !req.query.repairOrderId) {
+    throw new ApiError(400, "repairOrderId is required");
+  }
+  const result = await invoiceService.listInvoices({ repairOrderId: req.query.repairOrderId });
   res.json(result);
 }
 

@@ -19,10 +19,12 @@ invoiceRouter.get(
   catchAsync(listMyInvoices),
 );
 
+// serviceAdvisor is scoped down to a single order's invoice in the
+// controller — repairOrderId is required for that role, never a full list.
 invoiceRouter.get(
   "",
   requireAuth,
-  requireRole("accountant", "admin"),
+  requireRole("accountant", "admin", "serviceAdvisor"),
   catchAsync(listInvoices),
 );
 
