@@ -219,6 +219,7 @@ export async function getPartTransactions(id, { limit = 50 } = {}) {
   const transactions = await InventoryTransactionModel.find({ partId: id })
     .populate("actorId", "fullName role")
     .populate("repairOrderId", "code")
+    .populate("purchaseOrderId", "code")
     .sort({ createdAt: -1 })
     .limit(Math.min(Number(limit) || 50, 200));
 

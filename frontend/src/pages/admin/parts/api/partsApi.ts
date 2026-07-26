@@ -78,3 +78,28 @@ export function deletePart(token: string, id: string) {
     token,
   })
 }
+
+export type PartTransactionType = 'receipt' | 'issue' | 'return' | 'adjustment' | 'writeOff'
+
+export type PartTransactionRecord = {
+  _id: string
+  type: PartTransactionType
+  quantity: number
+  unitCost?: number
+  balanceAfter?: number
+  reason?: string
+  createdAt: string
+  actorId?: { _id: string; fullName?: string; role?: string } | null
+  repairOrderId?: { _id: string; code?: string } | null
+  purchaseOrderId?: { _id: string; code?: string } | null
+}
+
+/** The append-only stock ledger for one part — every receipt/issue/return/
+ *  adjustment/write-off, newest first. Answers "did this actually get
+ *  deducted, when, how much, and by whom", which On hand alone can't. */
+export function fetchPartTransactions(token: string, id: string) {
+  return apiRequest<{ transactions: PartTransactionRecord[] }>(`/api/admin/parts/${id}/transactions`, {
+    method: 'GET',
+    token,
+  })
+}

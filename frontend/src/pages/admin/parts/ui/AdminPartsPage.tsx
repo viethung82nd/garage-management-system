@@ -1,5 +1,5 @@
-import { PlusOutlined, SearchOutlined } from '@ant-design/icons'
-import { Button, Card, Form, Input, InputNumber, Modal, Popconfirm, Table, Tag, Tooltip } from 'antd'
+import { HistoryOutlined, PlusOutlined, SearchOutlined } from '@ant-design/icons'
+import { Button, Card, Empty, Form, Input, InputNumber, Modal, Popconfirm, Table, Tag, Tooltip } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState } from 'react'
 import {
@@ -7,9 +7,12 @@ import {
   createPart,
   deletePart,
   fetchParts,
+  fetchPartTransactions,
   updatePart,
   type CreatePartPayload,
   type PartRecord,
+  type PartTransactionRecord,
+  type PartTransactionType,
 } from '../api/partsApi'
 import { AdminShell, adminPalette } from '../../ui/AdminShell'
 import { InlineBanner } from '../../../../widgets/backoffice-shell'
@@ -17,6 +20,14 @@ import { useAuth } from '../../../../shared/auth'
 
 function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
+}
+
+const transactionTypeMeta: Record<PartTransactionType, { label: string; color: string; sign: '+' | '-' | '' }> = {
+  receipt: { label: 'Receipt', color: 'green', sign: '+' },
+  issue: { label: 'Issued', color: 'red', sign: '-' },
+  return: { label: 'Returned', color: 'blue', sign: '+' },
+  adjustment: { label: 'Adjustment', color: 'default', sign: '' },
+  writeOff: { label: 'Write-off', color: 'volcano', sign: '-' },
 }
 
 export default function AdminPartsPage() {
@@ -33,6 +44,10 @@ export default function AdminPartsPage() {
   const [adjustingPart, setAdjustingPart] = useState<PartRecord | null>(null)
   const [adjustForm] = Form.useForm<{ newQuantity: number; reason: string }>()
   const [adjusting, setAdjusting] = useState(false)
+  const [historyPart, setHistoryPart] = useState<PartRecord | null>(null)
+  const [historyTransactions, setHistoryTransactions] = useState<PartTransactionRecord[]>([])
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
 
   useEffect(() => {
     if (!token) return
@@ -126,6 +141,22 @@ export default function AdminPartsPage() {
     }
   }
 
+  async function openHistoryModal(part: PartRecord) {
+    if (!token) return
+    setHistoryPart(part)
+    setHistoryLoading(true)
+    setHistoryError('')
+    setHistoryTransactions([])
+    try {
+      const response = await fetchPartTransactions(token, part._id)
+      setHistoryTransactions(response.transactions)
+    } catch (error) {
+      setHistoryError(error instanceof Error ? error.message : 'Unable to load this part’s history.')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
   async function handleDelete(part: PartRecord) {
     if (!token) return
     setDeletingId(part._id)
@@ -174,6 +205,9 @@ export default function AdminPartsPage() {
             </Button>
             <Button size="small" onClick={() => openAdjustModal(part)}>
               Adjust stock
+            </Button>
+            <Button size="small" icon={<HistoryOutlined />} onClick={() => void openHistoryModal(part)}>
+              History
             </Button>
             <Popconfirm
               title="Retire this part?"
@@ -282,6 +316,73 @@ export default function AdminPartsPage() {
             <Input.TextArea autoSize={{ maxRows: 4, minRows: 2 }} />
           </Form.Item>
         </Form>
+      </Modal>
+
+      <Modal
+        title={historyPart ? `Stock history — ${historyPart.name}` : 'Stock history'}
+        open={Boolean(historyPart)}
+        onCancel={() => setHistoryPart(null)}
+        footer={null}
+        width={760}
+      >
+        {historyError ? <InlineBanner tone="error">{historyError}</InlineBanner> : null}
+        <Table
+          rowKey="_id"
+          loading={historyLoading}
+          dataSource={historyTransactions}
+          pagination={{ pageSize: 8, showTotal: (total) => `${total} movements` }}
+          locale={{ emptyText: <Empty description="No stock movements recorded for this part yet." image={Empty.PRESENTED_IMAGE_SIMPLE} /> }}
+          className="bo-table"
+          scroll={{ x: 620 }}
+          columns={[
+            {
+              title: 'Date',
+              dataIndex: 'createdAt',
+              key: 'createdAt',
+              render: (value: string) => new Date(value).toLocaleString('vi-VN'),
+            },
+            {
+              title: 'Type',
+              dataIndex: 'type',
+              key: 'type',
+              render: (value: PartTransactionType) => <Tag color={transactionTypeMeta[value].color}>{transactionTypeMeta[value].label}</Tag>,
+            },
+            {
+              title: 'Qty',
+              key: 'quantity',
+              align: 'right',
+              render: (_, row) => (
+                <span style={{ fontWeight: 700 }}>
+                  {transactionTypeMeta[row.type].sign}
+                  {row.quantity}
+                </span>
+              ),
+            },
+            {
+              title: 'Balance after',
+              dataIndex: 'balanceAfter',
+              key: 'balanceAfter',
+              align: 'right',
+              render: (value?: number) => value ?? '—',
+            },
+            {
+              title: 'Reference',
+              key: 'reference',
+              render: (_, row) => row.repairOrderId?.code || row.purchaseOrderId?.code || '—',
+            },
+            {
+              title: 'Reason',
+              dataIndex: 'reason',
+              key: 'reason',
+              render: (value?: string) => value || '—',
+            },
+            {
+              title: 'By',
+              key: 'actor',
+              render: (_, row) => row.actorId?.fullName || 'System',
+            },
+          ] satisfies ColumnsType<PartTransactionRecord>}
+        />
       </Modal>
     </AdminShell>
   )
