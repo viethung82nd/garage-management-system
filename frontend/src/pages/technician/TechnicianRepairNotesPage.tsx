@@ -13,7 +13,6 @@ import {
   fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
   fetchWorkshopServices,
-  fetchWorkshopTechnicians,
   issueWorkshopRepairOrderParts,
   orderId,
   personName,
