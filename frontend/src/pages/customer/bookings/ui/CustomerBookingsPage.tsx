@@ -79,19 +79,31 @@ function paymentMethodLabel(method?: string | null) {
   }
 }
 
-function mapStatus(order: CustomerRepairOrderApiRecord, invoice?: CustomerInvoiceApiRecord | null) {
+function mapStatus(order: CustomerRepairOrderApiRecord) {
   switch (order.status) {
     case 'inProgress':
+    case 'reworkRequired':
       return { statusLabel: 'In Progress', statusTone: 'in-progress' as const }
     case 'pending':
       return { statusLabel: 'Pending Intake', statusTone: 'pending' as const }
+    case 'waitingParts':
+    case 'waitingCustomer':
+    case 'onHold':
+      return { statusLabel: 'On Hold', statusTone: 'pending' as const }
     case 'cancelled':
       return { statusLabel: 'Cancelled', statusTone: 'pending' as const }
+    // Mechanical work is done but it hasn't passed QC yet — not ready for
+    // pickup until readyForDelivery, so this still reads as in-progress.
     case 'completed':
-      if (invoice?.status === 'paid') {
-        return { statusLabel: 'Completed', statusTone: 'completed' as const }
-      }
+      return { statusLabel: 'In Progress', statusTone: 'in-progress' as const }
+    case 'readyForDelivery':
       return { statusLabel: 'Ready for Pickup', statusTone: 'ready' as const }
+    // Handover (deliverVehicle) is itself gated on the invoice being paid in
+    // full, so reaching either of these already implies a settled invoice —
+    // no need to cross-check invoice.status here.
+    case 'delivered':
+    case 'closed':
+      return { statusLabel: 'Completed', statusTone: 'completed' as const }
     default:
       return { statusLabel: 'Updating', statusTone: 'pending' as const }
   }
@@ -203,7 +215,7 @@ export default function CustomerBookingsPage() {
     return repairOrders.map((order) => {
       const invoice = invoices.find((item) => item.repairOrder?.id === order._id) || null
       const linkedBooking = findMatchingBooking(order, bookings)
-      const visualStatus = mapStatus(order, invoice)
+      const visualStatus = mapStatus(order)
 
       return {
         key: order._id,
