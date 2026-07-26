@@ -19,6 +19,7 @@ export async function approveTransferRequest(req, res) {
     req.params.id,
     req.body?.resolveNote,
     req.user?.sub,
+    req.body?.toTechnicianId,
   );
   res.json(transferRequest);
 }

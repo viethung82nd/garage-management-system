@@ -198,6 +198,27 @@ export function fetchCustomerRepairOrders(token: string) {
   })
 }
 
+export type CustomerVehicleRecord = {
+  _id: string
+  licensePlate: string
+  brand?: string
+  model?: string
+  year?: number
+  color?: string
+  chassisNumber?: string
+  engineNumber?: string
+  lastKnownMileage?: number | null
+  photo?: string | null
+  lastInspectedAt?: string | null
+}
+
+export function fetchCustomerVehicles(token: string) {
+  return apiRequest<{ vehicles: CustomerVehicleRecord[] }>('/api/vehicles/mine', {
+    method: 'GET',
+    token,
+  })
+}
+
 export function fetchCustomerInvoices(token: string) {
   return apiRequest<{ invoices: CustomerInvoiceApiRecord[] }>('/api/invoices/mine', {
     method: 'GET',

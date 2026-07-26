@@ -272,7 +272,7 @@ export async function resolveCustomer({ fullName, phone, email }, session) {
 /** Finds a vehicle by licence plate, or registers a new one for the customer.
  *  Pass `session` to enrol every read/write in an outer transaction. */
 export async function resolveVehicle(
-  { licensePlate, brand, model },
+  { licensePlate, brand, model, year },
   customerId,
   session,
 ) {
@@ -294,6 +294,10 @@ export async function resolveVehicle(
       existing.model = model.trim();
       changed = true;
     }
+    if (year != null && year !== existing.year) {
+      existing.year = Number(year);
+      changed = true;
+    }
     if (changed) {
       await existing.save({ session });
     }
@@ -301,7 +305,7 @@ export async function resolveVehicle(
   }
   try {
     const [created] = await vehicleRepository.model.create(
-      [{ licensePlate: plate, brand, model, customerId }],
+      [{ licensePlate: plate, brand, model, year, customerId }],
       { session },
     );
     return created;

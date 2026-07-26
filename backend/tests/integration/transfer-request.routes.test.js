@@ -22,12 +22,13 @@ describe("Transfer Request API", () => {
     const created = await request(app)
       .post("/api/transfer-requests")
       .set(authHeader(techA))
-      .send({ repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() });
+      .send({ repairOrderId: order._id.toString() });
     expect(created.status).toBe(201);
 
     const approved = await request(app)
       .patch(`/api/transfer-requests/${created.body._id}/approve`)
-      .set(authHeader(advisor));
+      .set(authHeader(advisor))
+      .send({ toTechnicianId: techB._id.toString() });
     expect(approved.status).toBe(200);
 
     const updatedOrder = await request(app).get(`/api/repair-orders/${order._id}`).set(authHeader(advisor));
@@ -36,14 +37,13 @@ describe("Transfer Request API", () => {
 
   it("rejects a technician who isn't assigned to the order", async () => {
     const { user: techA } = await createUser({ role: "technician" });
-    const { user: techB } = await createUser({ role: "technician" });
     const { user: notAssigned } = await createUser({ role: "technician" });
     const order = await assignedOrder(techA);
 
     const res = await request(app)
       .post("/api/transfer-requests")
       .set(authHeader(notAssigned))
-      .send({ repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() });
+      .send({ repairOrderId: order._id.toString() });
     expect(res.status).toBe(403);
   });
 });

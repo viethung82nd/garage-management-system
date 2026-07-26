@@ -229,6 +229,7 @@ export type ReceptionPayload = {
   mileage?: string
   issueDescription?: string
   promisedAt?: string
+  year?: string
   /** Fuel level noted during the walk-around at hand-in (e.g. "1/2", "Full"). */
   fuelLevel?: string
   /** Vehicle arrived on a tow rather than driven in — it can't be road-tested yet. */
@@ -454,6 +455,10 @@ export function addWorkshopStepNote(token: string, id: string, payload: AddStepN
 
 export function fetchWorkshopServices(token: string) {
   return apiRequest<ApiService[]>('/api/services', { token })
+}
+
+export function fetchWorkshopActiveServices(token: string) {
+  return apiRequest<ApiService[]>('/api/services?isActive=true', { token })
 }
 
 /** Active services belonging to one category — used to build the SA's inspection checklist from the category the customer booked. */
@@ -773,12 +778,12 @@ export function fetchTransferRequests(token: string, query = '') {
   return apiRequest<{ transferRequests?: ApiTransferRequest[] } | ApiTransferRequest[]>(`/api/transfer-requests${query}`, { token })
 }
 
-export function createTransferRequestApi(token: string, payload: { repairOrderId: string; toTechnicianId: string; reason?: string }) {
+export function createTransferRequestApi(token: string, payload: { repairOrderId: string; reason?: string }) {
   return apiRequest<ApiTransferRequest>('/api/transfer-requests', { method: 'POST', token, body: JSON.stringify(payload) })
 }
 
-export function approveTransferRequestApi(token: string, id: string, resolveNote?: string) {
-  return apiRequest<ApiTransferRequest>(`/api/transfer-requests/${id}/approve`, { method: 'PATCH', token, body: JSON.stringify({ resolveNote }) })
+export function approveTransferRequestApi(token: string, id: string, toTechnicianId: string, resolveNote?: string) {
+  return apiRequest<ApiTransferRequest>(`/api/transfer-requests/${id}/approve`, { method: 'PATCH', token, body: JSON.stringify({ toTechnicianId, resolveNote }) })
 }
 
 export function rejectTransferRequestApi(token: string, id: string, resolveNote?: string) {

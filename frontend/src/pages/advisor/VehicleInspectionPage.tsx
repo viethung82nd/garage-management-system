@@ -24,6 +24,7 @@ import {
   createInspectionReport,
   fetchInspectionReports,
   fetchWorkshopRepairOrders,
+  fetchWorkshopActiveServices,
   fetchWorkshopServicesByCategory,
   orderId,
   personName,
@@ -64,6 +65,7 @@ type ServiceRow = {
   id: string;
   serviceId?: string;
   name: string;
+  category: string;
   price: number;
   selected: boolean;
 };
@@ -184,6 +186,7 @@ export function VehicleInspectionPage() {
   } = useApiMessage();
   const [saving, setSaving] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState("");
 
   useEffect(() => {
     if (!token) return;
@@ -297,31 +300,24 @@ export function VehicleInspectionPage() {
     };
   }, [token, selectedSubject?.vehicleId]);
 
-  // Load the services of the category the customer booked so the SA can tick
-  // the ones this vehicle actually needs (each row shows its catalogue price).
-  // Walk-ins (or bookings whose category has no services yet) fall back to the
-  // generic OK/Monitor/Needs-repair seed checklist. Re-runs whenever the
-  // selected order changes, so switching subjects starts from a clean slate.
+  // Load services for the inspection checklist. Booked customers show
+  // catalogue services from their chosen category; walk-ins (no category)
+  // show all active services grouped by category so the SA can pick from
+  // anything the workshop offers. Falls back to a generic seed checklist
+  // when no catalogue services are available at all.
   useEffect(() => {
     if (!token) return;
     const authToken = token;
     const category = selectedSubject?.serviceCategory?.trim();
 
-    if (!category) {
-      setServiceRows([]);
-      setItems(seedItems());
-      setSubmitted(false);
-      return;
-    }
-
     let cancelled = false;
 
-    async function loadCategoryServices() {
+    async function loadServices() {
       try {
-        const services = await fetchWorkshopServicesByCategory(
-          authToken,
-          category!,
-        );
+        const services = category
+          ? await fetchWorkshopServicesByCategory(authToken, category)
+          : await fetchWorkshopActiveServices(authToken);
+
         if (cancelled) return;
         const rows: ServiceRow[] = services
           .filter((service) => service?.name)
@@ -329,15 +325,17 @@ export function VehicleInspectionPage() {
             id: crypto.randomUUID(),
             serviceId: service._id || service.id,
             name: service.name as string,
+            category: service.category || category || "",
             price: service.basePrice ?? service.price ?? 0,
             selected: false,
           }));
+
         if (rows.length) {
-          setServiceRows(rows);
+          // Walk-in: sort by category so services group together
+          const sorted = category ? rows : rows.sort((a, b) => a.category.localeCompare(b.category));
+          setServiceRows(sorted);
           setItems([]);
         } else {
-          // Category has no catalogue services yet — don't leave the SA with an
-          // empty page; fall back to the generic checklist.
           setServiceRows([]);
           setItems(seedItems());
         }
@@ -350,7 +348,7 @@ export function VehicleInspectionPage() {
       }
     }
 
-    void loadCategoryServices();
+    void loadServices();
     return () => {
       cancelled = true;
     };
@@ -395,6 +393,20 @@ export function VehicleInspectionPage() {
   // Service-selection mode is active whenever the booked category yielded
   // catalogue services to tick; otherwise the generic checklist is shown.
   const servicesMode = serviceRows.length > 0;
+
+  const categoryOptions = useMemo(() => {
+    const cats = [...new Set(serviceRows.map((r) => r.category).filter(Boolean))];
+    return cats.sort((a, b) => a.localeCompare(b));
+  }, [serviceRows]);
+
+  const filteredServiceRows = useMemo(
+    () =>
+      categoryFilter && categoryFilter !== "All"
+        ? serviceRows.filter((r) => r.category === categoryFilter)
+        : serviceRows,
+    [serviceRows, categoryFilter],
+  );
+
   const selectedServices = useMemo(
     () => serviceRows.filter((row) => row.selected),
     [serviceRows],
@@ -643,7 +655,7 @@ export function VehicleInspectionPage() {
               textTransform: "uppercase",
             }}
           >
-            {selectedSubject?.serviceCategory}
+            {row.category || selectedSubject?.serviceCategory}
           </div>
           <div
             style={{ color: advisorPalette.ink, fontWeight: 700, marginTop: 2 }}
@@ -884,13 +896,30 @@ export function VehicleInspectionPage() {
                         marginBottom: 12,
                       }}
                     >
-                      Tick the services this vehicle needs from the booked
-                      category — the selected services and their prices carry
-                      over to the quote.
+                      {selectedSubject?.serviceCategory
+                        ? `Tick the services this vehicle needs from the ${selectedSubject.serviceCategory} category — the selected services and their prices carry over to the quote.`
+                        : "Tick the services this vehicle needs from any category — the selected services and their prices carry over to the quote."}
                     </p>
+                    {!selectedSubject?.serviceCategory && categoryOptions.length > 1 ? (
+                      <div style={{ marginBottom: 12 }}>
+                        <Select
+                          allowClear
+                          onChange={(value) => setCategoryFilter(value || "")}
+                          placeholder="Filter by category"
+                          style={{ width: 240 }}
+                          value={categoryFilter || undefined}
+                        >
+                          {categoryOptions.map((cat) => (
+                            <Select.Option key={cat} value={cat}>
+                              {cat}
+                            </Select.Option>
+                          ))}
+                        </Select>
+                      </div>
+                    ) : null}
                     <Table
                       columns={serviceColumns}
-                      dataSource={serviceRows}
+                      dataSource={filteredServiceRows}
                       pagination={false}
                       rowKey="id"
                       scroll={{ x: 480 }}

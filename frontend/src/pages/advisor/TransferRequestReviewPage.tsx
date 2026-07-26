@@ -1,10 +1,11 @@
 import { CheckOutlined, CloseOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Select, Table, Tag } from 'antd'
+import { Avatar, Button, Card, Modal, Select, Table, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   approveTransferRequestApi,
   fetchTransferRequests,
+  fetchWorkshopTechnicians,
   formatApiDate,
   orderId,
   personName,
@@ -13,6 +14,7 @@ import {
   vehicleName,
   vehiclePlate,
   type ApiRepairOrder,
+  type ApiTechnician,
   type ApiTransferRequest,
   type TransferRequestStatus,
 } from '../../shared/api/workshop'
@@ -61,7 +63,7 @@ function mapTransferRequest(request: ApiTransferRequest): TransferRequestRow {
     reason: request.reason || 'No reason provided.',
     requestedAt: formatApiDate(request.requestedAt),
     status: request.status || 'pending',
-    toTechnician: personName(request.toTechnicianId, 'Technician'),
+    toTechnician: request.toTechnicianId ? personName(request.toTechnicianId, 'Technician') : '—',
     vehicleLabel: vehicle ? `${vehicleName(vehicle)} - ${vehiclePlate(vehicle)}` : 'Not updated',
   }
 }
@@ -73,6 +75,14 @@ export function TransferRequestReviewPage() {
   const [loading, setLoading] = useState(true)
   const [apiMessage, setApiMessage] = useState<string>()
   const [resolvingId, setResolvingId] = useState<string>()
+  const [approveTarget, setApproveTarget] = useState<TransferRequestRow | null>(null)
+  const [approveTechId, setApproveTechId] = useState('')
+  const [technicians, setTechnicians] = useState<ApiTechnician[]>([])
+
+  const technicianOptions = useMemo(
+    () => technicians.map((t) => ({ label: t.fullName || t.email, value: t._id || t.id })),
+    [technicians],
+  )
 
   useEffect(() => {
     if (!token) return
@@ -100,17 +110,47 @@ export function TransferRequestReviewPage() {
     }
   }, [token, statusFilter])
 
-  async function resolveRequest(id: string, action: 'approve' | 'reject') {
-    if (!token) return
+  // Fetch technicians list for the approve modal
+  useEffect(() => {
+    if (!token || technicians.length) return
+    const authToken = token
+    let cancelled = false
+    void (async () => {
+      try {
+        const list = await fetchWorkshopTechnicians(authToken)
+        if (!cancelled) setTechnicians(list)
+      } catch {
+        /* best-effort */
+      }
+    })()
+    return () => { cancelled = true }
+  }, [token, technicians.length])
 
+  async function rejectRequest(id: string) {
+    if (!token) return
     setResolvingId(id)
     setApiMessage(undefined)
     try {
-      if (action === 'approve') await approveTransferRequestApi(token, id)
-      else await rejectTransferRequestApi(token, id)
+      await rejectTransferRequestApi(token, id)
       setRequests((current) => current.filter((request) => request.id !== id))
     } catch (err) {
-      setApiMessage(err instanceof Error ? err.message : 'Unable to resolve the transfer request')
+      setApiMessage(err instanceof Error ? err.message : 'Unable to reject the transfer request')
+    } finally {
+      setResolvingId(undefined)
+    }
+  }
+
+  async function confirmApprove() {
+    if (!token || !approveTarget || !approveTechId) return
+    setResolvingId(approveTarget.id)
+    setApiMessage(undefined)
+    try {
+      await approveTransferRequestApi(token, approveTarget.id, approveTechId)
+      setRequests((current) => current.filter((request) => request.id !== approveTarget.id))
+      setApproveTarget(null)
+      setApproveTechId('')
+    } catch (err) {
+      setApiMessage(err instanceof Error ? err.message : 'Unable to approve the transfer request')
     } finally {
       setResolvingId(undefined)
     }
@@ -173,14 +213,14 @@ export function TransferRequestReviewPage() {
             disabled={request.status !== 'pending'}
             icon={<CheckOutlined />}
             loading={resolvingId === request.id}
-            onClick={() => resolveRequest(request.id, 'approve')}
+            onClick={() => setApproveTarget(request)}
             type="primary"
           />
           <Button
             disabled={request.status !== 'pending'}
             icon={<CloseOutlined />}
             loading={resolvingId === request.id}
-            onClick={() => resolveRequest(request.id, 'reject')}
+            onClick={() => rejectRequest(request.id)}
           />
         </div>
       ),
@@ -208,6 +248,30 @@ export function TransferRequestReviewPage() {
           className="bo-table"
         />
       </Card>
+      <Modal
+        okText="Approve"
+        okButtonProps={{ disabled: !approveTechId, loading: resolvingId !== undefined }}
+        onCancel={() => { setApproveTarget(null); setApproveTechId('') }}
+        onOk={confirmApprove}
+        open={approveTarget !== null}
+        title="Approve transfer"
+      >
+        {approveTarget ? (
+          <div className="flex flex-col gap-4">
+            <p style={{ margin: 0 }}>
+              Assign <strong>{approveTarget.orderLabel}</strong> ({approveTarget.vehicleLabel}) from <strong>{approveTarget.fromTechnician}</strong> to:
+            </p>
+            <Select
+              onChange={setApproveTechId}
+              options={technicianOptions}
+              placeholder="Select a technician..."
+              showSearch
+              style={{ width: '100%' }}
+              value={approveTechId || undefined}
+            />
+          </div>
+        ) : null}
+      </Modal>
     </ServiceAdvisorShell>
   )
 }

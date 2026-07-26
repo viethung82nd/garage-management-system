@@ -13,7 +13,6 @@ import {
   fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
   fetchWorkshopServices,
-  fetchWorkshopTechnicians,
   issueWorkshopRepairOrderParts,
   orderId,
   personName,
@@ -24,7 +23,6 @@ import {
   type ApiInspectionReport,
   type ApiRepairOrder,
   type ApiService,
-  type ApiTechnician,
 } from '../../shared/api/workshop'
 import { InlineBanner, useApiMessage } from '../../widgets/backoffice-shell'
 import { TechnicianShell, technicianPalette } from '../../widgets/technician-shell'
@@ -213,8 +211,6 @@ export function TechnicianRepairNotesPage() {
 
   // Secondary: transfer
   const [transferOpen, setTransferOpen] = useState(false)
-  const [technicians, setTechnicians] = useState<ApiTechnician[]>([])
-  const [transferTechnicianId, setTransferTechnicianId] = useState('')
   const [transferReason, setTransferReason] = useState('')
   const [transferErrors, setTransferErrors] = useState<Record<string, string>>({})
   const [requestingTransfer, setRequestingTransfer] = useState(false)
@@ -291,24 +287,6 @@ export function TechnicianRepairNotesPage() {
       cancelled = true
     }
   }, [token, orderIdParam])
-
-  // Technicians for the transfer picker — only fetched when the panel opens.
-  useEffect(() => {
-    if (!token || !transferOpen || technicians.length) return
-    const authToken = token
-    let cancelled = false
-    void (async () => {
-      try {
-        const list = await fetchWorkshopTechnicians(authToken)
-        if (!cancelled) setTechnicians(list.filter((technician) => (technician._id || technician.id) !== (user?._id || user?.id)))
-      } catch {
-        /* best-effort */
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-  }, [token, transferOpen, technicians.length, user?._id, user?.id])
 
   // Service catalog for the extra-work picker — only fetched when the panel opens.
   useEffect(() => {
@@ -541,7 +519,6 @@ export function TechnicianRepairNotesPage() {
     const repairOrderId = repairOrder?._id || repairOrder?.id
     if (!repairOrderId || !token) return
     const errors: Record<string, string> = {}
-    if (!transferTechnicianId) errors.technician = 'Choose a technician to hand this order to.'
     if (!transferReason.trim()) errors.reason = 'Give a reason for the transfer.'
     setTransferErrors(errors)
     if (Object.keys(errors).length) return
@@ -549,10 +526,9 @@ export function TechnicianRepairNotesPage() {
     setRequestingTransfer(true)
     clearApiMessage()
     try {
-      await createTransferRequestApi(token, { reason: transferReason.trim(), repairOrderId, toTechnicianId: transferTechnicianId })
+      await createTransferRequestApi(token, { reason: transferReason.trim(), repairOrderId })
       showSuccess('Transfer request sent to the service advisor.')
       setTransferOpen(false)
-      setTransferTechnicianId('')
       setTransferReason('')
       setTransferErrors({})
     } catch (err) {
@@ -968,19 +944,6 @@ export function TechnicianRepairNotesPage() {
               <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Hand this order off?">
                 {transferOpen ? (
                   <div className="flex flex-col gap-3">
-                    <LabeledField label="Transfer to">
-                      <Select
-                        filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                        onChange={setTransferTechnicianId}
-                        options={technicians.map((technician) => ({ label: technician.fullName || technician.email, value: technician._id || technician.id }))}
-                        placeholder="Select a technician..."
-                        showSearch
-                        status={transferErrors.technician ? 'error' : undefined}
-                        style={{ width: '100%' }}
-                        value={transferTechnicianId || undefined}
-                      />
-                      {fieldError(transferErrors.technician)}
-                    </LabeledField>
                     <LabeledField label="Reason for the transfer">
                       <Input onChange={(event) => setTransferReason(event.target.value)} placeholder="e.g. Shift ending, handing off to the next technician" status={transferErrors.reason ? 'error' : undefined} value={transferReason} />
                       {fieldError(transferErrors.reason)}

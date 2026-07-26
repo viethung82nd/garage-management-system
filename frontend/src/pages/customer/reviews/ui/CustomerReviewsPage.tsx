@@ -18,7 +18,9 @@ function vehicleLabel(order: CustomerRepairOrderApiRecord) {
   if (!vehicle) {
     return 'Vehicle'
   }
-  return [vehicle.brand, vehicle.model, vehicle.licensePlate ? `(${vehicle.licensePlate})` : null].filter(Boolean).join(' ')
+  return [vehicle.brand, vehicle.model, vehicle.licensePlate ? `(${vehicle.licensePlate})` : null]
+    .filter(Boolean)
+    .join(' ')
 }
 
 function formatCompletedDate(value?: string | null) {
@@ -29,7 +31,11 @@ function formatCompletedDate(value?: string | null) {
   if (Number.isNaN(date.getTime())) {
     return 'Recently completed'
   }
-  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(date)
+  return new Intl.DateTimeFormat('en-GB', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  }).format(date)
 }
 
 function ReviewFormCard({
@@ -52,10 +58,18 @@ function ReviewFormCard({
     setError('')
     setSubmitting(true)
     try {
-      await submitServiceReview(token, { repairOrderId: order._id, rating, comment: comment.trim() || undefined })
+      await submitServiceReview(token, {
+        repairOrderId: order._id,
+        rating,
+        comment: comment.trim() || undefined,
+      })
       setSubmitted(true)
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : 'Unable to submit your review. Please try again.')
+      setError(
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unable to submit your review. Please try again.',
+      )
     } finally {
       setSubmitting(false)
     }
@@ -66,7 +80,9 @@ function ReviewFormCard({
   return (
     <CustomerPanel key={order._id} className="customer-review-card">
       <h4>{vehicleLabel(order)}</h4>
-      <p className="customer-review-card__meta">Completed {formatCompletedDate(order.completedAt)}</p>
+      <p className="customer-review-card__meta">
+        Completed {formatCompletedDate(order.completedAt)}
+      </p>
 
       {alreadyReviewed && existingReview ? (
         <div className="customer-review-card__existing">
@@ -110,13 +126,20 @@ export default function CustomerReviewsPage() {
       setLoading(true)
       setError('')
       try {
-        const [repairOrders, reviewsResponse] = await Promise.all([fetchCustomerRepairOrders(token), fetchMyReviews(token)])
+        const [repairOrders, reviewsResponse] = await Promise.all([
+          fetchCustomerRepairOrders(token),
+          fetchMyReviews(token),
+        ])
         if (cancelled) return
         setOrders(repairOrders)
         setReviews(reviewsResponse.reviews)
       } catch (requestError) {
         if (!cancelled) {
-          setError(requestError instanceof Error ? requestError.message : 'Unable to load your repair orders')
+          setError(
+            requestError instanceof Error
+              ? requestError.message
+              : 'Unable to load your repair orders',
+          )
         }
       } finally {
         if (!cancelled) setLoading(false)
@@ -129,8 +152,14 @@ export default function CustomerReviewsPage() {
     }
   }, [token])
 
-  const completedOrders = useMemo(() => orders.filter((order) => order.status === 'completed'), [orders])
-  const reviewsByOrderId = useMemo(() => new Map(reviews.map((review) => [review.repairOrderId, review])), [reviews])
+  const reviewableOrders = useMemo(
+    () => orders.filter((order) => ['completed', 'readyForDelivery', 'delivered'].includes(order.status)),
+    [orders],
+  )
+  const reviewsByOrderId = useMemo(
+    () => new Map(reviews.map((review) => [review.repairOrderId, review])),
+    [reviews],
+  )
 
   return (
     <CustomerPageLayout title="Service Reviews" breadcrumb="Reviews">
@@ -139,7 +168,7 @@ export default function CustomerReviewsPage() {
         <CustomerSectionHeading
           eyebrow="Your feedback"
           title="Leave a review"
-          description="Rate and comment on repair orders that have been completed."
+          description=""
           compact
           centered
         />
@@ -147,16 +176,21 @@ export default function CustomerReviewsPage() {
         {loading ? <CustomerPanel>Loading your completed repair orders...</CustomerPanel> : null}
         {error ? <CustomerPanel className="customer-panel--error">{error}</CustomerPanel> : null}
 
-        {!loading && !error && completedOrders.length === 0 ? (
+        {!loading && !error && reviewableOrders.length === 0 ? (
           <CustomerEmptyState
             title="No completed repair orders yet"
-            description="Once a repair order is marked completed, it will show up here so you can leave a review."
+            description="Once a repair order is completed and delivered, it will show up here so you can leave a review."
           />
         ) : null}
 
         {token
-          ? completedOrders.map((order) => (
-              <ReviewFormCard key={order._id} order={order} token={token} existingReview={reviewsByOrderId.get(order._id)} />
+          ? reviewableOrders.map((order) => (
+              <ReviewFormCard
+                key={order._id}
+                order={order}
+                token={token}
+                existingReview={reviewsByOrderId.get(order._id)}
+              />
             ))
           : null}
       </section>

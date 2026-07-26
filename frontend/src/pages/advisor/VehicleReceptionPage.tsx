@@ -302,6 +302,7 @@ export function VehicleReceptionPage() {
       .trim()
       .toUpperCase()
 
+    const yearStr = String(form.year ?? '').trim()
     const vinPattern = /^[A-HJ-NPR-Z0-9]{17}$/
     if (!model) {
       errors.model = 'Vehicle model is required.'
@@ -327,7 +328,14 @@ export function VehicleReceptionPage() {
 
     if (email && !emailPattern.test(email)) errors.customerEmail = 'Enter a valid email address.'
 
-    if (!plate) errors.plate = 'License plate is required.'
+    if (!plate)       errors.plate = 'License plate is required.'
+    if (yearStr) {
+      const yearNum = Number(yearStr)
+      const maxYear = new Date().getFullYear() + 1
+      if (!Number.isInteger(yearNum) || yearNum < 1980 || yearNum > maxYear) {
+        errors.year = `Model year must be between 1980 and ${maxYear}.`
+      }
+    }
     const mileageValue = mileage.replace(/,/g, '')
 
     if (mileage) {
@@ -412,6 +420,7 @@ export function VehicleReceptionPage() {
         customerEmail: form.customerEmail || undefined,
         plate: form.plate,
         model: form.model || undefined,
+        year: form.year || undefined,
         vin: form.vin || undefined,
         engineNo: form.engineNo || undefined,
         mileage: form.mileage || undefined,

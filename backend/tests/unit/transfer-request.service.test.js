@@ -21,10 +21,9 @@ describe("transfer-request.service", () => {
 
   it("the assigned technician can request a transfer", async () => {
     const { user: techA } = await createUser({ role: "technician" });
-    const { user: techB } = await createUser({ role: "technician" });
     const order = await assignedOrder(techA);
     const result = await transferService.createTransferRequest(
-      { repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() },
+      { repairOrderId: order._id.toString() },
       techA._id.toString(),
     );
     expect(result.status).toBe("pending");
@@ -32,28 +31,26 @@ describe("transfer-request.service", () => {
 
   it("rejects a technician who isn't assigned to the order", async () => {
     const { user: techA } = await createUser({ role: "technician" });
-    const { user: techB } = await createUser({ role: "technician" });
     const { user: notAssigned } = await createUser({ role: "technician" });
     const order = await assignedOrder(techA);
     await expect(
       transferService.createTransferRequest(
-        { repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() },
+        { repairOrderId: order._id.toString() },
         notAssigned._id.toString(),
       ),
     ).rejects.toMatchObject({ status: 403 });
   });
 
-  it("rejects a duplicate pending request to the same technician", async () => {
+  it("rejects a duplicate pending request", async () => {
     const { user: techA } = await createUser({ role: "technician" });
-    const { user: techB } = await createUser({ role: "technician" });
     const order = await assignedOrder(techA);
     await transferService.createTransferRequest(
-      { repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() },
+      { repairOrderId: order._id.toString() },
       techA._id.toString(),
     );
     await expect(
       transferService.createTransferRequest(
-        { repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() },
+        { repairOrderId: order._id.toString() },
         techA._id.toString(),
       ),
     ).rejects.toMatchObject({ status: 409 });
@@ -64,20 +61,19 @@ describe("transfer-request.service", () => {
     const { user: techB } = await createUser({ role: "technician" });
     const order = await assignedOrder(techA);
     const request = await transferService.createTransferRequest(
-      { repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() },
+      { repairOrderId: order._id.toString() },
       techA._id.toString(),
     );
-    await transferService.approveTransferRequest(request._id.toString(), "", advisorId);
+    await transferService.approveTransferRequest(request._id.toString(), "", advisorId, techB._id.toString());
     const updatedOrder = await RepairOrderModel.findById(order._id);
     expect(updatedOrder.technicianId.toString()).toBe(techB._id.toString());
   });
 
   it("rejecting leaves the order's technician unchanged", async () => {
     const { user: techA } = await createUser({ role: "technician" });
-    const { user: techB } = await createUser({ role: "technician" });
     const order = await assignedOrder(techA);
     const request = await transferService.createTransferRequest(
-      { repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() },
+      { repairOrderId: order._id.toString() },
       techA._id.toString(),
     );
     await transferService.rejectTransferRequest(request._id.toString(), "", advisorId);
@@ -90,10 +86,10 @@ describe("transfer-request.service", () => {
     const { user: techB } = await createUser({ role: "technician" });
     const order = await assignedOrder(techA);
     const request = await transferService.createTransferRequest(
-      { repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() },
+      { repairOrderId: order._id.toString() },
       techA._id.toString(),
     );
-    await transferService.approveTransferRequest(request._id.toString(), "", advisorId);
+    await transferService.approveTransferRequest(request._id.toString(), "", advisorId, techB._id.toString());
     await expect(
       transferService.rejectTransferRequest(request._id.toString(), "", advisorId),
     ).rejects.toMatchObject({ status: 400 });
@@ -101,10 +97,9 @@ describe("transfer-request.service", () => {
 
   it("listTransferRequests filters by status", async () => {
     const { user: techA } = await createUser({ role: "technician" });
-    const { user: techB } = await createUser({ role: "technician" });
     const order = await assignedOrder(techA);
     await transferService.createTransferRequest(
-      { repairOrderId: order._id.toString(), toTechnicianId: techB._id.toString() },
+      { repairOrderId: order._id.toString() },
       techA._id.toString(),
     );
     const result = await transferService.listTransferRequests({ status: "pending" });

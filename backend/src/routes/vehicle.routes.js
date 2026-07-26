@@ -6,9 +6,18 @@ import {
   checkVehicleExists,
   updateVehicleProfile,
   getOdometerHistory,
+  getMyVehicles,
 } from "../controllers/vehicle.controller.js";
 
 export const vehicleRouter = Router();
+
+// Customer's own vehicles — declared before parameterised routes.
+vehicleRouter.get(
+  "/mine",
+  requireAuth,
+  requireRole("onlineCustomer", "walkInCustomer"),
+  catchAsync(getMyVehicles)
+);
 
 // Check whether a vehicle profile exists for a licence plate (reception tool,
 // staff only). Declared before any parameterised route.

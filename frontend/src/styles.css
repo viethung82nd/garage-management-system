@@ -1,6 +1,6 @@
-@import "./shared/config/theme.css";
-@import "tailwindcss/theme.css";
-@import "tailwindcss/utilities";
+@import './shared/config/theme.css';
+@import 'tailwindcss/theme.css';
+@import 'tailwindcss/utilities';
 
 /*
  * public/kapa-auth/** holds static third-party WordPress/Elementor theme exports that get
@@ -186,7 +186,9 @@ body {
   width: 100% !important;
   border-radius: 10px;
   font-weight: 500;
-  transition: background-color 0.2s ease, color 0.2s ease;
+  transition:
+    background-color 0.2s ease,
+    color 0.2s ease;
 }
 
 a {
@@ -448,10 +450,6 @@ select {
   padding: 30px;
 }
 
-.customer-panel + .customer-panel {
-  margin-top: 20px;
-}
-
 .customer-panel--error {
   border-color: rgba(197, 48, 48, 0.25);
   background: rgba(197, 48, 48, 0.06);
@@ -478,7 +476,7 @@ select {
 .customer-section-heading .sub-title::before,
 .customer-info-card__eyebrow::before,
 .customer-booking-card__eyebrow::before {
-  content: "";
+  content: '';
   width: 26px;
   height: 8px;
   display: inline-block;
@@ -1261,7 +1259,7 @@ select {
 }
 
 .customer-booking-card__meta span:last-child::before {
-  content: "•";
+  content: '•';
   margin-right: 10px;
   color: rgba(15, 14, 14, 0.24);
 }
@@ -1724,20 +1722,6 @@ select {
   gap: 22px;
 }
 
-.customer-vehicle-card__media {
-  overflow: hidden;
-  border-radius: 22px;
-  background: rgba(15, 14, 14, 0.04);
-  aspect-ratio: 1 / 1;
-}
-
-.customer-vehicle-card__media img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  display: block;
-}
-
 .customer-stats-strip {
   grid-template-columns: repeat(4, minmax(0, 1fr));
 }
@@ -2106,7 +2090,6 @@ select {
 
   .customer-booking-card__grid,
   .customer-profile-meta,
-  .customer-vehicle-card__grid,
   .customer-stats-strip,
   .customer-modal__amounts {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2119,14 +2102,6 @@ select {
   .customer-invoice-sheet__summary,
   .customer-invoice-sheet__topline {
     grid-template-columns: 1fr;
-  }
-
-  .customer-vehicle-card__layout {
-    grid-template-columns: 1fr;
-  }
-
-  .customer-vehicle-card__media {
-    max-width: 420px;
   }
 }
 
@@ -2194,14 +2169,9 @@ select {
 
   .customer-booking-card__grid,
   .customer-profile-meta,
-  .customer-vehicle-card__grid,
   .customer-stats-strip,
   .customer-modal__amounts {
     grid-template-columns: 1fr;
-  }
-
-  .customer-vehicle-card__media {
-    max-width: none;
   }
 
   .customer-modal-backdrop {
@@ -2248,5 +2218,176 @@ select {
   .customer-timeline__item {
     grid-template-columns: 26px minmax(0, 1fr);
     column-gap: 14px;
+  }
+}
+
+/* ===== Vehicle Collection ===== */
+.customer-vehicles {
+  position: relative;
+}
+
+/* Grid mode — 1-3 vehicles, cards fill available space */
+.customer-vehicles--grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+  gap: 16px;
+}
+
+/* Carousel mode — 3+ vehicles, scrollable track with arrows */
+.customer-vehicles--carousel {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.customer-vehicles__track {
+  display: flex;
+  gap: 16px;
+  overflow-x: auto;
+  scroll-behavior: smooth;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding: 4px 0;
+  flex: 1;
+}
+
+.customer-vehicles__track::-webkit-scrollbar {
+  height: 6px;
+}
+
+.customer-vehicles__track::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.customer-vehicles__track::-webkit-scrollbar-thumb {
+  background: rgba(15, 14, 14, 0.12);
+  border-radius: 3px;
+}
+
+.customer-vehicle-card {
+  border-radius: 22px;
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(15, 14, 14, 0.06);
+  border: 1px solid rgba(15, 14, 14, 0.08);
+  overflow: hidden;
+  transition:
+    box-shadow 0.2s,
+    transform 0.2s;
+}
+
+.customer-vehicles--grid .customer-vehicle-card {
+  scroll-snap-align: unset;
+}
+
+.customer-vehicles--carousel .customer-vehicle-card {
+  flex: 0 0 300px;
+  scroll-snap-align: start;
+}
+
+.customer-vehicle-card:hover {
+  box-shadow: 0 4px 24px rgba(15, 14, 14, 0.1);
+  transform: translateY(-2px);
+}
+
+.customer-vehicle-card__media {
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  background: rgba(15, 14, 14, 0.04);
+  position: relative;
+}
+
+.customer-vehicle-card__media img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.customer-vehicle-card__placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  height: 100%;
+  color: rgba(15, 14, 14, 0.25);
+  font-size: 12px;
+}
+
+.customer-vehicle-card__body {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.customer-vehicle-card__plate {
+  font-size: 16px;
+  color: var(--color-text);
+}
+
+.customer-vehicle-card__model {
+  font-size: 13px;
+  color: var(--color-muted);
+  margin-bottom: 8px;
+}
+
+.customer-vehicle-card__stats {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  padding-top: 8px;
+  border-top: 1px solid rgba(15, 14, 14, 0.06);
+}
+
+.customer-vehicle-card__stats div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.customer-vehicle-card__stats strong {
+  font-size: 12px;
+  color: var(--color-text);
+}
+
+.customer-vehicles__arrow {
+  align-self: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  border: 1px solid rgba(15, 14, 14, 0.12);
+  background: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 20px;
+  color: var(--color-text);
+  transition:
+    background 0.15s,
+    box-shadow 0.15s;
+  flex-shrink: 0;
+  line-height: 1;
+  padding: 0;
+}
+
+.customer-vehicles__arrow:hover {
+  background: rgba(15, 14, 14, 0.04);
+  box-shadow: 0 2px 8px rgba(15, 14, 14, 0.1);
+}
+
+@media (max-width: 767.98px) {
+  .customer-vehicles--grid {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .customer-vehicles__arrow {
+    display: none;
+  }
+
+  .customer-vehicles--carousel .customer-vehicle-card {
+    flex: 0 0 260px;
   }
 }

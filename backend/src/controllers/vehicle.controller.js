@@ -27,3 +27,9 @@ export async function getOdometerHistory(req, res) {
   const result = await vehicleService.getOdometerHistory(req.params.id);
   res.json(result);
 }
+
+/** GET /api/vehicles/mine — the authenticated customer's vehicles. */
+export async function getMyVehicles(req, res) {
+  const vehicles = await vehicleService.getMyVehicles(req.user.sub);
+  res.json({ vehicles });
+}
