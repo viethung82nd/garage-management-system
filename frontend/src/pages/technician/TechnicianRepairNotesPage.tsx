@@ -1,4 +1,15 @@
-import { ArrowLeftOutlined, CheckOutlined, InboxOutlined, PictureOutlined, PlusOutlined, SwapOutlined, ThunderboltOutlined } from '@ant-design/icons'
+import {
+  ArrowLeftOutlined,
+  CheckOutlined,
+  ClockCircleOutlined,
+  InboxOutlined,
+  PauseCircleOutlined,
+  PictureOutlined,
+  PlayCircleOutlined,
+  PlusOutlined,
+  SwapOutlined,
+  ThunderboltOutlined,
+} from '@ant-design/icons'
 import { Button, Card, Empty, Image, Input, InputNumber, Popconfirm, Select, Steps, Tag, Upload } from 'antd'
 import type { UploadFile } from 'antd/es/upload/interface'
 import { useEffect, useMemo, useState } from 'react'
@@ -7,9 +18,12 @@ import { useAuth } from '../../shared/auth'
 import { resolveApiAssetUrl } from '../../shared/lib/api-client'
 import {
   addWorkshopStepNote,
+  clockOff,
+  clockOn,
   createAdditionalServiceProposal,
   createTransferRequestApi,
   fetchInspectionReports,
+  fetchTimeLogs,
   fetchWorkshopRepairOrderById,
   fetchWorkshopRepairOrders,
   fetchWorkshopServices,
@@ -23,6 +37,7 @@ import {
   type ApiInspectionReport,
   type ApiRepairOrder,
   type ApiService,
+  type ApiTimeLog,
 } from '../../shared/api/workshop'
 import { InlineBanner, useApiMessage } from '../../widgets/backoffice-shell'
 import { TechnicianShell, technicianPalette } from '../../widgets/technician-shell'
@@ -41,6 +56,9 @@ type RepairStep = {
   isPart: boolean
   cause: string
   correction: string
+  /** Who this specific line is assigned to — a repair order can have several technicians, one per line. */
+  technicianId?: string
+  technicianName?: string
 }
 
 function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
@@ -53,6 +71,7 @@ function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
     const latestNote = [...notes].reverse().find((note) => note.stepIndex === index)
     const status: RepairStepStatus =
       orderCompleted || service.status === 'completed' ? 'completed' : service.status === 'inProgress' ? 'active' : 'waiting'
+    const tech = typeof service.technicianId === 'object' ? service.technicianId : undefined
 
     return {
       estimate: `${apiService?.estimatedDuration || 45} min`,
@@ -67,6 +86,8 @@ function mapRepairSteps(order: ApiRepairOrder): RepairStep[] {
       isPart: service.kind === 'part',
       cause: service.cause || '',
       correction: service.correction || '',
+      technicianId: tech ? String(tech._id || tech.id) : typeof service.technicianId === 'string' ? service.technicianId : undefined,
+      technicianName: tech?.fullName,
     }
   })
 }
@@ -193,6 +214,11 @@ export function TechnicianRepairNotesPage() {
   const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
 
+  // Time tracking (Phase 4a) — clocking on/off is per-line now: a technician
+  // may only clock on to the specific service line assigned to them.
+  const [timeLogs, setTimeLogs] = useState<ApiTimeLog[]>([])
+  const [clockBusy, setClockBusy] = useState(false)
+
   // Secondary: additional-service proposal
   const [proposalOpen, setProposalOpen] = useState(false)
   const [services, setServices] = useState<ApiService[]>([])
@@ -267,6 +293,7 @@ export function TechnicianRepairNotesPage() {
         setSteps(nextSteps)
         setSelectedStepIndex(nextSteps.find((step) => step.status === 'active')?.stepIndex ?? nextSteps.find((step) => step.status === 'waiting')?.stepIndex ?? nextSteps[0]?.stepIndex ?? null)
         setNote('')
+        void loadTimeLogs(authToken, orderIdParam)
 
         // Pull the advisor's inspection so the technician sees the vehicle
         // photos, findings and flagged repair points they're inheriting —
@@ -346,6 +373,60 @@ export function TechnicianRepairNotesPage() {
     if (advanceFrom !== undefined) {
       const next = nextSteps.find((step) => step.stepIndex > advanceFrom && step.status !== 'completed')
       if (next) setSelectedStepIndex(next.stepIndex)
+    }
+  }
+
+  async function loadTimeLogs(authToken: string, repairOrderId: string) {
+    try {
+      const response = await fetchTimeLogs(authToken, repairOrderId)
+      setTimeLogs(response.timeLogs || [])
+    } catch {
+      // Best-effort — the clock control just falls back to "Clock on" with no elapsed time shown.
+    }
+  }
+
+  const myId = user?._id || user?.id
+  // BR-JOB-01: a technician may only have one open span at all, and it must
+  // be on the line assigned to them (enforced again by the backend).
+  const myOpenLog = timeLogs.find((log) => {
+    const techId = typeof log.technicianId === 'object' ? log.technicianId._id || log.technicianId.id : log.technicianId
+    return !log.endedAt && String(techId) === String(myId)
+  })
+  const selectedStepMinutes = selectedStep
+    ? timeLogs
+        .filter((log) => log.lineIndex === selectedStep.stepIndex)
+        .reduce((sum, log) => sum + (log.durationMinutes || 0), 0)
+    : 0
+
+  async function handleClockOn() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !selectedStep || !token) return
+    setClockBusy(true)
+    clearApiMessage()
+    try {
+      await clockOn(token, repairOrderId, { lineIndex: selectedStep.stepIndex })
+      await loadTimeLogs(token, repairOrderId)
+      showSuccess('Clocked on.')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to clock on to this service')
+    } finally {
+      setClockBusy(false)
+    }
+  }
+
+  async function handleClockOff() {
+    const repairOrderId = repairOrder?._id || repairOrder?.id
+    if (!repairOrderId || !token) return
+    setClockBusy(true)
+    clearApiMessage()
+    try {
+      await clockOff(token, repairOrderId, {})
+      await loadTimeLogs(token, repairOrderId)
+      showSuccess('Clocked off.')
+    } catch (err) {
+      showError(err instanceof Error ? err.message : 'Unable to clock off')
+    } finally {
+      setClockBusy(false)
     }
   }
 
@@ -517,7 +598,7 @@ export function TechnicianRepairNotesPage() {
 
   async function submitTransfer() {
     const repairOrderId = repairOrder?._id || repairOrder?.id
-    if (!repairOrderId || !token) return
+    if (!repairOrderId || !token || !selectedStep) return
     const errors: Record<string, string> = {}
     if (!transferReason.trim()) errors.reason = 'Give a reason for the transfer.'
     setTransferErrors(errors)
@@ -526,7 +607,11 @@ export function TechnicianRepairNotesPage() {
     setRequestingTransfer(true)
     clearApiMessage()
     try {
-      await createTransferRequestApi(token, { reason: transferReason.trim(), repairOrderId })
+      await createTransferRequestApi(token, {
+        reason: transferReason.trim(),
+        repairOrderId,
+        lineIndex: selectedStep.stepIndex,
+      })
       showSuccess('Transfer request sent to the service advisor.')
       setTransferOpen(false)
       setTransferReason('')
@@ -712,6 +797,41 @@ export function TechnicianRepairNotesPage() {
                   <h3 style={{ color: technicianPalette.ink, fontSize: 20, fontWeight: 700 }}>{selectedStep.title}</h3>
                   <Tag color={stepTag[selectedStep.status].color} style={{ marginRight: 0 }}>{stepTag[selectedStep.status].label}</Tag>
                 </div>
+                <div style={{ color: technicianPalette.textMuted, fontSize: 12, marginTop: 4 }}>
+                  {selectedStep.technicianId
+                    ? String(selectedStep.technicianId) === String(myId)
+                      ? 'Assigned to you'
+                      : `Assigned to ${selectedStep.technicianName || 'another technician'}`
+                    : 'Unassigned'}
+                </div>
+
+                {!orderIsTerminal && selectedStep.status !== 'completed' ? (
+                  <div
+                    className="mt-3 flex items-center justify-between gap-3"
+                    style={{ background: technicianPalette.panelAlt, borderRadius: 12, padding: 12 }}
+                  >
+                    <span style={{ alignItems: 'center', color: technicianPalette.textMuted, display: 'inline-flex', fontSize: 12, fontWeight: 600, gap: 6 }}>
+                      <ClockCircleOutlined /> {selectedStepMinutes} min logged on this step
+                    </span>
+                    {String(selectedStep.technicianId) === String(myId) ? (
+                      <Button
+                        danger={Boolean(myOpenLog && myOpenLog.lineIndex === selectedStep.stepIndex)}
+                        disabled={Boolean(myOpenLog && myOpenLog.lineIndex !== selectedStep.stepIndex)}
+                        icon={myOpenLog && myOpenLog.lineIndex === selectedStep.stepIndex ? <PauseCircleOutlined /> : <PlayCircleOutlined />}
+                        loading={clockBusy}
+                        onClick={myOpenLog && myOpenLog.lineIndex === selectedStep.stepIndex ? handleClockOff : handleClockOn}
+                        size="small"
+                        type="primary"
+                      >
+                        {myOpenLog && myOpenLog.lineIndex === selectedStep.stepIndex
+                          ? 'Clock off'
+                          : myOpenLog
+                            ? 'Clock off other step first'
+                            : 'Clock on'}
+                      </Button>
+                    ) : null}
+                  </div>
+                ) : null}
 
                 {orderIsTerminal ? (
                   <div className="mt-4 flex flex-col gap-3">
@@ -941,7 +1061,7 @@ export function TechnicianRepairNotesPage() {
                 )}
               </Card>
 
-              <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Hand this order off?">
+              <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Hand this service off?">
                 {transferOpen ? (
                   <div className="flex flex-col gap-3">
                     <LabeledField label="Reason for the transfer">
@@ -957,7 +1077,7 @@ export function TechnicianRepairNotesPage() {
                   </div>
                 ) : (
                   <div className="flex items-center justify-between gap-3">
-                    <p style={{ color: technicianPalette.textMuted, fontSize: 13, margin: 0 }}>Ask the advisor to reassign this order to another technician.</p>
+                    <p style={{ color: technicianPalette.textMuted, fontSize: 13, margin: 0 }}>Ask the advisor to reassign this service to another technician.</p>
                     <Button icon={<SwapOutlined />} onClick={() => setTransferOpen(true)}>Transfer</Button>
                   </div>
                 )}

@@ -33,7 +33,7 @@ export async function listTransferRequests({ status, repairOrderId }) {
   return { transferRequests };
 }
 
-export async function createTransferRequest({ repairOrderId, reason }, fromTechnicianId) {
+export async function createTransferRequest({ repairOrderId, lineIndex, reason }, fromTechnicianId) {
   if (!repairOrderId) {
     throw new ApiError(400, "repairOrderId is required");
   }
@@ -42,13 +42,23 @@ export async function createTransferRequest({ repairOrderId, reason }, fromTechn
     throw new ApiError(400, "Invalid repairOrderId format");
   }
 
+  const normalizedLineIndex = Number(lineIndex);
+  if (!Number.isInteger(normalizedLineIndex) || normalizedLineIndex < 0) {
+    throw new ApiError(400, "lineIndex is required");
+  }
+
   const repairOrder = await repairOrderRepository.findById(repairOrderId);
   if (!repairOrder) {
     throw new ApiError(404, "Repair order not found");
   }
 
-  if (String(repairOrder.technicianId) !== String(fromTechnicianId)) {
-    throw new ApiError(403, "Only the assigned technician can request a transfer for this repair order");
+  if (normalizedLineIndex >= repairOrder.services.length) {
+    throw new ApiError(400, "Invalid lineIndex");
+  }
+
+  const line = repairOrder.services[normalizedLineIndex];
+  if (String(line.technicianId) !== String(fromTechnicianId)) {
+    throw new ApiError(403, "Only the technician assigned to this service line can request a transfer for it");
   }
 
   if (repairOrder.status === "completed" || repairOrder.status === "cancelled") {
@@ -57,16 +67,18 @@ export async function createTransferRequest({ repairOrderId, reason }, fromTechn
 
   const existingRequest = await transferRequestRepository.findOne({
     repairOrderId,
+    lineIndex: normalizedLineIndex,
     fromTechnicianId,
     status: "pending",
   });
 
   if (existingRequest) {
-    throw new ApiError(409, "A pending transfer request already exists for this repair order");
+    throw new ApiError(409, "A pending transfer request already exists for this service");
   }
 
   const transferRequest = new transferRequestRepository.model({
     repairOrderId,
+    lineIndex: normalizedLineIndex,
     fromTechnicianId,
     reason: reason?.trim(),
     status: "pending",
@@ -107,8 +119,9 @@ async function resolveTransferRequest(id, resolveNote, resolvedBy, newStatus, to
     throw new ApiError(404, "Repair order not found");
   }
 
-  if (String(repairOrder.technicianId) !== String(transferRequest.fromTechnicianId)) {
-    throw new ApiError(400, "Repair order technician assignment has changed and this transfer request cannot be approved");
+  const line = repairOrder.services[transferRequest.lineIndex];
+  if (!line || String(line.technicianId) !== String(transferRequest.fromTechnicianId)) {
+    throw new ApiError(400, "This service's technician assignment has changed and this transfer request cannot be approved");
   }
 
   if (newStatus === "approved") {
@@ -124,7 +137,7 @@ async function resolveTransferRequest(id, resolveNote, resolvedBy, newStatus, to
     }
 
     transferRequest.toTechnicianId = toTechnicianId;
-    repairOrder.technicianId = toTechnicianId;
+    line.technicianId = toTechnicianId;
     await repairOrder.save();
   }
 
@@ -140,8 +153,8 @@ async function resolveTransferRequest(id, resolveNote, resolvedBy, newStatus, to
     title: newStatus === "approved" ? "Transfer request approved" : "Transfer request rejected",
     message:
       newStatus === "approved"
-        ? "Your transfer request was approved — the order has moved to the other technician."
-        : "Your transfer request was rejected — this order is still yours.",
+        ? `Your transfer request was approved — "${line?.name || "the service"}" has moved to the other technician.`
+        : "Your transfer request was rejected — this service is still yours.",
     refId: repairOrder._id,
     refModel: "RepairOrder",
   });
@@ -150,8 +163,8 @@ async function resolveTransferRequest(id, resolveNote, resolvedBy, newStatus, to
     await createNotification({
       userId: transferRequest.toTechnicianId,
       type: "repairOrderAssigned",
-      title: "Repair order transferred to you",
-      message: "A colleague transferred a repair order to you.",
+      title: "Repair order service transferred to you",
+      message: `A colleague transferred "${line?.name || "a service"}" on a repair order to you.`,
       refId: repairOrder._id,
       refModel: "RepairOrder",
     });

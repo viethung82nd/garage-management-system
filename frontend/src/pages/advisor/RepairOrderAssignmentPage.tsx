@@ -10,11 +10,12 @@ import {
   SendOutlined,
   ToolOutlined,
 } from '@ant-design/icons'
-import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Table, Tabs, Tag } from 'antd'
+import { Button, Card, Checkbox, Col, Dropdown, Empty, Input, Modal, Row, Select, Table, Tabs, Tag } from 'antd'
 import type { ColumnsType } from 'antd/es/table'
 import { useEffect, useMemo, useState, type CSSProperties } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import {
+  assignRepairOrderTechnicians,
   deliverVehicleApi,
   fetchInvoicesForRepairOrder,
   fetchQuotations,
@@ -25,7 +26,6 @@ import {
   personName,
   unwrapArray,
   updateRepairOrderStatus,
-  updateWorkshopRepairOrder,
   vehicleName,
   vehiclePlate,
   JOB_TYPE_LABELS,
@@ -36,6 +36,7 @@ import {
   type ApiTechnician,
 } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
+import { formatTechnicianLabel, getAssignedTechnicians } from '../../shared/lib/repairOrderTechnicians'
 import { InvoiceDocument, type InvoiceDocumentStatusTone } from '../../shared/ui/invoice/InvoiceDocument'
 import { SignaturePad } from '../../shared/ui/SignaturePad'
 import { InlineBanner, advisorPalette, useApiMessage } from '../../widgets/backoffice-shell'
@@ -501,12 +502,6 @@ function mapTechnician(technician: ApiTechnician): Technician {
   }
 }
 
-const statusTag: Record<Technician['status'], { color: string; label: string }> = {
-  available: { color: 'green', label: 'Available' },
-  busy: { color: 'gold', label: 'Busy' },
-  offline: { color: 'default', label: 'Off shift' },
-}
-
 // ============= PRODUCTION BOARD (merged in — this doubles as the "pick an
 // order" landing view when the page arrives with no ?orderId=) =============
 
@@ -586,7 +581,7 @@ function mapBoardCard(order: ApiRepairOrder): BoardCard {
     customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer'),
     promisedAt: order.promisedAt,
     status: order.status || '',
-    technician: personName(order.technicianId || order.technician, 'Unassigned'),
+    technician: formatTechnicianLabel(order),
     totalCost: order.totalCost || 0,
     finishedAt: order.deliveredAt || order.completedAt,
   }
@@ -916,7 +911,8 @@ export function RepairOrderAssignmentPage() {
   const [boardOrders, setBoardOrders] = useState<ApiRepairOrder[]>([])
   const [boardNow, setBoardNow] = useState(() => Date.now())
   const [technicians, setTechnicians] = useState<Technician[]>([])
-  const [selectedTechnicianId, setSelectedTechnicianId] = useState('')
+  // lineIndex -> technicianId (or null for "unassigned"), one entry per service line.
+  const [lineAssignments, setLineAssignments] = useState<Record<number, string | null>>({})
   const {
     message: apiMessage,
     tone: apiTone,
@@ -996,9 +992,13 @@ export function RepairOrderAssignmentPage() {
         const loadedOrder = await fetchWorkshopRepairOrderById(authToken, orderIdParam!)
         if (cancelled) return
         setOrder(loadedOrder)
-        const existingTechId =
-          loadedOrder.technicianId?._id || (loadedOrder.technicianId as unknown as string)
-        if (existingTechId) setSelectedTechnicianId(String(existingTechId))
+        const seeded: Record<number, string | null> = {}
+        ;(loadedOrder.services || []).forEach((service, index) => {
+          const tech = service.technicianId
+          const techId = typeof tech === 'object' ? tech?._id || tech?.id : tech
+          seeded[index] = techId ? String(techId) : null
+        })
+        setLineAssignments(seeded)
       } catch (err) {
         if (!cancelled)
           showError(err instanceof Error ? err.message : 'Unable to load this repair order')
@@ -1032,25 +1032,34 @@ export function RepairOrderAssignmentPage() {
     }
   }, [token])
 
-  const selectedTechnician = technicians.find((tech) => tech.id === selectedTechnicianId)
   const services = order?.services || []
   const totalCost =
     order?.totalCost ||
     services.reduce((sum, service) => sum + (service.priceAtTime || 0) * (service.quantity || 1), 0)
 
-  async function assignAndContinue() {
-    if (!token || !orderIdParam || !selectedTechnicianId) return
+  const assignedCount = services.filter((_, index) => lineAssignments[index]).length
+  const hasUnsavedAssignments = services.some((service, index) => {
+    const tech = service.technicianId
+    const savedId = typeof tech === 'object' ? tech?._id || tech?.id : tech
+    return (lineAssignments[index] || null) !== (savedId ? String(savedId) : null)
+  })
+
+  async function saveAssignments() {
+    if (!token || !orderIdParam || !order) return
 
     setSaving(true)
     clearApiMessage()
     try {
-      await updateWorkshopRepairOrder(token, orderIdParam, { technicianId: selectedTechnicianId })
+      const assignments = services.map((_, index) => ({
+        lineIndex: index,
+        technicianId: lineAssignments[index] || null,
+      }))
+      const updated = await assignRepairOrderTechnicians(token, orderIdParam, assignments)
+      setOrder(updated)
       setSaved(true)
-      // The technician takes it from here — back to the queue of orders
-      // still waiting on an assignment.
-      navigate('/advisor/work-orders')
+      showSuccess('Technician assignments saved.')
     } catch (err) {
-      showError(err instanceof Error ? err.message : 'Unable to assign a technician to this order')
+      showError(err instanceof Error ? err.message : 'Unable to save technician assignments')
     } finally {
       setSaving(false)
     }
@@ -1157,14 +1166,15 @@ export function RepairOrderAssignmentPage() {
   // drops every action that implies more work is still to be done: no
   // status changes, no technician (re)assignment.
   const isFinished = HISTORY_STATUSES.includes(order?.status || '')
-  // The order's own status only flips to inProgress when the assigned
-  // technician actually clocks on (see repair-order.service.js#clockOn) — so
-  // "pending" reliably means no hands-on work has started yet, and (re)picking
-  // a technician here is harmless. Once it's moved past pending, casually
-  // reassigning from this page would step on whoever is already mid-job;
-  // that has to go through a Transfer Request (technician-initiated,
-  // SA-approved) instead.
-  const canAssignTechnician = order?.status === 'pending'
+  // Assignment is now a per-line, ongoing operation (e.g. assigning a
+  // newly added additional-service line mid-repair) rather than a one-time
+  // whole-order handoff gated on "pending" — so it stays open for as long as
+  // there's real work left to hand out. Once QC has passed there's nothing
+  // left to (re)assign; reassigning a still-active line's technician goes
+  // through a Transfer Request (technician-initiated, SA-approved) instead,
+  // but the SA can still assign a line here that has no technician yet.
+  const NON_ASSIGNABLE_STATUSES = ['readyForDelivery', 'delivered', 'closed', 'cancelled']
+  const canAssignTechnician = Boolean(order) && !NON_ASSIGNABLE_STATUSES.includes(order?.status || '')
   const orderAccent =
     BOARD_COLUMNS.find((column) => column.statuses.includes(order?.status || ''))?.accent ??
     advisorPalette.red
@@ -1325,7 +1335,7 @@ export function RepairOrderAssignmentPage() {
               </div>
             </Card>
 
-            {canAssignTechnician ? (
+            {canAssignTechnician && services.length ? (
               <Card
                 bordered={false}
                 className="bo-card-hover bo-enter rounded-2xl"
@@ -1334,85 +1344,64 @@ export function RepairOrderAssignmentPage() {
                   boxShadow: advisorPalette.shadow,
                   border: `1px solid ${advisorPalette.border}`,
                 }}
-                title="Assign technician"
+                title="Assign technician per service"
               >
                 <div className="flex flex-col gap-2">
-                  {technicians.map((tech) => {
-                    const selected = tech.id === selectedTechnicianId
-                    const disabled = tech.status === 'offline'
+                  {services.map((service, index) => {
+                    const lineDisabled = service.status === 'completed'
                     return (
-                      <button
-                        disabled={disabled}
-                        key={tech.id}
-                        onClick={() => setSelectedTechnicianId(tech.id)}
+                      <div
+                        key={index}
+                        className="flex items-center gap-3 flex-wrap"
                         style={{
-                          alignItems: 'center',
-                          background: selected ? '#fffafa' : advisorPalette.panelAlt,
-                          border: `1px solid ${selected ? advisorPalette.red : advisorPalette.border}`,
+                          background: advisorPalette.panelAlt,
+                          border: `1px solid ${advisorPalette.border}`,
                           borderRadius: 10,
-                          cursor: disabled ? 'not-allowed' : 'pointer',
-                          display: 'flex',
-                          gap: 12,
-                          justifyContent: 'space-between',
-                          opacity: disabled ? 0.5 : 1,
+                          opacity: lineDisabled ? 0.6 : 1,
                           padding: '10px 14px',
-                          textAlign: 'left',
                         }}
-                        type="button"
                       >
-                        <div className="flex items-center gap-3" style={{ minWidth: 0 }}>
-                          <span
-                            style={{
-                              alignItems: 'center',
-                              background: selected ? advisorPalette.red : advisorPalette.panel,
-                              border: `1px solid ${advisorPalette.border}`,
-                              borderRadius: '50%',
-                              color: selected ? '#ffffff' : advisorPalette.ink,
-                              display: 'flex',
-                              flexShrink: 0,
-                              fontSize: 12,
-                              fontWeight: 700,
-                              height: 28,
-                              justifyContent: 'center',
-                              width: 28,
-                            }}
-                          >
-                            {tech.name.slice(0, 1).toUpperCase()}
-                          </span>
-                          <div className="flex items-baseline gap-2" style={{ minWidth: 0, overflow: 'hidden' }}>
-                            <span
-                              style={{
-                                color: advisorPalette.ink,
-                                fontWeight: 700,
-                                overflow: 'hidden',
-                                textOverflow: 'ellipsis',
-                                whiteSpace: 'nowrap',
-                              }}
-                            >
-                              {tech.name}
+                        <div style={{ flex: 1, minWidth: 160 }}>
+                          <div style={{ color: advisorPalette.ink, fontWeight: 700 }}>{service.name}</div>
+                          <div className="flex items-center gap-2" style={{ marginTop: 2 }}>
+                            <span style={{ color: advisorPalette.textMuted, fontSize: 12 }}>
+                              {formatMoney((service.priceAtTime || 0) * (service.quantity || 1))}
                             </span>
-                            {tech.skill ? (
-                              <span style={{ color: advisorPalette.textMuted, fontSize: 12, whiteSpace: 'nowrap' }}>
-                                {tech.skill}
-                              </span>
-                            ) : null}
+                            <Tag color={statusColor(service.status)} style={{ marginInlineEnd: 0 }}>
+                              {statusLabel(service.status)}
+                            </Tag>
                           </div>
                         </div>
-                        <div className="flex items-center gap-3" style={{ flexShrink: 0 }}>
-                          <span
-                            className="flex items-center gap-1"
-                            style={{ color: advisorPalette.textMuted, fontSize: 12 }}
-                          >
-                            <ProfileOutlined /> {tech.activeOrders} active
-                          </span>
-                          <Tag color={statusTag[tech.status].color} style={{ marginInlineEnd: 0 }}>
-                            {statusTag[tech.status].label}
-                          </Tag>
-                        </div>
-                      </button>
+                        <Select
+                          allowClear
+                          disabled={lineDisabled}
+                          onChange={(value) =>
+                            setLineAssignments((current) => ({ ...current, [index]: value ?? null }))
+                          }
+                          placeholder="Unassigned"
+                          style={{ minWidth: 240 }}
+                          value={lineAssignments[index] ?? undefined}
+                          options={technicians.map((tech) => ({
+                            label: `${tech.name}${tech.skill ? ` · ${tech.skill}` : ''} (${tech.activeOrders} active)`,
+                            value: tech.id,
+                            disabled: tech.status === 'offline',
+                          }))}
+                        />
+                      </div>
                     )
                   })}
                 </div>
+                <Button
+                  block
+                  disabled={!hasUnsavedAssignments}
+                  icon={<CheckOutlined />}
+                  loading={saving}
+                  onClick={saveAssignments}
+                  style={{ marginTop: 16 }}
+                  type="primary"
+                >
+                  {saving ? 'Saving...' : 'Save assignments'}
+                </Button>
               </Card>
             ) : null}
           </div>
@@ -1442,7 +1431,7 @@ export function RepairOrderAssignmentPage() {
                   ? statusLabel(order.status)
                   : saved
                     ? 'Assigned'
-                    : order.technicianId
+                    : getAssignedTechnicians(order).length
                       ? 'Previously assigned'
                       : 'Awaiting assignment'}
               </Tag>
@@ -1486,46 +1475,41 @@ export function RepairOrderAssignmentPage() {
                   </div>
                 </Col>
               </Row>
-              {canAssignTechnician ? (
-                <>
+              {canAssignTechnician && services.length ? (
+                <div
+                  style={{
+                    borderTop: '1px solid rgba(255,255,255,0.1)',
+                    marginTop: 20,
+                    paddingTop: 20,
+                  }}
+                >
                   <div
                     style={{
-                      borderTop: '1px solid rgba(255,255,255,0.1)',
-                      marginTop: 20,
-                      paddingTop: 20,
+                      color: 'rgba(255,255,255,0.55)',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      textTransform: 'uppercase',
                     }}
                   >
-                    <div
-                      style={{
-                        color: 'rgba(255,255,255,0.55)',
-                        fontSize: 11,
-                        fontWeight: 700,
-                        textTransform: 'uppercase',
-                      }}
-                    >
-                      Assigning to
-                    </div>
-                    <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 8 }}>
-                      {selectedTechnician?.name ?? 'No technician selected'}
-                    </div>
+                    Assigned
                   </div>
-                  <Button
-                    block
-                    disabled={!services.length || !selectedTechnicianId}
-                    icon={<CheckOutlined />}
-                    loading={saving}
-                    onClick={assignAndContinue}
-                    size="large"
-                    style={{ marginTop: 16 }}
-                    type="primary"
-                  >
-                    {saving ? 'Assigning...' : 'Assign & send to technician'}
-                  </Button>
-                </>
+                  <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 8 }}>
+                    {assignedCount} of {services.length} services assigned
+                  </div>
+                  {getAssignedTechnicians(order).length ? (
+                    <div className="flex flex-wrap gap-2" style={{ marginTop: 10 }}>
+                      {getAssignedTechnicians(order).map((tech) => (
+                        <Tag key={tech._id || tech.id} style={{ marginInlineEnd: 0 }}>
+                          {tech.fullName}
+                        </Tag>
+                      ))}
+                    </div>
+                  ) : null}
+                </div>
               ) : (
-                // Once past pending, this is read-only — reassigning here
-                // would step on whoever is already mid-job; that has to go
-                // through a Transfer Request instead (see canAssignTechnician).
+                // Nothing left to (re)assign once QC has passed / delivered —
+                // reassigning an in-flight line goes through a Transfer
+                // Request instead (see canAssignTechnician).
                 <div
                   style={{
                     borderTop: '1px solid rgba(255,255,255,0.1)',
@@ -1544,7 +1528,7 @@ export function RepairOrderAssignmentPage() {
                     Technician
                   </div>
                   <div style={{ color: 'white', fontSize: 18, fontWeight: 700, marginTop: 8 }}>
-                    {personName(order.technicianId || order.technician, 'Unassigned')}
+                    {formatTechnicianLabel(order)}
                   </div>
                   {isFinished && (order.completedAt || order.deliveredAt) ? (
                     <>

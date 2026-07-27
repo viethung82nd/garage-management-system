@@ -294,7 +294,7 @@ export default function AdminReportsPage() {
     } else {
       downloadCsv(
         `${tabLabels.technician}-${rangeLabel}`,
-        ['Technician', 'Completed orders', 'Completion rate', 'Avg. time (hrs)', `Revenue (${currency})`],
+        ['Technician', 'Completed services', 'Completion rate', 'Avg. time (hrs)', `Revenue (${currency})`],
         report.byTechnician.map((row) => [
           row.technicianName || 'Unknown',
           row.orderCount,
@@ -346,7 +346,9 @@ export default function AdminReportsPage() {
 
   const technicianColumns: ColumnsType<TechnicianPerformance> = [
     { title: 'Technician', dataIndex: 'technicianName', key: 'technicianName', render: (value?: string | null) => value || 'Unknown' },
-    { title: 'Completed orders', dataIndex: 'orderCount', key: 'orderCount', sorter: (a, b) => a.orderCount - b.orderCount },
+    // A repair order can now have several technicians, one per service line —
+    // this counts completed LINES this technician owns, not whole orders.
+    { title: 'Completed services', dataIndex: 'orderCount', key: 'orderCount', sorter: (a, b) => a.orderCount - b.orderCount },
     {
       title: 'Completion rate',
       dataIndex: 'completionRate',
@@ -575,7 +577,7 @@ export default function AdminReportsPage() {
                       columns={technicianColumns}
                       dataSource={report?.byTechnician ?? []}
                       loading={isLoading}
-                      locale={{ emptyText: 'No completed repair orders in this date range.' }}
+                      locale={{ emptyText: 'No completed services in this date range.' }}
                       pagination={false}
                       rowKey="technicianId"
                       className="bo-table"

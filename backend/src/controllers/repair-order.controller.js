@@ -51,8 +51,25 @@ export async function updateRepairOrder(req, res) {
  * Update repair order progress (status + optional notes)
  */
 export async function updateRepairProgress(req, res) {
-  const result = await repairOrderService.updateRepairProgress(req.params.id, req.body ?? {});
+  const result = await repairOrderService.updateRepairProgress(
+    req.params.id,
+    req.body ?? {},
+    req.user.sub,
+    req.user.role,
+  );
   res.json(result);
+}
+
+/**
+ * PATCH /api/repair-orders/:id/assign
+ * Assign (or reassign/clear) the technician for one or more service lines.
+ */
+export async function assignServiceTechnicians(req, res) {
+  const order = await repairOrderService.assignServiceTechnicians(
+    req.params.id,
+    (req.body ?? {}).assignments,
+  );
+  res.json(order);
 }
 
 /**

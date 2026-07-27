@@ -39,6 +39,12 @@ type InvoiceWorkItem = {
   searchText: string
 }
 
+/** A repair order/invoice can have several technicians, one per service line — join their names for display. */
+function joinTechnicianNames(names: Array<string | undefined> = []) {
+  const unique = [...new Set(names.filter((name): name is string => Boolean(name)))]
+  return unique.length ? unique.join(', ') : 'Technician updating'
+}
+
 // Same semantic status palette as the invoice document (InvoiceConfirmPage) — one
 // consistent meaning for "paid"/"awaiting"/"overdue"/"ready"/"cancelled" across both pages.
 function toneByStatus(status: QueueStatus) {
@@ -167,7 +173,7 @@ function mapInvoiceToQueueItem(invoice: InvoiceApiRecord): InvoiceWorkItem {
     contact: invoice.customer?.phone || '',
     vehicle,
     advisor: invoice.serviceAdvisor?.fullName || 'Service advisor updating',
-    technician: invoice.technician?.fullName || 'Technician updating',
+    technician: joinTechnicianNames(invoice.technicians?.map((tech) => tech.fullName)),
     status,
     paymentMethod: toPaymentLabel(invoice.latestPayment?.method),
     issuedAt: formatDateTime(invoice.issuedAt),
@@ -200,7 +206,7 @@ function mapRepairOrderToQueueItem(order: RepairOrderApiRecord): InvoiceWorkItem
     contact: order.vehicleId?.customerId?.phone || '',
     vehicle,
     advisor: order.advisorId?.fullName || 'Service advisor updating',
-    technician: order.technicianId?.fullName || 'Technician updating',
+    technician: joinTechnicianNames(order.services.map((service) => service.technicianId?.fullName)),
     status: 'Ready to bill',
     paymentMethod: 'Direct at desk',
     issuedAt: formatDateTime(order.completedAt),

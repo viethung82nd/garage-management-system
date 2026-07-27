@@ -57,13 +57,12 @@ export type ApiRepairOrder = {
   customer?: AuthUser
   advisorId?: AuthUser
   advisor?: AuthUser
-  technicianId?: AuthUser
-  technician?: AuthUser
   inspectionId?: string
   issueDescription?: string
   /** Service category the customer chose when booking, carried from the booking at Reception. Drives the inspection checklist. */
   serviceCategory?: string
-  services?: Array<{ serviceId?: ApiService | string; partId?: string; kind?: 'service' | 'part' | 'labor'; name?: string; quantity?: number; priceAtTime?: number; status?: 'pending' | 'inProgress' | 'completed'; cause?: string; correction?: string }>
+  /** Each line owns its own technician now — a repair order can have several, one per line. See shared/lib/repairOrderTechnicians. */
+  services?: Array<{ serviceId?: ApiService | string; partId?: string; kind?: 'service' | 'part' | 'labor'; name?: string; quantity?: number; priceAtTime?: number; status?: 'pending' | 'inProgress' | 'completed'; cause?: string; correction?: string; technicianId?: AuthUser | string | null; completedAt?: string }>
   stepNotes?: Array<{ content?: string; technicianId?: AuthUser | string; stepIndex?: number; photos?: string[]; createdAt?: string }>
   status?: string
   totalCost?: number
@@ -423,6 +422,19 @@ export function updateWorkshopRepairOrder(token: string, id: string, payload: un
   return apiRequest<ApiRepairOrder>(`/api/repair-orders/${id}`, { method: 'PUT', token, body: JSON.stringify(payload) })
 }
 
+/** Assigns (or reassigns/clears) the technician for one or more service lines on a repair order. */
+export function assignRepairOrderTechnicians(
+  token: string,
+  id: string,
+  assignments: Array<{ lineIndex: number; technicianId: string | null }>,
+) {
+  return apiRequest<ApiRepairOrder>(`/api/repair-orders/${id}/assign`, {
+    method: 'PATCH',
+    token,
+    body: JSON.stringify({ assignments }),
+  })
+}
+
 export function updateWorkshopRepairProgress(token: string, id: string, payload: unknown) {
   return apiRequest<{ order?: ApiRepairOrder } | ApiRepairOrder>(`/api/repair-orders/${id}/progress`, { method: 'PATCH', token, body: JSON.stringify(payload) })
 }
@@ -765,6 +777,8 @@ export type ApiTransferRequest = {
   _id?: string
   id?: string
   repairOrderId?: ApiRepairOrder | string
+  /** Which service line this hand-off is for — a transfer request hands off one line, not the whole order. */
+  lineIndex?: number
   fromTechnicianId?: AuthUser | string
   toTechnicianId?: AuthUser | string
   reason?: string
@@ -778,7 +792,7 @@ export function fetchTransferRequests(token: string, query = '') {
   return apiRequest<{ transferRequests?: ApiTransferRequest[] } | ApiTransferRequest[]>(`/api/transfer-requests${query}`, { token })
 }
 
-export function createTransferRequestApi(token: string, payload: { repairOrderId: string; reason?: string }) {
+export function createTransferRequestApi(token: string, payload: { repairOrderId: string; lineIndex: number; reason?: string }) {
   return apiRequest<ApiTransferRequest>('/api/transfer-requests', { method: 'POST', token, body: JSON.stringify(payload) })
 }
 
@@ -860,9 +874,9 @@ export type ApiTimeLogsResponse = {
   totalMinutes?: number
 }
 
-/** Technician clocks on to start hands-on work on a repair order (optionally pinned to one service line via lineIndex). */
-export function clockOn(token: string, orderId: string, body?: { lineIndex?: number; note?: string }) {
-  return apiRequest<ApiTimeLog>(`/api/repair-orders/${orderId}/clock-on`, { method: 'POST', token, body: JSON.stringify(body || {}) })
+/** Technician clocks on to start hands-on work on one service line of a repair order. */
+export function clockOn(token: string, orderId: string, body: { lineIndex: number; note?: string }) {
+  return apiRequest<ApiTimeLog>(`/api/repair-orders/${orderId}/clock-on`, { method: 'POST', token, body: JSON.stringify(body) })
 }
 
 /** Technician clocks off, closing their own open time log on this order. 409s if there is no open log. */

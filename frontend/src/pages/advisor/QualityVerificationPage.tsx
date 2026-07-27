@@ -18,6 +18,7 @@ import {
   type ApiRepairOrder,
   type QualityCheckResult,
 } from '../../shared/api/workshop'
+import { formatTechnicianLabel } from '../../shared/lib/repairOrderTechnicians'
 import { resolveApiAssetUrl } from '../../shared/lib/api-client'
 import { getUserInitials, useAuth } from '../../shared/auth'
 import {
@@ -100,7 +101,7 @@ function mapOrder(order: ApiRepairOrder): OrderView {
     invoicedAt: order.invoicedAt,
     id: order._id || order.id || crypto.randomUUID(),
     plate: vehiclePlate(vehicle),
-    technician: personName(order.technicianId || order.technician, 'Unassigned'),
+    technician: formatTechnicianLabel(order),
     vehicle: vehicleName(vehicle),
     stepPhotos: (order.stepNotes || []).flatMap((note) => note.photos || []),
     workPerformed: (order.services || [])

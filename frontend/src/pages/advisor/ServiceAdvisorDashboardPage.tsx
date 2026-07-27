@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { fetchAdvisorDashboard, fetchWorkshopBookings, fetchWorkshopRepairOrders, personName, unwrapArray, vehicleName, vehiclePlate, type ApiBooking, type ApiRepairOrder } from '../../shared/api/workshop'
 import { useAuth } from '../../shared/auth'
+import { getAssignedTechnicians } from '../../shared/lib/repairOrderTechnicians'
 import { InlineBanner, StatCard, advisorPalette } from '../../widgets/backoffice-shell'
 import { ServiceAdvisorShell } from '../../widgets/service-advisor-shell'
 
@@ -47,7 +48,7 @@ function mapOrderQueue(order: ApiRepairOrder): QueueItem {
   return {
     customer: personName(order.customer || vehicle?.customerId || vehicle?.customer, 'Customer'),
     meta: `${vehicleName(vehicle)} - ${vehiclePlate(vehicle)}`,
-    status: order.status === 'inProgress' ? 'In progress' : order.technicianId ? 'Assigned' : 'Awaiting technician',
+    status: order.status === 'inProgress' ? 'In progress' : getAssignedTechnicians(order).length ? 'Assigned' : 'Awaiting technician',
     to: `/advisor/quality-check?orderId=${id}`,
   }
 }
