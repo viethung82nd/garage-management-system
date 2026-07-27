@@ -33,6 +33,12 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
 }
 
+/** A repair order can have several technicians, one per service line — join their names for display. */
+function joinTechnicianNames(order: CustomerRepairOrderApiRecord) {
+  const unique = [...new Set(order.services.map((service) => service.technicianId?.fullName).filter((name): name is string => Boolean(name)))]
+  return unique.length ? unique.join(', ') : 'Technician updating'
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) {
     return 'Updating'
@@ -229,7 +235,7 @@ export default function CustomerBookingsPage() {
         plate: order.vehicleId?.licensePlate || '',
         intakeType: linkedBooking?.source === 'walkIn' ? 'Walk-in' : 'Appointment',
         advisor: order.advisorId?.fullName || 'Service advisor updating',
-        technician: order.technicianId?.fullName || 'Technician updating',
+        technician: joinTechnicianNames(order),
         garageName: GARAGE_NAME,
         amount: formatMoney(invoice?.total || order.totalCost || 0),
         paymentMethod: paymentMethodLabel(invoice?.latestPayment?.method),

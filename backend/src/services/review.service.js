@@ -1,13 +1,41 @@
 import { reviewRepository } from "../repositories/review.repository.js";
 import { repairOrderRepository } from "../repositories/repair-order.repository.js";
+import { TimeLogModel } from "../models/index.js";
 import { ApiError } from "../utils/apiError.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 
 /**
+ * A repair order can have several technicians (one per service line) now —
+ * a review still attributes to just one, so pick whoever logged the most
+ * hands-on time on this order, falling back to the first assigned line's
+ * technician if there's only one candidate or no time logs to compare.
+ */
+async function pickReviewedTechnician(order) {
+  const distinctIds = [];
+  const seen = new Set();
+  for (const service of order.services || []) {
+    if (service.technicianId && !seen.has(String(service.technicianId))) {
+      seen.add(String(service.technicianId));
+      distinctIds.push(service.technicianId);
+    }
+  }
+  if (distinctIds.length <= 1) return distinctIds[0] || null;
+
+  const totals = await TimeLogModel.aggregate([
+    { $match: { repairOrderId: order._id, technicianId: { $in: distinctIds } } },
+    { $group: { _id: "$technicianId", minutes: { $sum: "$durationMinutes" } } },
+    { $sort: { minutes: -1 } },
+    { $limit: 1 },
+  ]);
+  return totals[0]?._id || distinctIds[0];
+}
+
+/**
  * A customer rates a completed repair order (Customer "Submit Service Review").
  * Allowed only once per order, only for orders that are completed and belong
- * to the customer. The reviewed technician is taken from the order.
+ * to the customer. The reviewed technician is whoever logged the most time
+ * on the order — see pickReviewedTechnician.
  */
 export async function createReview({ repairOrderId, rating, comment }, customerId) {
   if (!OID_RE.test(String(repairOrderId))) {
@@ -36,7 +64,7 @@ export async function createReview({ repairOrderId, rating, comment }, customerI
     return await reviewRepository.create({
       customerId,
       repairOrderId: order._id,
-      technicianId: order.technicianId,
+      technicianId: await pickReviewedTechnician(order),
       rating,
       comment: comment?.trim(),
     });

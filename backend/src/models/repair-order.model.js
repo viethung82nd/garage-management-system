@@ -116,6 +116,23 @@ const orderServiceSchema = new Schema(
       enum: ORDER_SERVICE_STATUSES,
       default: "pending",
     },
+    // Who's doing this specific line. A repair order can have several
+    // technicians, each owning one or more lines — this, not a single
+    // order-level field, is the actual unit of assignment (see
+    // assignServiceTechnicians in repair-order.service.js).
+    technicianId: {
+      type: Schema.Types.ObjectId,
+      ref: "User",
+      default: null,
+    },
+    // Stamped when this line's own status reaches "completed" — needed to
+    // time-bound per-technician reporting (technicianBreakdown in
+    // admin.service.js). The order's own completedAt only fires once EVERY
+    // line is done, which would misattribute every technician on a
+    // multi-tech order to whenever the last line finished.
+    completedAt: {
+      type: Date,
+    },
   },
   { _id: false },
 );
@@ -183,10 +200,6 @@ const repairOrderSchema = new Schema(
       required: true,
     },
     advisorId: {
-      type: Schema.Types.ObjectId,
-      ref: "User",
-    },
-    technicianId: {
       type: Schema.Types.ObjectId,
       ref: "User",
     },

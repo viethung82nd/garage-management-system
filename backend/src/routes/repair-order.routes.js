@@ -9,6 +9,7 @@ import {
   createRepairOrder,
   updateRepairOrder,
   updateRepairProgress,
+  assignServiceTechnicians,
   deleteRepairOrder,
   addStepNote,
   getStepNotes,
@@ -73,6 +74,14 @@ repairOrderRouter.patch(
   requireAuth,
   requireRole("technician", "serviceAdvisor", "admin"),
   catchAsync(updateRepairProgress),
+);
+
+// Assign (or reassign/clear) the technician for one or more service lines.
+repairOrderRouter.patch(
+  "/:id/assign",
+  requireAuth,
+  requireRole("serviceAdvisor", "admin"),
+  catchAsync(assignServiceTechnicians),
 );
 
 // Delete a repair order (admin only)

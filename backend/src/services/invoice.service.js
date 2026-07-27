@@ -25,7 +25,7 @@ const invoicePopulate = [
         populate: { path: "customerId", select: "fullName phone email accountType role" },
       },
       { path: "advisorId", select: "fullName email phone role" },
-      { path: "technicianId", select: "fullName email phone role" },
+      { path: "services.technicianId", select: "fullName email phone role" },
       // Needed so serializeInvoice() can read service.serviceId.category —
       // without this, serviceId stays an unpopulated ObjectId and every
       // line silently falls back to "no category".
@@ -162,13 +162,18 @@ function serializeInvoice(invoice, latestPayment) {
           phone: order.advisorId.phone || "",
         }
       : null,
-    technician: order?.technicianId
-      ? {
-          id: String(order.technicianId._id),
-          fullName: order.technicianId.fullName,
-          phone: order.technicianId.phone || "",
+    // A repair order can have several technicians, one per service line —
+    // list every distinct one instead of a single "the" technician.
+    technicians: (() => {
+      const seen = new Map();
+      for (const service of order?.services || []) {
+        const tech = service.technicianId;
+        if (tech && !seen.has(String(tech._id))) {
+          seen.set(String(tech._id), { id: String(tech._id), fullName: tech.fullName, phone: tech.phone || "" });
         }
-      : null,
+      }
+      return [...seen.values()];
+    })(),
     latestPayment: serializePayment(latestPayment),
   };
 }

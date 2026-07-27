@@ -54,6 +54,12 @@ function formatDateTime(value?: string | null) {
   }).format(date)
 }
 
+/** A repair order/invoice can have several technicians, one per service line — join their names for display. */
+function joinTechnicianNames(names: Array<string | undefined> = []) {
+  const unique = [...new Set(names.filter((name): name is string => Boolean(name)))]
+  return unique.length ? unique.join(', ') : 'Technician updating'
+}
+
 function formatVehicleLabel(record: { brand?: string; model?: string; year?: number | null; licensePlate?: string }) {
   const main = [record.brand, record.model, record.year].filter(Boolean).join(' ')
   if (main && record.licensePlate) {
@@ -255,7 +261,7 @@ export default function InvoiceConfirmPage() {
         paymentMethod: 'Direct payment at service desk',
         paymentReference: null as string | null,
         serviceAdvisor: order.advisorId?.fullName || 'Service advisor updating',
-        technician: order.technicianId?.fullName || 'Technician updating',
+        technician: joinTechnicianNames(order.services.map((service) => service.technicianId?.fullName)),
         items: order.services.map((service) => ({
           label: service.name,
           qty: service.quantity,
@@ -315,7 +321,7 @@ export default function InvoiceConfirmPage() {
       paymentMethod: paymentMethodLabel(invoice.latestPayment?.method),
       paymentReference: invoice.latestPayment?.reference || null,
       serviceAdvisor: invoice.serviceAdvisor?.fullName || 'Service advisor updating',
-      technician: invoice.technician?.fullName || 'Technician updating',
+      technician: joinTechnicianNames(invoice.technicians?.map((tech) => tech.fullName)),
       items: invoice.lineItems.map((item) => ({
         label: item.description,
         qty: item.quantity,

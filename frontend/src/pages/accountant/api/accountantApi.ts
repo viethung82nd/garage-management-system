@@ -30,11 +30,6 @@ export type RepairOrderApiRecord = {
     fullName: string
     phone?: string
   }
-  technicianId?: {
-    _id: string
-    fullName: string
-    phone?: string
-  }
   services: Array<{
     name: string
     quantity: number
@@ -44,6 +39,12 @@ export type RepairOrderApiRecord = {
     serviceId?: {
       _id?: string
       category?: string
+    }
+    /** Each line owns its own technician now — a repair order can have several, one per line. */
+    technicianId?: {
+      _id: string
+      fullName: string
+      phone?: string
     }
   }>
 }
@@ -125,11 +126,12 @@ export type InvoiceApiRecord = {
     fullName: string
     phone?: string
   } | null
-  technician: {
+  /** A repair order can have several technicians, one per service line — every distinct one billed on this invoice. */
+  technicians: Array<{
     id: string
     fullName: string
     phone?: string
-  } | null
+  }>
   latestPayment: {
     id: string
     amount: number

@@ -9,6 +9,13 @@ const transferRequestSchema = new Schema(
       ref: "RepairOrder",
       required: true,
     },
+    // Which service line this hand-off is for — assignment is per-line now,
+    // so a transfer request hands off one line, not the whole order.
+    lineIndex: {
+      type: Number,
+      required: true,
+      min: 0,
+    },
     fromTechnicianId: {
       type: Schema.Types.ObjectId,
       ref: "User",

@@ -29,6 +29,12 @@ function formatMoney(value: number) {
   return `${new Intl.NumberFormat('vi-VN').format(value)} ₫`
 }
 
+/** A repair order/invoice can have several technicians, one per service line — join their names for display. */
+function joinTechnicianNames(names: Array<string | undefined> = []) {
+  const unique = [...new Set(names.filter((name): name is string => Boolean(name)))]
+  return unique.length ? unique.join(', ') : 'Technician updating'
+}
+
 function formatDateTime(value?: string | null) {
   if (!value) {
     return 'Updating'
@@ -185,7 +191,7 @@ export default function CustomerInvoicesPage() {
         vin: invoice.vehicle?.chassisNumber || invoice.vehicle?.engineNumber || 'Not recorded',
         mileage: invoice.vehicle?.lastKnownMileage != null ? `${new Intl.NumberFormat('en-US').format(invoice.vehicle.lastKnownMileage)} km` : 'Not recorded',
         advisor: invoice.serviceAdvisor?.fullName || 'Service advisor updating',
-        technician: invoice.technician?.fullName || 'Technician updating',
+        technician: joinTechnicianNames(invoice.technicians?.map((tech) => tech.fullName)),
         customerName: invoice.customer?.fullName || user?.fullName || 'Customer',
         customerPhone: invoice.customer?.phone || user?.phone || 'No phone on file',
         customerEmail: invoice.customer?.email || user?.email || 'No email on file',

@@ -43,39 +43,31 @@ function parseReportDate(str, label, { endOfDay = false } = {}) {
 }
 
 /**
- * Per-technician performance over completed orders in [start, end]: order count,
- * average turnaround (hours), revenue, and a completion rate. Completion rate is
- * completed-in-range over all orders ever assigned to the technician —
- * RepairOrder carries no creation timestamp, so non-completed orders cannot be
- * time-bounded; this is a deliberate, documented approximation.
+ * Per-technician performance over completed SERVICE LINES in [start, end] —
+ * one repair order can now have several technicians, one per line, so the
+ * unit of measure is the line, not the order: `orderCount` is really "lines
+ * completed" and `revenue` is that line's own value, not the whole order's.
+ * Completion rate is completed-in-range over all lines ever assigned to the
+ * technician — a line carries no creation timestamp, so non-completed lines
+ * cannot be time-bounded; this is a deliberate, documented approximation
+ * (same one the previous per-order version made).
  */
 async function technicianBreakdown(start, end) {
   const completed = await repairOrderRepository.aggregate([
+    { $unwind: "$services" },
     {
       $match: {
-        status: "completed",
-        completedAt: { $gte: start, $lte: end },
-        technicianId: { $ne: null },
+        "services.status": "completed",
+        "services.completedAt": { $gte: start, $lte: end },
+        "services.technicianId": { $ne: null },
       },
     },
     {
       $group: {
-        _id: "$technicianId",
+        _id: "$services.technicianId",
         orderCount: { $sum: 1 },
-        revenue: { $sum: { $ifNull: ["$totalCost", 0] } },
-        avgTime: {
-          $avg: {
-            $cond: [
-              { $and: ["$startedAt", "$completedAt"] },
-              {
-                $divide: [
-                  { $subtract: ["$completedAt", "$startedAt"] },
-                  3600000, // ms → hours
-                ],
-              },
-              null,
-            ],
-          },
+        revenue: {
+          $sum: { $multiply: ["$services.priceAtTime", { $ifNull: ["$services.quantity", 1] }] },
         },
       },
     },
@@ -84,26 +76,41 @@ async function technicianBreakdown(start, end) {
 
   if (!completed.length) return [];
 
-  const assigned = await repairOrderRepository.aggregate([
-    { $match: { technicianId: { $ne: null } } },
-    { $group: { _id: "$technicianId", total: { $sum: 1 } } },
+  const techIds = completed.map((c) => c._id);
+
+  const [assigned, timeLogs] = await Promise.all([
+    repairOrderRepository.aggregate([
+      { $unwind: "$services" },
+      { $match: { "services.technicianId": { $in: techIds } } },
+      { $group: { _id: "$services.technicianId", total: { $sum: 1 } } },
+    ]),
+    // Per-technician total clocked minutes on completed lines in range —
+    // avgTime is now "hours actually logged per completed line", sourced
+    // from TimeLog (same precedent as reporting.service.js#getGrossProfitReport)
+    // instead of the whole order's startedAt/completedAt span.
+    TimeLogModel.aggregate([
+      { $match: { technicianId: { $in: techIds }, endedAt: { $ne: null } } },
+      { $group: { _id: "$technicianId", minutes: { $sum: "$durationMinutes" } } },
+    ]),
   ]);
   const assignedMap = new Map(assigned.map((a) => [String(a._id), a.total]));
+  const minutesMap = new Map(timeLogs.map((t) => [String(t._id), t.minutes]));
 
-  const techIds = completed.map((c) => c._id);
   const techs = await userRepository.model
     .find({ _id: { $in: techIds } }, { fullName: 1 })
     .lean();
   const nameMap = new Map(techs.map((t) => [String(t._id), t.fullName]));
 
   return completed.map((c) => {
-    const total = assignedMap.get(String(c._id)) || c.orderCount;
+    const key = String(c._id);
+    const total = assignedMap.get(key) || c.orderCount;
+    const minutes = minutesMap.get(key) || 0;
     return {
       technicianId: c._id,
-      technicianName: nameMap.get(String(c._id)) ?? null,
+      technicianName: nameMap.get(key) ?? null,
       orderCount: c.orderCount,
       completionRate: total ? Number((c.orderCount / total).toFixed(4)) : 0,
-      avgTime: c.avgTime ? Number(c.avgTime.toFixed(2)) : 0,
+      avgTime: c.orderCount ? Number((minutes / 60 / c.orderCount).toFixed(2)) : 0,
       revenue: c.revenue,
     };
   });
@@ -162,7 +169,7 @@ async function attributeCollectedRevenue(start, end) {
     .find({ _id: { $in: [...collectedByInvoice.keys()] } }, { lineItems: 1, total: 1, repairOrderId: 1 })
     .populate({
       path: "repairOrderId",
-      select: "technicianId services",
+      select: "services",
       populate: { path: "services.serviceId", select: "name" },
     })
     .lean();
@@ -172,10 +179,6 @@ async function attributeCollectedRevenue(start, end) {
     if (collected <= 0) continue;
 
     const order = invoice.repairOrderId;
-    if (order?.technicianId) {
-      const techKey = String(order.technicianId);
-      byTechnician.set(techKey, (byTechnician.get(techKey) || 0) + collected);
-    }
 
     const lineItems = invoice.lineItems || [];
     if (lineItems.length > 0 && invoice.total > 0) {
@@ -201,6 +204,14 @@ async function attributeCollectedRevenue(start, end) {
         existing.orderCount += item.quantity;
         existing.revenue += share;
         byService.set(key, existing);
+
+        // Attribute this same share to whichever technician owns this
+        // specific line — not the whole invoice to one order-level tech —
+        // since a multi-technician order splits revenue per line.
+        if (orderService?.technicianId) {
+          const techKey = String(orderService.technicianId);
+          byTechnician.set(techKey, (byTechnician.get(techKey) || 0) + share);
+        }
       });
     }
   }
@@ -267,9 +278,10 @@ export async function getRevenueReport({ startDate, endDate, period = "monthly",
     // services/technicians it paid for — see attributeCollectedRevenue's
     // doc comment for why this (not raw completed-order value) is used.
     attributeCollectedRevenue(start, end),
-    // Workload metrics (orderCount/completionRate/avgTime) are still based on
-    // completed orders in the period — a legitimate, separate "how busy was
-    // this technician" measure, not a money figure, so it keeps its own basis.
+    // Workload metrics (orderCount/completionRate/avgTime) are based on
+    // completed SERVICE LINES in the period — a legitimate, separate "how
+    // busy was this technician" measure, not a money figure, so it keeps its
+    // own basis (see technicianBreakdown's doc comment).
     technicianBreakdown(start, end),
   ]);
 
@@ -376,9 +388,15 @@ async function enrichTechnicians(users) {
   const technicianIds = users.map((user) => user._id);
 
   const [orderCounts, openTimeLogs] = await Promise.all([
+    // Count DISTINCT repair orders each technician has an incomplete line on
+    // — a technician with 3 open lines on the same order still counts as 1
+    // active order, not 3, hence the two-stage group after $unwind.
     repairOrderRepository.model.aggregate([
-      { $match: { technicianId: { $in: technicianIds }, status: { $nin: TERMINAL_ORDER_STATUSES } } },
-      { $group: { _id: "$technicianId", count: { $sum: 1 } } },
+      { $match: { status: { $nin: TERMINAL_ORDER_STATUSES } } },
+      { $unwind: "$services" },
+      { $match: { "services.technicianId": { $in: technicianIds } } },
+      { $group: { _id: { tech: "$services.technicianId", order: "$_id" } } },
+      { $group: { _id: "$_id.tech", count: { $sum: 1 } } },
     ]),
     TimeLogModel.find({ technicianId: { $in: technicianIds }, endedAt: null })
       .select("technicianId")

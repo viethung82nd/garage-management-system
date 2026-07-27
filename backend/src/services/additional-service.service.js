@@ -210,6 +210,10 @@ async function applyProposalApproval(proposal, approvalRecord) {
         quantity: 1,
         kind: "service",
         source: "additionalService",
+        // The technician who flagged this extra work is already on the car —
+        // default the new line to them; the SA can reassign it like any
+        // other line via assignServiceTechnicians.
+        technicianId: proposal.technicianId || undefined,
         // Extra work on a comeback the garage owns is internal (not re-billed);
         // otherwise the customer approved and pays.
         jobType: order.isComeback ? "internal" : "customerPay",

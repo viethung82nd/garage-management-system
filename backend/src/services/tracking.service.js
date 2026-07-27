@@ -220,7 +220,7 @@ export async function trackRepairOrder({ plate, orderId, phone }) {
         populate: { path: "customerId", select: "fullName phone accountType" },
       })
       .populate("advisorId", "fullName")
-      .populate("technicianId", "fullName")
+      .populate("services.technicianId", "fullName")
       .populate("inspectionId", "photos");
 
     if (!order || !order.vehicleId || order.vehicleId.licensePlate !== normalizedPlate) {
@@ -247,7 +247,7 @@ export async function trackRepairOrder({ plate, orderId, phone }) {
         populate: { path: "customerId", select: "fullName phone accountType" },
       })
       .populate("advisorId", "fullName")
-      .populate("technicianId", "fullName")
+      .populate("services.technicianId", "fullName")
       .populate("inspectionId", "photos");
 
     if (!order) {
@@ -293,7 +293,9 @@ export async function trackRepairOrder({ plate, orderId, phone }) {
       model: order.vehicleId.model,
     },
     serviceAdvisor: order.advisorId?.fullName || "Updating",
-    technician: order.technicianId?.fullName || "Assigning technician",
+    technician:
+      [...new Set(order.services.map((s) => s.technicianId?.fullName).filter(Boolean))].join(", ") ||
+      "Assigning technician",
     services,
     approvedServices: services.map((service) => service.name),
     // Real inspection photos taken for this order, if any were recorded —

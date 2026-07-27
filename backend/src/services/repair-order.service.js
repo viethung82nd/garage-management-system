@@ -47,10 +47,19 @@ const repairOrderPopulate = [
   },
   { path: "inspectionId" },
   { path: "advisorId", select: "fullName email phone role" },
-  { path: "technicianId", select: "fullName email phone role" },
   { path: "services.serviceId", select: "name category" },
+  { path: "services.technicianId", select: "fullName email phone role" },
   { path: "stepNotes.technicianId", select: "fullName email phone role" },
 ];
+
+/** Distinct technician ObjectIds (as strings) across a repair order's service lines. */
+function getAssignedTechnicianIds(order) {
+  const ids = new Set();
+  for (const service of order.services || []) {
+    if (service.technicianId) ids.add(String(service.technicianId._id || service.technicianId));
+  }
+  return ids;
+}
 
 /** Fetch all repair orders with optional filters. */
 export async function getAllRepairOrders({
@@ -67,7 +76,7 @@ export async function getAllRepairOrders({
   if (status) filter.status = status;
   if (vehicleId) filter.vehicleId = vehicleId;
   if (normalizedServiceAdvisorId) filter.advisorId = normalizedServiceAdvisorId;
-  if (technicianId) filter.technicianId = technicianId;
+  if (technicianId) filter["services.technicianId"] = technicianId;
 
   // The accountant's billing queue. "Ready to invoice" is not a status — since
   // QC now moves a passed order to readyForDelivery, keying the queue off a
@@ -199,7 +208,7 @@ export async function createRepairOrder({ vehicleId, serviceAdvisorId, advisorId
 }
 
 /** Update a repair order. */
-export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorId, technicianId, services, reason }) {
+export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorId, services, reason }) {
   const normalizedServiceAdvisorId =
     serviceAdvisorId !== undefined ? serviceAdvisorId : advisorId;
 
@@ -276,23 +285,6 @@ export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorI
     order.advisorId = normalizedServiceAdvisorId || null;
   }
 
-  const previousTechnicianId = order.technicianId ? String(order.technicianId) : null;
-  let technicianChanged = false;
-  if (technicianId !== undefined) {
-    if (technicianId && !technicianId.match(OID_RE)) {
-      throw new ApiError(400, "Invalid technician ID format");
-    }
-    if (technicianId) {
-      const technician = await userRepository.findById(technicianId);
-      if (!technician || technician.role !== "technician") {
-        throw new ApiError(404, "Technician not found");
-      }
-    }
-    const nextTechnicianId = technicianId || null;
-    technicianChanged = String(nextTechnicianId) !== String(previousTechnicianId);
-    order.technicianId = nextTechnicianId;
-  }
-
   if (services && Array.isArray(services)) {
     if (services.length === 0) {
       throw new ApiError(400, "At least one service is required");
@@ -309,7 +301,7 @@ export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorI
       repairOrderId: order._id,
       from: previousStatus,
       to: order.status,
-      changedBy: normalizedServiceAdvisorId || technicianId || undefined,
+      changedBy: normalizedServiceAdvisorId || undefined,
       reason: reason?.trim() || undefined,
     });
   }
@@ -318,25 +310,103 @@ export async function updateRepairOrder(id, { status, serviceAdvisorId, advisorI
     ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),
   ]);
 
-  if (technicianChanged && order.technicianId) {
+  return order;
+}
+
+/**
+ * Assigns (or reassigns/clears) the technician for one or more service lines
+ * on a repair order — the only place that writes RepairOrder.services[].technicianId.
+ * A repair order can end up with several distinct technicians this way, one
+ * per line, instead of the single whole-order assignment this replaces.
+ */
+export async function assignServiceTechnicians(id, assignments) {
+  if (!id.match(OID_RE)) {
+    throw new ApiError(400, "Invalid repair order ID format");
+  }
+  if (!Array.isArray(assignments) || assignments.length === 0) {
+    throw new ApiError(400, "At least one assignment is required");
+  }
+
+  const order = await repairOrderRepository.findById(id);
+  if (!order) {
+    throw new ApiError(404, "Repair order not found");
+  }
+
+  if (TERMINAL_ORDER_STATUSES.includes(order.status) || ["readyForDelivery", "delivered"].includes(order.status)) {
+    throw new ApiError(409, `Cannot reassign technicians on a ${order.status} repair order`);
+  }
+
+  const technicianCache = new Map();
+  async function resolveTechnician(technicianId) {
+    if (!technicianId) return null;
+    if (!technicianId.match(OID_RE)) {
+      throw new ApiError(400, "Invalid technician ID format");
+    }
+    if (technicianCache.has(technicianId)) return technicianCache.get(technicianId);
+    const technician = await userRepository.findById(technicianId);
+    if (!technician || technician.role !== "technician") {
+      throw new ApiError(404, `Technician ${technicianId} not found`);
+    }
+    technicianCache.set(technicianId, technician);
+    return technician;
+  }
+
+  // Newly-assigned technician (id) -> the names of the line(s) they just got,
+  // so each gets exactly one notification even if they picked up several lines.
+  const newlyAssigned = new Map();
+
+  for (const assignment of assignments) {
+    const lineIndex = Number(assignment?.lineIndex);
+    if (!Number.isInteger(lineIndex) || lineIndex < 0 || lineIndex >= order.services.length) {
+      throw new ApiError(400, `Invalid lineIndex: ${assignment?.lineIndex}`);
+    }
+    const line = order.services[lineIndex];
+    if (line.status === "completed") {
+      throw new ApiError(409, `Line ${lineIndex} (${line.name}) is already completed and cannot be reassigned`);
+    }
+
+    const nextTechnicianId = assignment.technicianId || null;
+    const previousTechnicianId = line.technicianId ? String(line.technicianId) : null;
+    if (String(nextTechnicianId) === previousTechnicianId) continue;
+
+    if (nextTechnicianId) {
+      await resolveTechnician(nextTechnicianId);
+      const names = newlyAssigned.get(nextTechnicianId) || [];
+      names.push(line.name);
+      newlyAssigned.set(nextTechnicianId, names);
+    }
+
+    line.technicianId = nextTechnicianId;
+  }
+
+  await order.save();
+  await order.populate([
+    ...repairOrderPopulate.filter((item) => item.path !== "stepNotes.technicianId"),
+  ]);
+
+  if (newlyAssigned.size > 0) {
     const vehicleLabel = order.vehicleId?.licensePlate
       ? `${order.vehicleId.licensePlate}${order.vehicleId.model ? ` (${order.vehicleId.model})` : ""}`
       : "a vehicle";
-    await createNotification({
-      userId: order.technicianId._id || order.technicianId,
-      type: "repairOrderAssigned",
-      title: "New repair order assigned",
-      message: `You've been assigned to a repair order for ${vehicleLabel}.`,
-      refId: order._id,
-      refModel: "RepairOrder",
-    });
+    await Promise.all(
+      [...newlyAssigned.entries()].map(([technicianId, names]) =>
+        createNotification({
+          userId: technicianId,
+          type: "repairOrderAssigned",
+          title: names.length > 1 ? "New repair order services assigned" : "New repair order service assigned",
+          message: `You've been assigned ${names.length} service(s) on a repair order for ${vehicleLabel}: ${names.join(", ")}.`,
+          refId: order._id,
+          refModel: "RepairOrder",
+        }),
+      ),
+    );
   }
 
   return order;
 }
 
 /** Update repair order progress (status + optional notes). */
-export async function updateRepairProgress(id, { status, notes, technicianId, stepIndex, cause, correction }) {
+export async function updateRepairProgress(id, { status, notes, stepIndex, cause, correction }, actorId, actorRole) {
   if (!id.match(OID_RE)) {
     throw new ApiError(400, "Invalid repair order ID format");
   }
@@ -360,17 +430,6 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
     throw new ApiError(400, `Cannot change status of a ${order.status} repair order`);
   }
 
-  if (technicianId) {
-    if (!technicianId.match(OID_RE)) {
-      throw new ApiError(400, "Invalid technician ID format");
-    }
-    const technicianDoc = await userRepository.findById(technicianId);
-    if (!technicianDoc) {
-      throw new ApiError(404, "Technician not found");
-    }
-    order.technicianId = technicianId;
-  }
-
   const previousStatus = order.status;
   const hasStepIndex = stepIndex !== undefined && stepIndex !== null;
 
@@ -386,6 +445,15 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
     }
     if (!ORDER_SERVICE_STATUSES.includes(status)) {
       throw new ApiError(400, `A step's status must be one of: ${ORDER_SERVICE_STATUSES.join(", ")}`);
+    }
+
+    // BR-JOB-01 at line scope: a technician may only touch the line assigned
+    // to them, not any line on the order. Admin/SA are trusted more broadly.
+    if (actorRole === "technician") {
+      const lineTechnicianId = order.services[index].technicianId;
+      if (!lineTechnicianId || String(lineTechnicianId) !== String(actorId)) {
+        throw new ApiError(403, "Only the technician assigned to this service line can update it");
+      }
     }
 
     // BR-JOB-04: 3C (Cause/Correction — the line itself is the Complaint) is
@@ -412,6 +480,14 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
     if (typeof correction === "string" && correction.trim()) {
       order.services[index].correction = correction.trim();
     }
+    // Per-line completion timestamp — needed to time-bound per-technician
+    // reporting (a multi-tech order's own completedAt only fires once every
+    // line is done, which would misattribute everyone to that last moment).
+    if (status === "completed") {
+      if (!order.services[index].completedAt) order.services[index].completedAt = new Date();
+    } else {
+      order.services[index].completedAt = undefined;
+    }
 
     // Only recompute the order's own status from its lines while the order
     // is still in one of its normal working states. Once it has moved past
@@ -436,6 +512,14 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
       throw new ApiError(400, `Invalid status. Must be one of: ${REPAIR_ORDER_STATUSES.join(", ")}`);
     }
 
+    // A technician acting on the whole order (no stepIndex) must at least be
+    // assigned to one of its lines — otherwise they have no business on this
+    // order at all. Which of several assigned technicians may do this isn't
+    // further restricted.
+    if (actorRole === "technician" && !getAssignedTechnicianIds(order).has(String(actorId))) {
+      throw new ApiError(403, "You are not assigned to any service on this repair order");
+    }
+
     // Exception states exist specifically so a wait has to be explainable —
     // an unexplained "waitingParts" is exactly the blind spot they replace.
     if (WAITING_STATUSES.includes(status) && !notes?.trim()) {
@@ -454,15 +538,9 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
   }
 
   if (notes && notes.trim()) {
-    const techId = technicianId || order.technicianId;
-
-    if (!techId) {
-      throw new ApiError(400, "Technician ID is required when adding progress notes");
-    }
-
     const newNote = {
       content: `[${previousStatus} → ${order.status}] ${notes.trim()}`,
-      technicianId: techId,
+      technicianId: actorId,
       createdAt: new Date(),
     };
     if (hasStepIndex) newNote.stepIndex = Number(stepIndex);
@@ -476,7 +554,7 @@ export async function updateRepairProgress(id, { status, notes, technicianId, st
     repairOrderId: order._id,
     from: previousStatus,
     to: order.status,
-    changedBy: technicianId || order.technicianId || undefined,
+    changedBy: actorId || undefined,
     reason: notes?.trim() || undefined,
   });
 
@@ -627,11 +705,17 @@ export async function getRepairOrderStatus(id) {
   const repairOrder = await repairOrderRepository.model
     .findById(id)
     .populate("vehicleId")
-    .populate("technicianId", "fullName phone")
+    .populate("services.technicianId", "fullName phone")
     .populate("advisorId", "fullName");
 
   if (!repairOrder) {
     return null;
+  }
+
+  const technicians = new Map();
+  for (const service of repairOrder.services) {
+    const tech = service.technicianId;
+    if (tech) technicians.set(String(tech._id), { id: tech._id, name: tech.fullName, phone: tech.phone });
   }
 
   return {
@@ -643,13 +727,7 @@ export async function getRepairOrderStatus(id) {
       brand: repairOrder.vehicleId.brand,
       model: repairOrder.vehicleId.model,
     },
-    technician: repairOrder.technicianId
-      ? {
-          id: repairOrder.technicianId._id,
-          name: repairOrder.technicianId.fullName,
-          phone: repairOrder.technicianId.phone,
-        }
-      : null,
+    technicians: [...technicians.values()],
     services: repairOrder.services.map((service) => ({
       name: service.name,
       price: service.priceAtTime,
@@ -704,12 +782,12 @@ export async function submitQualityCheck(id, { passed, items, note, reworkReason
     throw new ApiError(400, "Only a repair order marked completed by the technician can be quality-checked");
   }
 
-  // Separation of duties: the person who did the work cannot also be the one
-  // who passes it — otherwise QC is a rubber stamp instead of an independent
-  // check. (No such conflict is possible when the order has no technician
-  // assigned, so that case is left alone.)
-  if (order.technicianId && String(order.technicianId) === String(reviewerId)) {
-    throw new ApiError(403, "The technician who performed this work cannot also pass its quality check");
+  // Separation of duties: none of the technicians who did the work can also
+  // be the one who passes it — otherwise QC is a rubber stamp instead of an
+  // independent check. (No such conflict is possible when no line has a
+  // technician assigned, so that case is left alone.)
+  if (getAssignedTechnicianIds(order).has(String(reviewerId))) {
+    throw new ApiError(403, "A technician who performed this work cannot also pass its quality check");
   }
 
   const failedItems = Array.isArray(items) ? items.filter((item) => item?.result === "fail") : [];
@@ -779,18 +857,20 @@ export async function submitQualityCheck(id, { passed, items, note, reworkReason
     reason: summary.replace(/^\[QC (?:pass|fail)\]\s*/, ""),
   });
 
-  if (order.technicianId) {
-    await createNotification({
-      userId: order.technicianId,
-      type: passed ? "qualityCheckPassed" : "qualityCheckFailed",
-      title: passed ? "Repair order passed quality check" : "Repair order sent back for rework",
-      message: passed
-        ? "Your work passed quality check and is ready for handover."
-        : summary.replace(/^\[QC fail\]\s*/, ""),
-      refId: order._id,
-      refModel: "RepairOrder",
-    });
-  }
+  await Promise.all(
+    [...getAssignedTechnicianIds(order)].map((technicianId) =>
+      createNotification({
+        userId: technicianId,
+        type: passed ? "qualityCheckPassed" : "qualityCheckFailed",
+        title: passed ? "Repair order passed quality check" : "Repair order sent back for rework",
+        message: passed
+          ? "Your work passed quality check and is ready for handover."
+          : summary.replace(/^\[QC fail\]\s*/, ""),
+        refId: order._id,
+        refModel: "RepairOrder",
+      }),
+    ),
+  );
 
   return {
     message: passed ? "Repair order passed quality check" : "Repair order sent back for rework",
@@ -960,11 +1040,11 @@ export async function issuePartsForOrder(id, actorId, actorRole) {
     throw new ApiError(409, `Cannot issue parts for a ${order.status} repair order`);
   }
 
-  // BR-JOB-01, same rule as clockOn: a technician can only act on the order
-  // assigned to them. The parts desk / advisor / admin roles are trusted more
-  // broadly and skip this check.
-  if (actorRole === "technician" && String(order.technicianId) !== String(actorId)) {
-    throw new ApiError(403, "Only the technician assigned to this repair order can issue its parts");
+  // BR-JOB-01, same rule as clockOn: a technician can only act on an order
+  // they have at least one assigned line on. The parts desk / advisor / admin
+  // roles are trusted more broadly and skip this check.
+  if (actorRole === "technician" && !getAssignedTechnicianIds(order).has(String(actorId))) {
+    throw new ApiError(403, "Only a technician assigned to this repair order can issue its parts");
   }
 
   const result = await runInTransaction(async (session) =>
@@ -1016,15 +1096,31 @@ export async function clockOn(orderId, { lineIndex, note }, technicianId, actorR
     throw new ApiError(409, `Cannot clock on to a ${order.status} repair order`);
   }
 
+  // A technician now always clocks on to one specific line, not "the order"
+  // — that's the only way clock-on authorization can mean anything once a
+  // single order can have several technicians on different lines.
+  if (lineIndex === undefined || lineIndex === null) {
+    throw new ApiError(400, "lineIndex is required");
+  }
+  const normalizedLineIndex = Number(lineIndex);
+  if (
+    !Number.isInteger(normalizedLineIndex) ||
+    normalizedLineIndex < 0 ||
+    normalizedLineIndex >= order.services.length
+  ) {
+    throw new ApiError(400, "Invalid lineIndex");
+  }
+
   // BR-JOB-01: work only happens on what's actually been assigned — a
-  // technician can't just pick up any car on the floor. Admin keeps override
+  // technician can't just pick up any line on the floor. Admin keeps override
   // access for support/testing.
   if (actorRole !== "admin") {
-    if (!order.technicianId) {
-      throw new ApiError(409, "This repair order has no technician assigned yet");
+    const lineTechnicianId = order.services[normalizedLineIndex].technicianId;
+    if (!lineTechnicianId) {
+      throw new ApiError(409, "This service line has no technician assigned yet");
     }
-    if (String(order.technicianId) !== String(technicianId)) {
-      throw new ApiError(403, "Only the technician assigned to this repair order can clock on to it");
+    if (String(lineTechnicianId) !== String(technicianId)) {
+      throw new ApiError(403, "Only the technician assigned to this service line can clock on to it");
     }
   }
 
@@ -1049,22 +1145,10 @@ export async function clockOn(orderId, { lineIndex, note }, technicianId, actorR
     );
   }
 
-  let normalizedLineIndex;
-  if (lineIndex !== undefined && lineIndex !== null) {
-    normalizedLineIndex = Number(lineIndex);
-    if (
-      !Number.isInteger(normalizedLineIndex) ||
-      normalizedLineIndex < 0 ||
-      normalizedLineIndex >= order.services.length
-    ) {
-      throw new ApiError(400, "Invalid lineIndex");
-    }
-  }
-
   const timeLog = await TimeLogModel.create({
     repairOrderId: order._id,
     technicianId,
-    ...(normalizedLineIndex !== undefined ? { lineIndex: normalizedLineIndex } : {}),
+    lineIndex: normalizedLineIndex,
     startedAt: new Date(),
     endedAt: null,
     ...(note?.trim() ? { note: note.trim() } : {}),
