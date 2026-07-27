@@ -864,11 +864,13 @@ export function TechnicianRepairNotesPage() {
                         </div>
                       </Image.PreviewGroup>
                     ) : null}
-                    <Button block disabled={saving} icon={<ThunderboltOutlined />} onClick={reopenStep} size="large">
-                      Reopen this step
-                    </Button>
+                    {String(selectedStep.technicianId) === String(myId) ? (
+                      <Button block disabled={saving} icon={<ThunderboltOutlined />} onClick={reopenStep} size="large">
+                        Reopen this step
+                      </Button>
+                    ) : null}
                   </div>
-                ) : (
+                ) : String(selectedStep.technicianId) === String(myId) ? (
                   <div className="mt-4 flex flex-col gap-3">
                     <div>
                       <div style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600, marginBottom: 6 }}>Cause</div>
@@ -941,6 +943,10 @@ export function TechnicianRepairNotesPage() {
                         </Button>
                       </>
                     )}
+                  </div>
+                ) : (
+                  <div style={{ color: technicianPalette.textMuted, fontSize: 13, textAlign: 'center', padding: '16px 0' }}>
+                    This step is assigned to another technician.
                   </div>
                 )}
               </Card>
