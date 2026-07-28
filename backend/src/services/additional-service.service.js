@@ -10,7 +10,7 @@ import { renderEmailLayout, SITE_URL } from "../utils/emailTemplate.js";
 import { uploadBufferToCloudinary } from "../utils/cloudinary.js";
 import { recordStatusChange } from "../utils/orderStatus.js";
 import { runInTransaction } from "../utils/transaction.js";
-import { APPROVAL_CHANNELS, DeferredWorkModel, TimeLogModel } from "../models/index.js";
+import { APPROVAL_CHANNELS, DeferredWorkModel, PartModel, TimeLogModel } from "../models/index.js";
 
 const OID_RE = /^[0-9a-fA-F]{24}$/;
 const FE_STATUSES = ["pending", "sent", "approved", "rejected"];
@@ -42,16 +42,16 @@ export async function listAdditionalServiceProposals({ repairOrderId }) {
 }
 
 /**
- * Technician flags extra work found mid-repair for SA review. Deliberately
- * takes no laborCost/partsCost — pricing extra work is the service advisor's
- * call (see updateAdditionalServiceProposal), not the technician's, so this
- * never accepts a price even if one is sent.
+ * Technician flags extra work found mid-repair for SA review. The technician
+ * picks from the service catalog (required) and optionally selects a part from
+ * the parts catalog — pricing is auto-calculated from the catalog, never
+ * manually entered.
  */
 export async function createAdditionalServiceProposal(
   {
     repairOrderId,
     serviceId,
-    serviceName,
+    partId,
     affectedPart,
     reason,
     customerImpact,
@@ -65,23 +65,27 @@ export async function createAdditionalServiceProposal(
   if (!repairOrderId || !OID_RE.test(repairOrderId)) {
     throw new ApiError(400, "A valid repairOrderId is required");
   }
-  if (!serviceName?.trim()) {
-    throw new ApiError(400, "serviceName is required");
+  if (!serviceId || !OID_RE.test(serviceId)) {
+    throw new ApiError(400, "A valid serviceId is required");
   }
 
-  // Optional: the technician picked this from the SA's service catalog
-  // instead of (or in addition to) typing a custom name — carries the real
-  // catalog link through to the order line if the proposal is approved.
-  let catalogServiceId;
-  if (serviceId) {
-    if (!OID_RE.test(serviceId)) {
-      throw new ApiError(400, "Invalid serviceId format");
+  const catalogService = await serviceRepository.findById(serviceId);
+  if (!catalogService) {
+    throw new ApiError(404, "Service not found in the catalog");
+  }
+
+  let partUnitPrice = 0;
+  let catalogPartId;
+  if (partId) {
+    if (!OID_RE.test(partId)) {
+      throw new ApiError(400, "Invalid partId format");
     }
-    const catalogService = await serviceRepository.findById(serviceId);
-    if (!catalogService) {
-      throw new ApiError(404, "Service not found in the catalog");
+    const catalogPart = await PartModel.findById(partId);
+    if (!catalogPart) {
+      throw new ApiError(404, "Part not found in the catalog");
     }
-    catalogServiceId = catalogService._id;
+    catalogPartId = catalogPart._id;
+    partUnitPrice = catalogPart.unitPrice || 0;
   }
 
   const photos = await Promise.all(
@@ -96,14 +100,17 @@ export async function createAdditionalServiceProposal(
   const proposal = await serviceRequestRepository.create({
     repairOrderId,
     technicianId,
-    serviceId: catalogServiceId,
-    serviceName: serviceName.trim(),
+    serviceId: catalogService._id,
+    serviceName: catalogService.name,
+    partId: catalogPartId,
     affectedPart,
     reason,
     customerImpact,
     estimateMinutes,
     photos,
     evidenceCount: photos.length || evidenceCount || 0,
+    laborCost: catalogService.basePrice || 0,
+    partsCost: partUnitPrice,
     priority: ["high", "medium", "low"].includes(priority) ? priority : "medium",
     status: "pending",
   });
@@ -306,10 +313,9 @@ async function createDeferredWorkForDecline(proposal, vehicleId, customerId, dec
 }
 
 /**
- * SA sends/approves/rejects a proposal. `overrides` lets the SA set the
- * final price before it goes anywhere — the technician's labor/parts cost is
- * only ever an estimate; pricing what the customer actually gets billed is
- * the SA's call, not the technician's.
+ * SA sends/approves/rejects a proposal. The price is auto-calculated from
+ * the catalog at creation time — the SA only decides the status and records
+ * the customer's authorisation if approving.
  */
 export async function updateAdditionalServiceProposal(id, status, reviewedBy, overrides = {}) {
   if (!OID_RE.test(id)) {
@@ -328,22 +334,6 @@ export async function updateAdditionalServiceProposal(id, status, reviewedBy, ov
   }
   if (TERMINAL_STATUSES.includes(proposal.status)) {
     throw new ApiError(409, `This proposal was already ${proposal.status} and can no longer be changed`);
-  }
-
-  const { laborCost, partsCost } = overrides;
-  if (laborCost !== undefined) {
-    const parsedLaborCost = Number(laborCost);
-    if (Number.isNaN(parsedLaborCost) || parsedLaborCost < 0) {
-      throw new ApiError(400, "laborCost must be a non-negative number");
-    }
-    proposal.laborCost = parsedLaborCost;
-  }
-  if (partsCost !== undefined) {
-    const parsedPartsCost = Number(partsCost);
-    if (Number.isNaN(parsedPartsCost) || parsedPartsCost < 0) {
-      throw new ApiError(400, "partsCost must be a non-negative number");
-    }
-    proposal.partsCost = parsedPartsCost;
   }
 
   proposal.status = status;

@@ -18,8 +18,8 @@ export const partRouter = Router();
 // order (wired into quoting in Phase 3).
 partRouter.use(requireAuth);
 
-partRouter.get("", requireRole("admin", "partsStaff", "serviceAdvisor"), catchAsync(getAllParts));
-partRouter.get("/:id", requireRole("admin", "partsStaff", "serviceAdvisor"), catchAsync(getPartById));
+partRouter.get("", requireRole("admin", "partsStaff", "serviceAdvisor", "technician"), catchAsync(getAllParts));
+partRouter.get("/:id", requireRole("admin", "partsStaff", "serviceAdvisor", "technician"), catchAsync(getPartById));
 partRouter.get(
   "/:id/transactions",
   requireRole("admin", "partsStaff", "accountant"),

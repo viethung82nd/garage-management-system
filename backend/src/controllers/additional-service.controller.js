@@ -28,12 +28,12 @@ export async function createAdditionalServiceProposal(req, res) {
  * authorisation — see the service for why an advisor's click alone isn't enough.
  */
 export async function updateAdditionalServiceProposal(req, res) {
-  const { status, laborCost, partsCost, approval } = req.body ?? {};
+  const { status, approval } = req.body ?? {};
   const proposal = await additionalServiceService.updateAdditionalServiceProposal(
     req.params.id,
     status,
     req.user.sub,
-    { laborCost, partsCost, approval },
+    { approval },
   );
   res.json(proposal);
 }

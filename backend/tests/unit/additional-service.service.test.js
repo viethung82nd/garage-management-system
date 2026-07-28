@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest";
 import * as additionalServiceService from "../../src/services/additional-service.service.js";
-import { VehicleModel, RepairOrderModel } from "../../src/models/index.js";
+import { VehicleModel, RepairOrderModel, ServiceModel } from "../../src/models/index.js";
 import { createUser } from "../factories.js";
 
 async function orderFor(advisor) {
@@ -9,47 +9,52 @@ async function orderFor(advisor) {
   return RepairOrderModel.create({ vehicleId: vehicle._id, advisorId: advisor?._id, services: [], totalCost: 0, status: "inProgress" });
 }
 
+async function createCatalogService(name, basePrice) {
+  return ServiceModel.create({ name, basePrice, isActive: true });
+}
+
 describe("additional-service.service", () => {
   it("technician proposes extra work, advisor is notified", async () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const { user: tech } = await createUser({ role: "technician" });
     const order = await orderFor(advisor);
+    const svc = await createCatalogService("Brake fluid flush", 150000);
     const proposal = await additionalServiceService.createAdditionalServiceProposal(
-      { repairOrderId: order._id.toString(), serviceName: "Brake fluid flush" },
+      { repairOrderId: order._id.toString(), serviceId: svc._id.toString() },
       tech._id.toString(),
     );
     expect(proposal.status).toBe("pending");
+    expect(proposal.laborCost).toBe(150000);
+    expect(proposal.serviceName).toBe("Brake fluid flush");
   });
 
-  it("rejects a missing serviceName", async () => {
+  it("rejects a missing serviceId", async () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const { user: tech } = await createUser({ role: "technician" });
     const order = await orderFor(advisor);
     await expect(
       additionalServiceService.createAdditionalServiceProposal(
-        { repairOrderId: order._id.toString(), serviceName: "" },
+        { repairOrderId: order._id.toString(), serviceId: "" },
         tech._id.toString(),
       ),
     ).rejects.toMatchObject({ status: 400 });
   });
 
-  it("approving pushes a line item onto the repair order, priced by the SA's override", async () => {
+  it("approving pushes a line item onto the repair order, priced from catalog", async () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const { user: tech } = await createUser({ role: "technician" });
     const order = await orderFor(advisor);
-    // The technician can only flag the work and estimate a time — pricing is
-    // the SA's call, so laborCost/partsCost sent here are ignored.
+    const svc = await createCatalogService("Wiper blades", 50000);
+    // Price is auto-calculated from catalog — no manual pricing.
     const proposal = await additionalServiceService.createAdditionalServiceProposal(
-      { repairOrderId: order._id.toString(), serviceName: "Wiper blades", laborCost: 20000, partsCost: 30000 },
+      { repairOrderId: order._id.toString(), serviceId: svc._id.toString() },
       tech._id.toString(),
     );
-    expect(proposal.laborCost).toBeUndefined();
+    expect(proposal.laborCost).toBe(50000);
 
     await additionalServiceService.updateAdditionalServiceProposal(
       proposal._id.toString(), "approved", advisor._id.toString(),
       {
-        laborCost: 20000,
-        partsCost: 30000,
         // Extra work may only be billed with the customer's authorisation;
         // an advisor relaying it must evidence how it was obtained.
         approval: { channel: "phone", decidedByName: "Nguyen Van A", contactValue: "0901234567" },
@@ -65,14 +70,15 @@ describe("additional-service.service", () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const { user: tech } = await createUser({ role: "technician" });
     const order = await orderFor(advisor);
+    const svc = await createCatalogService("Wiper blades", 50000);
     const proposal = await additionalServiceService.createAdditionalServiceProposal(
-      { repairOrderId: order._id.toString(), serviceName: "Wiper blades" },
+      { repairOrderId: order._id.toString(), serviceId: svc._id.toString() },
       tech._id.toString(),
     );
 
     await expect(
       additionalServiceService.updateAdditionalServiceProposal(
-        proposal._id.toString(), "approved", advisor._id.toString(), { laborCost: 20000 },
+        proposal._id.toString(), "approved", advisor._id.toString(), {},
       ),
     ).rejects.toMatchObject({ status: 400 });
 
@@ -85,15 +91,15 @@ describe("additional-service.service", () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const { user: tech } = await createUser({ role: "technician" });
     const order = await orderFor(advisor);
+    const svc = await createCatalogService("Brake fluid", 15000);
     const proposal = await additionalServiceService.createAdditionalServiceProposal(
-      { repairOrderId: order._id.toString(), serviceName: "Brake fluid" },
+      { repairOrderId: order._id.toString(), serviceId: svc._id.toString() },
       tech._id.toString(),
     );
 
     const approved = await additionalServiceService.updateAdditionalServiceProposal(
       proposal._id.toString(), "approved", advisor._id.toString(),
       {
-        laborCost: 15000,
         approval: { channel: "zalo", decidedByName: "Tran Thi B", contactValue: "0912345678" },
       },
     );
@@ -111,8 +117,9 @@ describe("additional-service.service", () => {
     const { user: advisor } = await createUser({ role: "serviceAdvisor" });
     const { user: tech } = await createUser({ role: "technician" });
     const order = await orderFor(advisor);
+    const svc = await createCatalogService("X", 10000);
     const proposal = await additionalServiceService.createAdditionalServiceProposal(
-      { repairOrderId: order._id.toString(), serviceName: "X" },
+      { repairOrderId: order._id.toString(), serviceId: svc._id.toString() },
       tech._id.toString(),
     );
     await additionalServiceService.updateAdditionalServiceProposal(
@@ -129,8 +136,9 @@ describe("additional-service.service", () => {
     const { user: tech } = await createUser({ role: "technician" });
     const order1 = await orderFor(advisor);
     const order2 = await orderFor(advisor);
-    await additionalServiceService.createAdditionalServiceProposal({ repairOrderId: order1._id.toString(), serviceName: "A" }, tech._id.toString());
-    await additionalServiceService.createAdditionalServiceProposal({ repairOrderId: order2._id.toString(), serviceName: "B" }, tech._id.toString());
+    const svc = await createCatalogService("A", 10000);
+    await additionalServiceService.createAdditionalServiceProposal({ repairOrderId: order1._id.toString(), serviceId: svc._id.toString() }, tech._id.toString());
+    await additionalServiceService.createAdditionalServiceProposal({ repairOrderId: order2._id.toString(), serviceId: svc._id.toString() }, tech._id.toString());
 
     const result = await additionalServiceService.listAdditionalServiceProposals({ repairOrderId: order1._id.toString() });
     expect(result.proposals).toHaveLength(1);
