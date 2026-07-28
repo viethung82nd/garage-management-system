@@ -513,14 +513,9 @@ export type ApprovalEvidence = {
 }
 
 export type UpdateAdditionalServiceProposalOverrides = {
-  laborCost?: number
-  partsCost?: number
   approval?: ApprovalEvidence
 }
 
-/** `overrides` lets the SA adjust the price before sending/approving — the
- * technician's cost is only ever an estimate; the SA decides what actually
- * gets quoted to the customer. */
 export function updateAdditionalServiceProposal(
   token: string,
   id: string,
@@ -536,13 +531,10 @@ export function updateAdditionalServiceProposal(
 
 export type CreateAdditionalServiceProposalPayload = {
   repairOrderId: string
-  serviceId?: string
-  serviceName: string
-  affectedPart?: string
+  serviceId: string
+  partId?: string
   reason?: string
   customerImpact?: string
-  laborCost?: number
-  partsCost?: number
   estimateMinutes?: number
   evidenceCount?: number
   priority?: 'high' | 'medium' | 'low'

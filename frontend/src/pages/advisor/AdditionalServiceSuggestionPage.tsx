@@ -1,5 +1,5 @@
 import { CheckOutlined, FileTextOutlined, PictureOutlined } from '@ant-design/icons'
-import { Avatar, Button, Card, Empty, Input, InputNumber, Modal, Select, Tag } from 'antd'
+import { Avatar, Button, Card, Empty, Input, Modal, Select, Tag } from 'antd'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { fetchAdditionalServiceProposals, personName, unwrapArray, updateAdditionalServiceProposal, type ApiAdditionalServiceProposal, type ApprovalChannel, type ApprovalEvidence } from '../../shared/api/workshop'
 import { getUserInitials, useAuth } from '../../shared/auth'
@@ -132,8 +132,6 @@ export function AdditionalServiceSuggestionPage() {
   const { token } = useAuth()
   const [proposals, setProposals] = useState<ExtraServiceProposal[]>([])
   const [selectedId, setSelectedId] = useState('')
-  const [editedLaborCost, setEditedLaborCost] = useState(0)
-  const [editedPartsCost, setEditedPartsCost] = useState(0)
   const { message: apiMessage, tone: apiTone, showError, showSuccess, clear: clearApiMessage } = useApiMessage()
   const [saving, setSaving] = useState(false)
   const [approvalOpen, setApprovalOpen] = useState(false)
@@ -167,13 +165,6 @@ export function AdditionalServiceSuggestionPage() {
 
   const selectedProposal = proposals.find((proposal) => proposal.id === selectedId)
 
-  // Reset the editable price to the technician's estimate whenever the
-  // selected proposal changes — the SA's edit is per-proposal, not sticky.
-  useEffect(() => {
-    setEditedLaborCost(selectedProposal?.laborCost || 0)
-    setEditedPartsCost(selectedProposal?.partsCost || 0)
-  }, [selectedProposal?.id])
-
   const pendingCount = proposals.filter((proposal) => proposal.status === 'pending').length
   const sentCount = proposals.filter((proposal) => proposal.status === 'sent').length
   // Total of what's actively quoted to customers awaiting their decision —
@@ -195,14 +186,7 @@ export function AdditionalServiceSuggestionPage() {
     clearApiMessage()
 
     try {
-      // The technician's labor/parts cost is only an estimate — this is the
-      // price the SA actually confirms, whether sending the quote to the
-      // customer or approving the line straight onto the work order.
-      const updated = await updateAdditionalServiceProposal(token, selectedProposal.id, status, {
-        laborCost: editedLaborCost,
-        partsCost: editedPartsCost,
-        approval,
-      })
+      const updated = await updateAdditionalServiceProposal(token, selectedProposal.id, status, { approval })
       const mapped = mapProposal(updated)
       setProposals((current) => current.map((proposal) => (proposal.id === selectedProposal.id ? { ...proposal, ...mapped, status } : proposal)))
       showSuccess(
@@ -293,21 +277,24 @@ export function AdditionalServiceSuggestionPage() {
               ) : (
                 <div className="flex flex-col gap-3">
                   <p style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 600, margin: 0 }}>
-                    The technician only flags the work needed — set the price before sending it to the customer or approving it.
+                    The technician only flags the work needed — the price is auto-calculated from the service catalog.
                   </p>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>Labour</div>
-                      <InputNumber min={0} onChange={(value) => setEditedLaborCost(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={editedLaborCost} />
-                    </div>
-                    <div>
-                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, marginBottom: 4, textTransform: 'uppercase' }}>Parts</div>
-                      <InputNumber min={0} onChange={(value) => setEditedPartsCost(Math.max(0, Number(value) || 0))} style={{ width: '100%' }} value={editedPartsCost} />
-                    </div>
-                  </div>
                   <div className="flex items-center justify-between" style={{ background: advisorPalette.panelAlt, borderRadius: 12, padding: '10px 14px' }}>
-                    <span style={{ color: advisorPalette.textMuted, fontSize: 12, fontWeight: 700, textTransform: 'uppercase' }}>Price to quote</span>
-                    <span style={{ color: advisorPalette.ink, fontSize: 16, fontWeight: 700 }}>{formatMoney(editedLaborCost + editedPartsCost)}</span>
+                    <div>
+                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700 }}>Labour</div>
+                      <div style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 2 }}>{formatMoney(selectedProposal?.laborCost || 0)}</div>
+                    </div>
+                    <div className="text-right">
+                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700 }}>Parts</div>
+                      <div style={{ color: advisorPalette.ink, fontSize: 15, fontWeight: 700, marginTop: 2 }}>{formatMoney(selectedProposal?.partsCost || 0)}</div>
+                    </div>
+                    <div style={{ borderLeft: `1px solid ${advisorPalette.border}`, height: 32 }} />
+                    <div className="text-right">
+                      <div style={{ color: advisorPalette.textMuted, fontSize: 11, fontWeight: 700, textTransform: 'uppercase' }}>Total</div>
+                      <div style={{ color: advisorPalette.ink, fontSize: 17, fontWeight: 700, marginTop: 2 }}>
+                        {formatMoney((selectedProposal?.laborCost || 0) + (selectedProposal?.partsCost || 0))}
+                      </div>
+                    </div>
                   </div>
 
                   <Button block disabled={saving} icon={<FileTextOutlined />} onClick={() => updateStatus('sent')} size="large" type="primary">
@@ -331,7 +318,7 @@ export function AdditionalServiceSuggestionPage() {
       </div>
 
       <CustomerAuthorisationModal
-        amount={editedLaborCost + editedPartsCost}
+        amount={selectedProposal ? selectedProposal.laborCost + selectedProposal.partsCost : 0}
         onCancel={() => setApprovalOpen(false)}
         onConfirm={async (evidence) => {
           await updateStatus('approved', evidence)

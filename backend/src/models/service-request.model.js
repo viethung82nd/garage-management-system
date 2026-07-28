@@ -37,6 +37,10 @@ const serviceRequestSchema = new Schema(
       type: String,
       trim: true,
     },
+    partId: {
+      type: Schema.Types.ObjectId,
+      ref: "Part",
+    },
     affectedPart: {
       type: String,
       trim: true,

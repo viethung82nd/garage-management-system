@@ -30,11 +30,13 @@ import {
   issueWorkshopRepairOrderParts,
   orderId,
   personName,
+  searchParts,
   unwrapArray,
   updateWorkshopRepairProgress,
   vehicleName,
   vehiclePlate,
   type ApiInspectionReport,
+  type ApiPartOption,
   type ApiRepairOrder,
   type ApiService,
   type ApiTimeLog,
@@ -222,9 +224,9 @@ export function TechnicianRepairNotesPage() {
   // Secondary: additional-service proposal
   const [proposalOpen, setProposalOpen] = useState(false)
   const [services, setServices] = useState<ApiService[]>([])
+  const [parts, setParts] = useState<ApiPartOption[]>([])
   const [proposalServiceId, setProposalServiceId] = useState('')
-  const [proposalServiceName, setProposalServiceName] = useState('')
-  const [proposalAffectedPart, setProposalAffectedPart] = useState('')
+  const [proposalPartId, setProposalPartId] = useState('')
   const [proposalReason, setProposalReason] = useState('')
   const [proposalEstimateMinutes, setProposalEstimateMinutes] = useState(30)
   const [proposalPriority, setProposalPriority] = useState<'high' | 'medium' | 'low'>('medium')
@@ -315,15 +317,21 @@ export function TechnicianRepairNotesPage() {
     }
   }, [token, orderIdParam])
 
-  // Service catalog for the extra-work picker — only fetched when the panel opens.
+  // Service catalog + parts for the extra-work picker — only fetched when the panel opens.
   useEffect(() => {
-    if (!token || !proposalOpen || services.length) return
+    if (!token || !proposalOpen) return
     const authToken = token
     let cancelled = false
     void (async () => {
       try {
-        const catalog = await fetchWorkshopServices(authToken)
-        if (!cancelled) setServices(Array.isArray(catalog) ? catalog : [])
+        const [catalog, partsResponse] = await Promise.all([
+          fetchWorkshopServices(authToken),
+          searchParts(authToken, ''),
+        ])
+        if (cancelled) return
+        if (Array.isArray(catalog)) setServices(catalog)
+        const partsList = Array.isArray(partsResponse) ? partsResponse : (partsResponse as { parts?: ApiPartOption[] }).parts ?? []
+        setParts(partsList)
       } catch {
         /* best-effort */
       }
@@ -331,7 +339,7 @@ export function TechnicianRepairNotesPage() {
     return () => {
       cancelled = true
     }
-  }, [token, proposalOpen, services.length])
+  }, [token, proposalOpen])
 
   const selectedStep = steps.find((step) => step.stepIndex === selectedStepIndex)
   const serviceSteps = steps.filter((step) => !step.isPart)
@@ -536,7 +544,7 @@ export function TechnicianRepairNotesPage() {
 
   function validateProposal() {
     const errors: Record<string, string> = {}
-    if (!proposalServiceName.trim()) errors.serviceName = 'Service name is required.'
+    if (!proposalServiceId) errors.serviceId = 'Select a service from the catalog.'
     if (!proposalReason.trim()) errors.reason = 'Explain why this work is needed.'
     if (proposalEstimateMinutes < 1) errors.estimate = 'Estimate must be at least 1 minute.'
     return errors
@@ -552,23 +560,19 @@ export function TechnicianRepairNotesPage() {
     setSubmittingProposal(true)
     clearApiMessage()
     try {
-      // No cost fields here on purpose — pricing extra work is the service
-      // advisor's call, not the technician's; see AdditionalServiceSuggestionPage.
       await createAdditionalServiceProposal(token, {
-        affectedPart: proposalAffectedPart.trim() || undefined,
         estimateMinutes: proposalEstimateMinutes,
+        partId: proposalPartId || undefined,
         photos: proposalPhotos.map((file) => file.originFileObj as File).filter(Boolean),
         priority: proposalPriority,
         reason: proposalReason.trim(),
         repairOrderId,
-        serviceId: proposalServiceId || undefined,
-        serviceName: proposalServiceName.trim(),
+        serviceId: proposalServiceId,
       })
       showSuccess("Additional service proposal sent to the service advisor. This order is now waiting on the customer's decision.")
       setProposalOpen(false)
       setProposalServiceId('')
-      setProposalServiceName('')
-      setProposalAffectedPart('')
+      setProposalPartId('')
       setProposalReason('')
       setProposalEstimateMinutes(30)
       setProposalPriority('medium')
@@ -976,39 +980,53 @@ export function TechnicianRepairNotesPage() {
               <Card bordered={false} className="bo-enter rounded-2xl" style={{ background: technicianPalette.panel, boxShadow: technicianPalette.shadow, border: `1px solid ${technicianPalette.border}` }} title="Found extra work?">
                 {proposalOpen ? (
                   <div className="flex flex-col gap-3">
-                    <LabeledField label="Pick from catalog (optional)">
+                    <LabeledField label="Service from catalog">
                       <Select
-                        allowClear
                         filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
-                        onChange={(value) => {
-                          setProposalServiceId(value || '')
-                          const picked = services.find((service) => (service._id || service.id) === value)
-                          if (picked?.name) setProposalServiceName(picked.name)
-                        }}
-                        options={services.map((service) => ({ label: service.name, value: service._id || service.id }))}
+                        onChange={(value) => setProposalServiceId(value || '')}
+                        options={services.map((service) => ({
+                          label: `${service.name} — ${new Intl.NumberFormat('vi-VN').format(service.basePrice || 0)} ₫`,
+                          value: service._id || service.id,
+                        }))}
                         placeholder="Search the service catalog..."
                         showSearch
+                        status={proposalErrors.serviceId ? 'error' : undefined}
                         style={{ width: '100%' }}
                         value={proposalServiceId || undefined}
                       />
+                      {fieldError(proposalErrors.serviceId)}
                     </LabeledField>
-                    <LabeledField label="Service name">
-                      <Input
-                        onChange={(event) => {
-                          setProposalServiceName(event.target.value)
-                          // Once the tech edits the text, it may no longer match the
-                          // catalog entry they picked — treat it as a custom line.
-                          setProposalServiceId('')
-                        }}
-                        placeholder="e.g. Rear brake pad replacement, or pick from catalog above"
-                        status={proposalErrors.serviceName ? 'error' : undefined}
-                        value={proposalServiceName}
+                    <LabeledField label="Part (optional)">
+                      <Select
+                        allowClear
+                        filterOption={(input, option) => (option?.label ?? '').toLowerCase().includes(input.toLowerCase())}
+                        onChange={(value) => setProposalPartId(value || '')}
+                        options={parts.map((part) => ({
+                          label: `${part.sku} — ${part.name} (${new Intl.NumberFormat('vi-VN').format(part.unitPrice)} ₫)`,
+                          value: part._id,
+                        }))}
+                        placeholder="Select a part..."
+                        showSearch
+                        style={{ width: '100%' }}
+                        value={proposalPartId || undefined}
                       />
-                      {fieldError(proposalErrors.serviceName)}
                     </LabeledField>
-                    <LabeledField label="Affected part (optional)">
-                      <Input onChange={(event) => setProposalAffectedPart(event.target.value)} placeholder="e.g. Rear brake pads" value={proposalAffectedPart} />
-                    </LabeledField>
+                    {proposalServiceId ? (
+                      <div style={{ background: technicianPalette.panelAlt, borderRadius: 10, padding: '10px 14px' }}>
+                        <div className="flex items-center justify-between">
+                          <span style={{ color: technicianPalette.textMuted, fontSize: 12, fontWeight: 600 }}>Auto-calculated price</span>
+                          <span style={{ color: technicianPalette.ink, fontSize: 15, fontWeight: 700 }}>
+                            {(() => {
+                              const picked = services.find((s) => (s._id || s.id) === proposalServiceId)
+                              const pickedPart = parts.find((p) => p._id === proposalPartId)
+                              const labor = picked?.basePrice || 0
+                              const partPrice = pickedPart?.unitPrice || 0
+                              return new Intl.NumberFormat('vi-VN').format(labor + partPrice)
+                            })()} ₫
+                          </span>
+                        </div>
+                      </div>
+                    ) : null}
                     <LabeledField label="Why is it needed?">
                       <Input onChange={(event) => setProposalReason(event.target.value)} placeholder="What you found and why it needs attention" status={proposalErrors.reason ? 'error' : undefined} value={proposalReason} />
                       {fieldError(proposalErrors.reason)}
